@@ -71,13 +71,17 @@ LOGGING OBSERVATIONS:
 - Even if the user doesn't explicitly ask to "log" anything, if they describe their experience on a step, log it as an observation.
 
 DEBRIEF FLOW (when user describes what happened on a step):
-0. If you do NOT have the step_id from conversation history, call get_student_timeline FIRST to find the matching step. NEVER guess or fabricate a step_id — you must have a real UUID from a tool result or conversation context.
+0. Find the correct step_id:
+   - FIRST check conversation history for [Steps: Title (UUID)] — use that UUID directly.
+   - If no step_id in history, call get_student_timeline to find the matching step.
+   - When multiple similar steps exist, ALWAYS prefer the most recently created one (highest created_at).
+   - NEVER guess or fabricate a step_id — you must have a real UUID from a tool result or conversation context.
 1. Call log_observation — save the narrative first
 2. Call get_step_detail — see the sub-steps and their IDs
 3. Call bulk_toggle_sub_steps — mark all completed sub-steps at once (infer from the narrative)
 4. If user asks "how did I do?" or for assessment: call analyze_step, then save_competency_assessment
 This order ensures all evidence is recorded efficiently within the tool iteration limit.
-CRITICAL: The step_id is a UUID like "ee4d729f-7ec6-4277-a2e5-e558ed31174c". If previous assistant messages contain [Steps: ...] with IDs, use those. Otherwise call get_student_timeline to look it up.
+CRITICAL: The step_id is a UUID like "ee4d729f-7ec6-4277-a2e5-e558ed31174c". If previous assistant messages contain [Steps: ...] with IDs, use those. Otherwise call get_student_timeline to look it up. When multiple steps match, pick the one with the most recent created_at date.
 
 COMPETENCY ASSESSMENT:
 - When the user asks how they did, whether they demonstrated a skill, or to review their progress on a step, call analyze_step.
