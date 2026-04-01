@@ -661,11 +661,24 @@ async function handleMessage(
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   const tools = getAnthropicTools();
 
+  // Mark system prompt and tools for prompt caching — saves ~90% on repeated input tokens
+  const cachedSystem: Anthropic.TextBlockParam = {
+    type: 'text',
+    text: systemPrompt,
+    cache_control: { type: 'ephemeral' },
+  };
+
+  const cachedTools = tools.map((tool, i) =>
+    i === tools.length - 1
+      ? { ...tool, cache_control: { type: 'ephemeral' as const } }
+      : tool,
+  );
+
   let response = await anthropic.messages.create({
     model: 'claude-haiku-4-5-20251001',
     max_tokens: 1024,
-    system: systemPrompt,
-    tools,
+    system: [cachedSystem],
+    tools: cachedTools,
     messages,
   });
 
@@ -716,8 +729,8 @@ async function handleMessage(
     response = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 1024,
-      system: systemPrompt,
-      tools,
+      system: [cachedSystem],
+      tools: cachedTools,
       messages,
     });
     console.log(`[telegram] Claude response (${Date.now() - claudeStart}ms): stop_reason=${response.stop_reason}`);
