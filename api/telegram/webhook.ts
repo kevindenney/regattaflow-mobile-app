@@ -455,6 +455,23 @@ async function handleMessage(
     .maybeSingle();
 
   if (!link?.user_id || !link.linked_at) {
+    // Rate-limit: if an unexpired code already exists, don't generate a new one
+    const { data: existing } = await supabase
+      .from('telegram_links')
+      .select('link_code, link_code_expires_at')
+      .eq('telegram_user_id', telegramUserId)
+      .gt('link_code_expires_at', new Date().toISOString())
+      .is('linked_at', null)
+      .maybeSingle();
+
+    if (existing?.link_code) {
+      await sendMessage(
+        chatId,
+        `You already have a pending link code.\n\nOpen this URL while logged into BetterAt:\n${APP_URL}/settings/telegram?code=${existing.link_code}\n\nSend me another message after linking.`,
+      );
+      return;
+    }
+
     const code = generateLinkCode();
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
 
@@ -645,7 +662,7 @@ async function handleMessage(
   const tools = getAnthropicTools();
 
   let response = await anthropic.messages.create({
-    model: 'claude-3-5-haiku-20241022',
+    model: 'claude-haiku-4-5-20251001',
     max_tokens: 1024,
     system: systemPrompt,
     tools,
@@ -697,7 +714,7 @@ async function handleMessage(
     console.log(`[telegram] Calling Claude iteration ${iterations + 1}...`);
     const claudeStart = Date.now();
     response = await anthropic.messages.create({
-      model: 'claude-3-5-haiku-20241022',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 1024,
       system: systemPrompt,
       tools,
@@ -790,13 +807,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     ok();
-  } catch (error) {
-    console.error('Telegram webhook error:', error);
+  } catch (error: any) {
+    console.error('Telegram webhook error:', error?.message || error, error?.stack);
 
     try {
       const chatId = (req.body as TelegramUpdate)?.message?.chat?.id;
       if (chatId) {
-        await sendMessage(chatId, "Sorry, I'm having trouble right now. Please try again in a moment.");
+        const errMsg = error?.message?.slice(0, 200) || 'Unknown error';
+        await sendMessage(chatId, `Sorry, I'm having trouble right now. Please try again in a moment.\n\n_Debug: ${errMsg}_`, { parse_mode: 'Markdown' });
       }
     } catch {
       // Ignore - best effort
