@@ -768,9 +768,13 @@ async function handleMessage(
     sendOptions.replyMarkup = { inline_keyboard: lastKeyboard };
   }
 
-  console.log(`[telegram] Sending response (${responseText.length} chars)...`);
-  await sendMessage(chatId, responseText, sendOptions);
-  console.log(`[telegram] Response sent OK`);
+  console.log(`[telegram] Sending response (${responseText.length} chars), stop_reason=${response.stop_reason}...`);
+  const sendResult = await sendMessage(chatId, responseText, sendOptions);
+  if (!sendResult.ok) {
+    console.error(`[telegram] sendMessage FAILED: ${sendResult.description}`);
+  } else {
+    console.log(`[telegram] Response sent OK`);
+  }
 
   // --- Save conversation ---
   // Save only a short summary when tools were used. This prevents Haiku from
@@ -816,8 +820,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  // Always respond 200 to Telegram to prevent retry floods
-  const ok = () => res.status(200).json({ ok: true });
+  // Respond 200 to Telegram IMMEDIATELY to prevent retries and timeouts.
+  // Processing continues in the background after the response is sent.
+  res.status(200).json({ ok: true });
 
   try {
     const update = req.body as TelegramUpdate;
@@ -825,7 +830,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Handle inline keyboard button presses
     if (update.callback_query) {
       await handleCallbackQuery(update.callback_query);
-      ok();
       return;
     }
 
@@ -833,8 +837,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (update.message?.from) {
       await handleMessage(update.message);
     }
-
-    ok();
   } catch (error: any) {
     console.error('Telegram webhook error:', error?.message || error, error?.stack);
 
@@ -842,12 +844,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const chatId = (req.body as TelegramUpdate)?.message?.chat?.id;
       if (chatId) {
         const errMsg = error?.message?.slice(0, 200) || 'Unknown error';
-        await sendMessage(chatId, `Sorry, I'm having trouble right now. Please try again in a moment.\n\n_Debug: ${errMsg}_`, { parse_mode: 'Markdown' });
+        await sendMessage(chatId, `Sorry, I'm having trouble right now. Please try again in a moment.\n\n_Debug: ${errMsg}_`, { parseMode: 'MarkdownV2' });
       }
     } catch {
       // Ignore - best effort
     }
-
-    ok(); // Always 200 to prevent Telegram retries
   }
 }
