@@ -738,7 +738,12 @@ async function handleMessage(
     messages.push({ role: 'assistant', content: response.content as Anthropic.ContentBlockParam[] });
     messages.push({ role: 'user', content: toolResults });
 
-    await sendChatAction(chatId, 'typing');
+    // After 2nd tool call, send a progress message so user knows we're working
+    if (iterations === 2) {
+      await sendMessage(chatId, '_Processing... this may take a moment._');
+    } else {
+      await sendChatAction(chatId, 'typing');
+    }
 
     console.log(`[telegram] Calling Claude iteration ${iterations + 1}...`);
     const claudeStart = Date.now();
