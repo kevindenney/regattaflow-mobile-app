@@ -853,7 +853,7 @@ const TOOLS: TelegramToolDef[] = [
           .eq('user_id', auth.userId);
       }
 
-      return { saved: true, updated, total: results.length };
+      return { saved: true, updated, total: results.length, step_id: stepId };
     },
   },
 
@@ -1729,6 +1729,21 @@ export function getToolResponseKeyboard(
         // Photo was already attached — clear any pending "Attach to:" buttons
         if (result.attached) return [];
         return null;
+      }
+
+      // Debrief/assessment tools: clear timeline buttons and show contextual actions
+      case 'log_observation':
+      case 'save_competency_assessment': {
+        const stepId = result.step_id as string | undefined;
+        if (stepId) {
+          return [[{ text: '📋 View Step', callback_data: `detail:${stepId}` }]];
+        }
+        return []; // Clear any previous timeline buttons
+      }
+
+      case 'bulk_toggle_sub_steps': {
+        // After toggling sub-steps, clear timeline buttons (debrief in progress)
+        return [];
       }
 
       default:
