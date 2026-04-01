@@ -9,8 +9,8 @@ import { transcribeVoiceNote } from '../../lib/telegram/transcription';
 import type { InlineKeyboardButton } from '../../lib/telegram/formatting';
 import type { AuthContext } from '../../services/mcp/server';
 
-// Allow up to 60s for multi-tool chains (e.g. analyze_step → edge function AI call)
-export const maxDuration = 60;
+// Allow up to 120s for multi-tool chains (debrief flow: 5+ tool calls with AI analysis)
+export const maxDuration = 120;
 
 // ---------------------------------------------------------------------------
 // Constants
