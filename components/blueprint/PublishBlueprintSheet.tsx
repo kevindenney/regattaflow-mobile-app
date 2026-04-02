@@ -80,6 +80,7 @@ export function PublishBlueprintSheet({
   const [publishAs, setPublishAs] = useState<'individual' | string>('individual');
   const [selectedProgramId, setSelectedProgramId] = useState<string | null>(null);
   const [accessLevel, setAccessLevel] = useState<BlueprintAccessLevel>('public');
+  const [priceDollars, setPriceDollars] = useState('');
   const [justPublished, setJustPublished] = useState(false);
   const [selectedBlueprint, setSelectedBlueprint] = useState<BlueprintRecord | null>(existingBlueprint ?? null);
   const activeBlueprint = selectedBlueprint;
@@ -156,6 +157,7 @@ export function PublishBlueprintSheet({
       setPublishAs(activeBlueprint.organization_id ?? 'individual');
       setSelectedProgramId(activeBlueprint.program_id ?? null);
       setAccessLevel(activeBlueprint.access_level ?? 'public');
+      setPriceDollars(activeBlueprint.price_cents ? String(activeBlueprint.price_cents / 100) : '');
     } else {
       const defaultTitle = `${interestName} Blueprint`;
       setTitle(defaultTitle);
@@ -163,6 +165,7 @@ export function PublishBlueprintSheet({
       setPublishAs('individual');
       setSelectedProgramId(null);
       setAccessLevel('public');
+      setPriceDollars('');
       setSlug(generateBlueprintSlug(user?.user_metadata?.display_name ?? 'user', interestName));
     }
   }, [activeBlueprint, interestName, user, visible, justPublished]);
@@ -189,6 +192,10 @@ export function PublishBlueprintSheet({
   const handlePublish = useCallback(async () => {
     if (!user?.id || !title.trim()) return;
 
+    const priceCents = accessLevel === 'paid' && priceDollars
+      ? Math.round(parseFloat(priceDollars) * 100)
+      : null;
+
     try {
       let publishedId: string;
       if (isEditing && activeBlueprint) {
@@ -200,7 +207,8 @@ export function PublishBlueprintSheet({
             is_published: true,
             organization_id: selectedOrgId || null,
             program_id: selectedProgramId || null,
-            access_level: selectedOrgId ? accessLevel : 'public',
+            access_level: accessLevel,
+            price_cents: priceCents,
           },
         });
         publishedId = activeBlueprint.id;
@@ -214,7 +222,8 @@ export function PublishBlueprintSheet({
           is_published: true,
           organization_id: selectedOrgId,
           program_id: selectedProgramId,
-          access_level: selectedOrgId ? accessLevel : 'public',
+          access_level: accessLevel,
+          price_cents: priceCents,
         });
         publishedId = created.id;
       }
@@ -224,7 +233,7 @@ export function PublishBlueprintSheet({
       console.error('[PublishBlueprintSheet] Publish failed:', err);
       showAlert('Publish Failed', err?.message || 'Something went wrong. Please try again.');
     }
-  }, [user, title, description, slug, interestId, isEditing, activeBlueprint, createBlueprint, updateBlueprint, onClose, selectedOrgId, selectedProgramId, accessLevel]);
+  }, [user, title, description, slug, interestId, isEditing, activeBlueprint, createBlueprint, updateBlueprint, onClose, selectedOrgId, selectedProgramId, accessLevel, priceDollars]);
 
   const handleUnpublish = useCallback(async () => {
     if (!activeBlueprint) return;
@@ -490,40 +499,62 @@ export function PublishBlueprintSheet({
             </View>
           )}
 
-          {/* Access Level — only shown when publishing under an org */}
-          {selectedOrgId && (
-            <View style={styles.field}>
-              <Text style={styles.fieldLabel}>Who Can Subscribe</Text>
-              <View style={styles.segmentRow}>
-                <Pressable
-                  style={[styles.segmentBtn, accessLevel === 'public' && styles.segmentBtnActive]}
-                  onPress={() => setAccessLevel('public')}
-                >
-                  <Ionicons name="globe-outline" size={13} color={accessLevel === 'public' ? C.accent : C.labelMid} />
-                  <Text style={[styles.segmentText, accessLevel === 'public' && styles.segmentTextActive]}>
-                    Public
-                  </Text>
-                </Pressable>
+          {/* Access Level */}
+          <View style={styles.field}>
+            <Text style={styles.fieldLabel}>Who Can Subscribe</Text>
+            <View style={styles.segmentRow}>
+              <Pressable
+                style={[styles.segmentBtn, accessLevel === 'public' && styles.segmentBtnActive]}
+                onPress={() => { setAccessLevel('public'); setPriceDollars(''); }}
+              >
+                <Ionicons name="globe-outline" size={13} color={accessLevel === 'public' ? C.accent : C.labelMid} />
+                <Text style={[styles.segmentText, accessLevel === 'public' && styles.segmentTextActive]}>
+                  Public
+                </Text>
+              </Pressable>
+              {selectedOrgId && (
                 <Pressable
                   style={[styles.segmentBtn, accessLevel === 'org_members' && styles.segmentBtnActive]}
-                  onPress={() => setAccessLevel('org_members')}
+                  onPress={() => { setAccessLevel('org_members'); setPriceDollars(''); }}
                 >
                   <Ionicons name="people-outline" size={13} color={accessLevel === 'org_members' ? C.accent : C.labelMid} />
                   <Text style={[styles.segmentText, accessLevel === 'org_members' && styles.segmentTextActive]}>
                     Members Only
                   </Text>
                 </Pressable>
-                <Pressable
-                  style={[styles.segmentBtn, { opacity: 0.4 }]}
-                  disabled
-                >
-                  <Ionicons name="card-outline" size={13} color={C.labelLight} />
-                  <Text style={styles.segmentText}>Paid</Text>
-                  <View style={styles.comingSoonBadge}>
-                    <Text style={styles.comingSoonText}>Soon</Text>
-                  </View>
-                </Pressable>
+              )}
+              <Pressable
+                style={[styles.segmentBtn, accessLevel === 'paid' && styles.segmentBtnActive]}
+                onPress={() => setAccessLevel('paid')}
+              >
+                <Ionicons name="card-outline" size={13} color={accessLevel === 'paid' ? C.accent : C.labelMid} />
+                <Text style={[styles.segmentText, accessLevel === 'paid' && styles.segmentTextActive]}>
+                  Paid
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+
+          {/* Price — shown when access level is paid */}
+          {accessLevel === 'paid' && (
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>Price (USD)</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Text style={{ fontSize: 18, fontWeight: '700', color: C.labelDark, marginRight: 4 }}>$</Text>
+                <TextInput
+                  style={[styles.input, { flex: 1 }]}
+                  value={priceDollars}
+                  onChangeText={(text) => setPriceDollars(text.replace(/[^0-9.]/g, ''))}
+                  placeholder="49"
+                  placeholderTextColor={C.labelLight}
+                  keyboardType="decimal-pad"
+                />
               </View>
+              {selectedOrgId && (
+                <Text style={{ fontSize: 11, color: C.labelMid, marginTop: 4 }}>
+                  Organization members get free access. Non-members pay this price.
+                </Text>
+              )}
             </View>
           )}
 
@@ -907,18 +938,6 @@ const styles = StyleSheet.create({
   segmentTextActive: {
     color: C.accent,
     fontWeight: '600',
-  },
-  comingSoonBadge: {
-    backgroundColor: '#F0F0EE',
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-    borderRadius: 3,
-    marginLeft: 2,
-  },
-  comingSoonText: {
-    fontSize: 8,
-    fontWeight: '600',
-    color: C.labelLight,
   },
   successState: {
     alignItems: 'center',

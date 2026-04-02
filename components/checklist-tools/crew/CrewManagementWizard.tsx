@@ -561,11 +561,10 @@ export function CrewManagementWizard({
                   )}
                 </Pressable>
                 <Pressable
-                  style={styles.removeButton}
+                  style={({ pressed }) => [styles.removeButton, pressed && { opacity: 0.5 }]}
                   onPress={() => handleRemoveCrew(member)}
-                  hitSlop={{ top: 8, bottom: 8, left: 4, right: 8 }}
                 >
-                  <Trash2 size={16} color={IOS_COLORS.red} />
+                  <Trash2 size={18} color={IOS_COLORS.red} />
                 </Pressable>
               </View>
             );
@@ -946,10 +945,13 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   removeButton: {
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     paddingVertical: 16,
     borderLeftWidth: StyleSheet.hairlineWidth,
     borderLeftColor: IOS_COLORS.separator,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    ...(Platform.OS === 'web' ? { cursor: 'pointer' } : {}),
   },
   // Add crew button
   addCrewButton: {

@@ -2,7 +2,7 @@
  * WavePeriodPressureViz Component
  *
  * Combined visualization of wave period (critical for downwind) and pressure gradients
- * Uses Storm Glass wave period and atmospheric pressure data
+ * Uses wave period and atmospheric pressure data
  */
 
 import React, { useMemo } from 'react';

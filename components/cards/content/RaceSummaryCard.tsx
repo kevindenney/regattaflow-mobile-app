@@ -736,7 +736,7 @@ export function RaceSummaryCard({
       if (stepStatus === 'in_progress') return 'on_water' as RacePhase;
       return 'days_before' as RacePhase; // pending, planned, or any other
     }
-    return getCurrentPhaseForRace(race.date, race.startTime);
+    return getCurrentPhaseForRace(race.date ?? '', race.startTime);
   }, [race.date, race.startTime, isTimelineStep, stepStatus]);
   // Restore last-used tab for this step, falling back to status-derived default
   const [selectedPhase, setSelectedPhase] = useState<RacePhase>(() => {
@@ -1226,7 +1226,7 @@ export function RaceSummaryCard({
         parts.push('Shared from BetterAt');
         await Share.share({ message: parts.join('\n'), title: race.name, url });
       } else {
-        const dateStr = new Date(race.date).toLocaleDateString('en-US', {
+        const dateStr = new Date(race.date ?? '').toLocaleDateString('en-US', {
           weekday: 'short',
           month: 'short',
           day: 'numeric',
@@ -1361,7 +1361,7 @@ export function RaceSummaryCard({
 
   // Handle selecting an arrival time option
   const handleSelectArrivalTime = useCallback((minutesBefore: number) => {
-    const plannedArrival = calculateArrivalTime(race.date, race.startTime, minutesBefore);
+    const plannedArrival = calculateArrivalTime(race.date ?? '', race.startTime, minutesBefore);
     updateArrivalIntention({
       plannedArrival,
       minutesBefore,
@@ -1418,7 +1418,7 @@ export function RaceSummaryCard({
   }, [isSailing, race.date, race.startTime]);
 
   const countdown = useMemo(
-    () => calculateCountdown(race.date, effectiveCountdownStartTime),
+    () => calculateCountdown(race.date ?? '', effectiveCountdownStartTime),
     [race.date, effectiveCountdownStartTime]
   );
   const rawTimelineStatus = String((race as any)?.status || (race as any)?.metadata?.status || '').toLowerCase();
@@ -1521,7 +1521,7 @@ export function RaceSummaryCard({
   const seasonId = (race as any).season_id;
   const { data: seriesPosition } = useRaceSeriesPosition({
     raceId: race.id,
-    raceDate: race.date,
+    raceDate: race.date ?? '',
     seasonId,
     enabled: true,
   });
@@ -1533,7 +1533,7 @@ export function RaceSummaryCard({
     raceId: race.id,
     fleetName,
     boatClass: boatClassName,
-    raceDate: race.date,
+    raceDate: race.date ?? '',
     regattaId,
     enabled: !countdown.isPast,
   });
@@ -2403,7 +2403,7 @@ export function RaceSummaryCard({
         {!isTimelineStep && (
           <View style={styles.simpleDetailRow}>
             <Ionicons name="calendar-outline" size={16} color={IOS_COLORS.secondaryLabel} />
-            <Text style={styles.simpleDetailText}>{formatFullDate(race.date, race.startTime)}</Text>
+            <Text style={styles.simpleDetailText}>{formatFullDate(race.date ?? '', race.startTime)}</Text>
           </View>
         )}
 

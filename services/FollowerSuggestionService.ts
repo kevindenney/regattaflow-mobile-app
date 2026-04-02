@@ -7,6 +7,7 @@
 
 import { supabase } from './supabase';
 import { createLogger } from '@/lib/utils/logger';
+import { isAbortError } from '@/lib/utils/fetchWithTimeout';
 import { isDemoRaceId } from '@/lib/demo/demoRaceData';
 import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
 
@@ -275,14 +276,14 @@ export class FollowerSuggestionService {
       }
 
       if (error) {
-        logger.error('getSuggestionsForRace failed:', error);
+        if (!isAbortError(error)) logger.error('getSuggestionsForRace failed:', error);
         return [];
       }
 
       const enriched = await this.enrichWithSuggesterNames((data || []) as RawSuggestionRow[]);
       return enriched.map(mapRow);
     } catch (error) {
-      logger.error('getSuggestionsForRace failed:', error);
+      if (!isAbortError(error)) logger.error('getSuggestionsForRace failed:', error);
       return [];
     }
   }

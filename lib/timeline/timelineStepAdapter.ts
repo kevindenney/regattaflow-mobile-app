@@ -14,7 +14,7 @@ export function timelineStepToCardRaceData(step: TimelineStepRecord): CardRaceDa
     name: step.title,
     interest_id: step.interest_id,
     venue: step.location_name ?? '',
-    date: step.starts_at || step.created_at,
+    date: step.starts_at || undefined,
     status: STATUS_MAP[step.status] ?? 'scheduled',
     created_by: step.user_id,
     user_id: step.user_id,

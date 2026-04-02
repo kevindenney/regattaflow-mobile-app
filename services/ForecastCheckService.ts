@@ -64,7 +64,7 @@ export class ForecastCheckService {
       windTrend: forecastData.windTrend || 'steady',
       highTide: forecastData.highTide,
       lowTide: forecastData.lowTide,
-      source: 'stormglass',
+      source: 'openmeteo',
       confidence: 0.8,
     };
 

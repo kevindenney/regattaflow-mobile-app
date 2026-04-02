@@ -12,8 +12,14 @@
  */
 
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { CohortCompetencyMatrix } from '@/types/cohortCompetency';
+import {
+  achievementColor as cellColor,
+  achievementTextColor as cellTextColor,
+  statusCellColor as statusColor,
+  statusAbbrev,
+} from '@/lib/utils/competencyColors';
 
 interface CompetencyHeatmapProps {
   matrix: CohortCompetencyMatrix;
@@ -23,18 +29,11 @@ interface CompetencyHeatmapProps {
 const CELL_SIZE = 28;
 const LABEL_WIDTH = 140;
 
-function cellColor(percent: number): string {
-  if (percent >= 80) return '#10B981';
-  if (percent >= 50) return '#F59E0B';
-  if (percent >= 25) return '#F97316';
-  if (percent > 0) return '#EF4444';
-  return '#E5E7EB';
-}
-
-function cellTextColor(percent: number): string {
-  if (percent >= 50) return '#FFFFFF';
-  if (percent > 0) return '#FFFFFF';
-  return '#9CA3AF';
+/** Wrap children with a native browser tooltip on web; passthrough on native. */
+function Tooltip({ label, children }: { label: string; children: React.ReactNode }) {
+  if (Platform.OS !== 'web') return <>{children}</>;
+  // On web, render a <div> with title attribute for native browser tooltip
+  return React.createElement('div', { title: label, style: { display: 'contents' } }, children);
 }
 
 function initials(name: string): string {
@@ -71,14 +70,15 @@ export function CompetencyHeatmap({ matrix, onStudentPress }: CompetencyHeatmapP
           <View style={styles.headerRow}>
             <View style={[styles.labelCell, { width: LABEL_WIDTH }]} />
             {matrix.students.map(s => (
-              <TouchableOpacity
-                key={s.userId}
-                style={styles.headerCell}
-                onPress={() => onStudentPress?.(s.userId)}
-              >
-                <Text style={styles.headerInitials}>{initials(s.userName)}</Text>
-                <Text style={styles.headerPercent}>{s.overallPercent}%</Text>
-              </TouchableOpacity>
+              <Tooltip key={s.userId} label={`${s.userName} — ${s.overallPercent}%`}>
+                <TouchableOpacity
+                  style={styles.headerCell}
+                  onPress={() => onStudentPress?.(s.userId)}
+                >
+                  <Text style={styles.headerInitials}>{initials(s.userName)}</Text>
+                  <Text style={styles.headerPercent}>{s.overallPercent}%</Text>
+                </TouchableOpacity>
+              </Tooltip>
             ))}
           </View>
 
@@ -97,15 +97,16 @@ export function CompetencyHeatmap({ matrix, onStudentPress }: CompetencyHeatmapP
                   const achievement = student.byDomain[domain.id];
                   const pct = achievement?.percent ?? 0;
                   return (
-                    <TouchableOpacity
-                      key={student.userId}
-                      style={[styles.cell, { backgroundColor: cellColor(pct) }]}
-                      onPress={() => onStudentPress?.(student.userId)}
-                    >
-                      <Text style={[styles.cellText, { color: cellTextColor(pct) }]}>
-                        {pct > 0 ? pct : ''}
-                      </Text>
-                    </TouchableOpacity>
+                    <Tooltip key={student.userId} label={`${student.userName} — ${domain.title}: ${pct}%`}>
+                      <TouchableOpacity
+                        style={[styles.cell, { backgroundColor: cellColor(pct) }]}
+                        onPress={() => onStudentPress?.(student.userId)}
+                      >
+                        <Text style={[styles.cellText, { color: cellTextColor(pct) }]}>
+                          {pct > 0 ? pct : ''}
+                        </Text>
+                      </TouchableOpacity>
+                    </Tooltip>
                   );
                 })}
               </TouchableOpacity>
@@ -124,10 +125,13 @@ export function CompetencyHeatmap({ matrix, onStudentPress }: CompetencyHeatmapP
                         </View>
                         {matrix.students.map(student => {
                           const status = student.byCompetency[compId] ?? 'not_started';
+                          const compTitle = getCompetencyTitle(compId, matrix);
                           return (
-                            <View key={student.userId} style={[styles.compCell, { backgroundColor: statusColor(status) }]}>
-                              <Text style={styles.compCellText}>{statusAbbrev(status)}</Text>
-                            </View>
+                            <Tooltip key={student.userId} label={`${student.userName} — ${compTitle}: ${status.replace(/_/g, ' ')}`}>
+                              <View style={[styles.compCell, { backgroundColor: statusColor(status) }]}>
+                                <Text style={styles.compCellText}>{statusAbbrev(status)}</Text>
+                              </View>
+                            </Tooltip>
                           );
                         })}
                       </View>
@@ -152,28 +156,6 @@ function LegendItem({ color, label }: { color: string; label: string }) {
       <Text style={styles.legendText}>{label}</Text>
     </View>
   );
-}
-
-function statusColor(status: string): string {
-  switch (status) {
-    case 'competent': return '#047857';
-    case 'validated': return '#10B981';
-    case 'checkoff_ready': return '#7C3AED';
-    case 'practicing': return '#F59E0B';
-    case 'learning': return '#0369A1';
-    default: return '#F1F5F9';
-  }
-}
-
-function statusAbbrev(status: string): string {
-  switch (status) {
-    case 'competent': return 'C';
-    case 'validated': return 'V';
-    case 'checkoff_ready': return 'CR';
-    case 'practicing': return 'P';
-    case 'learning': return 'L';
-    default: return '';
-  }
 }
 
 function getCompetencyTitle(compId: string, matrix: CohortCompetencyMatrix): string {

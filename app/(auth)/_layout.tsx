@@ -29,6 +29,8 @@ const ONBOARDING_ROUTES = new Set([
   'coach-onboarding-complete',
   // Sailor onboarding
   'sailor-onboarding-comprehensive',
+  // Post-onboarding welcome
+  'org-welcome',
 ]);
 
 // Routes that should be accessible while signed out (OAuth callback needs to run)
@@ -50,6 +52,21 @@ export default function AuthLayout() {
 
   // Once we enter onboarding, mark it and stay in until we explicitly leave the (auth) group
   if (isInOnboardingFlow && !hasEnteredOnboarding.current) {
+    hasEnteredOnboarding.current = true;
+  }
+
+  // Pre-mark onboarding intent for club/coach signup to prevent flash of main app
+  // When state becomes 'ready' while still on signup page, the user is about to be
+  // redirected to their onboarding flow — mark it now to prevent a render cycle
+  // where the auth layout briefly returns null and the tabs layout flashes.
+  const isAuthEntryPoint = AUTH_ENTRY_ROUTES.has(currentRoute ?? '');
+  if (
+    state === 'ready' &&
+    userType &&
+    isAuthEntryPoint &&
+    !hasEnteredOnboarding.current &&
+    (userType === 'club' || userType === 'coach')
+  ) {
     hasEnteredOnboarding.current = true;
   }
 
@@ -162,9 +179,6 @@ export default function AuthLayout() {
     );
   }
 
-  // Allow rendering for login/signup pages even when signed out
-  const isAuthEntryPoint = AUTH_ENTRY_ROUTES.has(currentRoute ?? '');
-
   // Don't render if signed out AND not on login/signup
   if (state === 'signed_out' && !isAuthEntryPoint) {
     return null;
@@ -203,6 +217,7 @@ export default function AuthLayout() {
       <Stack.Screen name="coach-onboarding-stripe-callback" />
       <Stack.Screen name="coach-onboarding-complete" />
       <Stack.Screen name="sailor-onboarding-comprehensive" />
+      <Stack.Screen name="org-welcome" />
   </Stack>
   );
 }

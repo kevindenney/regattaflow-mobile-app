@@ -46,15 +46,6 @@ import type { LayoutRectangle } from 'react-native';
 
 export type RaceFilterSegment = 'upcoming' | 'past' | 'progress';
 
-export interface RecommendedStepTemplate {
-  id: string;
-  title: string;
-  description?: string | null;
-  stepType: string;
-  moduleIds: string[];
-  suggestedCompetencyIds: string[];
-}
-
 export interface RacesFloatingHeaderProps {
   /** Top inset for safe area */
   topInset: number;
@@ -84,10 +75,6 @@ export interface RacesFloatingHeaderProps {
   blueprintLabel?: string;
   /** Whether a published blueprint exists for this interest */
   isBlueprintPublished?: boolean;
-  /** Optional org-published step templates for "Create New" menu */
-  recommendedTemplates?: RecommendedStepTemplate[];
-  /** Selects one recommended template */
-  onSelectRecommendedTemplate?: (template: RecommendedStepTemplate) => void;
   /** Current scroll offset for large title collapse */
   scrollOffset?: number;
   /** Callback to expose the + button's layout for onboarding tour spotlight */
@@ -150,8 +137,6 @@ export function RacesFloatingHeader({
   onPublishBlueprint,
   blueprintLabel,
   isBlueprintPublished,
-  recommendedTemplates = [],
-  onSelectRecommendedTemplate,
   scrollOffset: _scrollOffset = 0,
   onAddButtonLayout,
   measureTrigger,
@@ -493,33 +478,6 @@ export function RacesFloatingHeader({
                     <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />
                   </TouchableOpacity>
 
-                  {recommendedTemplates.length > 0 && onSelectRecommendedTemplate ? (
-                    <>
-                      <View style={styles.menuSeparator} />
-                      <View style={styles.menuSection}>
-                        <Text style={styles.menuSectionTitle}>Recommended from your program</Text>
-                        {recommendedTemplates.map((template) => (
-                          <TouchableOpacity
-                            key={template.id}
-                            style={styles.menuOption}
-                            onPress={() => handleMenuOption(() => onSelectRecommendedTemplate(template))}
-                            activeOpacity={0.7}
-                          >
-                            <View style={[styles.menuOptionIcon, { backgroundColor: `${IOS_COLORS.systemIndigo}15` }]}>
-                              <MaterialCommunityIcons name="star-outline" size={24} color={IOS_COLORS.systemIndigo} />
-                            </View>
-                            <View style={styles.menuOptionContent}>
-                              <Text style={styles.menuOptionTitle}>{template.title}</Text>
-                              <Text style={styles.menuOptionSubtitle} numberOfLines={2}>
-                                {template.description || 'Program-recommended nursing step template'}
-                              </Text>
-                            </View>
-                            <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    </>
-                  ) : null}
 
                   {hasCohortPracticeItem && onAddPractice ? (
                     <>
@@ -698,33 +656,6 @@ export function RacesFloatingHeader({
                     <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />
                   </TouchableOpacity>
 
-                  {recommendedTemplates.length > 0 && onSelectRecommendedTemplate ? (
-                    <>
-                      <View style={styles.menuSeparator} />
-                      <View style={styles.menuSection}>
-                        <Text style={styles.menuSectionTitle}>Recommended from your program</Text>
-                        {recommendedTemplates.map((template) => (
-                          <TouchableOpacity
-                            key={template.id}
-                            style={styles.menuOption}
-                            onPress={() => handleMenuOption(() => onSelectRecommendedTemplate(template))}
-                            activeOpacity={0.7}
-                          >
-                            <View style={[styles.menuOptionIcon, { backgroundColor: `${IOS_COLORS.systemIndigo}15` }]}>
-                              <MaterialCommunityIcons name="star-outline" size={24} color={IOS_COLORS.systemIndigo} />
-                            </View>
-                            <View style={styles.menuOptionContent}>
-                              <Text style={styles.menuOptionTitle}>{template.title}</Text>
-                              <Text style={styles.menuOptionSubtitle} numberOfLines={2}>
-                                {template.description || 'Program-recommended nursing step template'}
-                              </Text>
-                            </View>
-                            <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    </>
-                  ) : null}
 
                   {/* Add Step Option */}
                   {onAddStep && (

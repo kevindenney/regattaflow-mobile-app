@@ -65,7 +65,6 @@ export default function MapScreen() {
   // Professional API keys (these would come from secure storage)
   const apiKeys = {
     // MapLibre is open source - no API key needed for mapping
-    'stormglass': process.env.EXPO_PUBLIC_STORMGLASS_API_KEY || 'demo-key',
     'openweathermap': process.env.EXPO_PUBLIC_OPENWEATHERMAP_API_KEY || '',
     'aisstream-api': '01037d15e391c289c1d106479d8870e1df107f65',
     'meteomatics': 'demo-key',

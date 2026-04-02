@@ -64,7 +64,7 @@
         │                    │                    │
     ┌───┴───────┐    ┌───────┴────────┐   ┌──────┴──────┐
     │           │    │                │   │             │
-    │ Anthropic │    │  StormGlass    │   │    Stripe   │
+    │ Anthropic │    │  Open-Meteo    │   │    Stripe   │
     │  Claude   │    │   (Weather)    │   │  (Payments) │
     └───────────┘    └────────────────┘   └─────────────┘
 ```
@@ -101,7 +101,7 @@
 
 **External Services**:
 - **Anthropic Claude**: AI coaching and strategy generation
-- **StormGlass**: Weather, tides, currents data
+- **Open-Meteo**: Weather, waves data (FREE)
 - **Stripe**: Payment processing and subscription management
 - **Expo Notifications**: Push notification delivery
 
@@ -174,7 +174,7 @@
 - Custom MCP skills (15+ sailing-specific)
 
 **Weather**:
-- StormGlass API (primary)
+- Open-Meteo API (primary, FREE)
 - Surf MCP (secondary, for testing)
 
 **Payments**:
@@ -506,7 +506,7 @@ CREATE TABLE weather_cache (
   longitude DECIMAL(10, 7),
   timestamp TIMESTAMPTZ NOT NULL,
   forecast_data JSONB,
-  source TEXT DEFAULT 'stormglass',
+  source TEXT DEFAULT 'openmeteo',
   expires_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(venue_id, timestamp)
@@ -1170,7 +1170,7 @@ regattaflow-app/
 │   ├── OfflineSyncService.ts
 │   ├── NotificationService.ts
 │   ├── weather/
-│   │   ├── StormGlassService.ts
+│   │   ├── OpenMeteoService.ts
 │   │   └── WeatherCacheService.ts
 │   ├── ai/
 │   │   ├── EnhancedClaudeClient.ts
@@ -2401,7 +2401,6 @@ EXPO_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 EXPO_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key # Edge Functions only
 ANTHROPIC_API_KEY=your-claude-api-key # Edge Functions only
-STORMGLASS_API_KEY=your-stormglass-key # Edge Functions only
 STRIPE_SECRET_KEY=your-stripe-secret-key # Edge Functions only
 STRIPE_WEBHOOK_SECRET=your-webhook-secret # Edge Functions only
 ```

@@ -73,8 +73,13 @@ export default function SignUp() {
     setPersona(normalizePersonaParam(params.persona));
   }, [params.persona]);
 
-  const personaLabels = interestCtx.personaLabels;
-  const personaSubtitles = interestCtx.personaSubtitles;
+  // Always use generic persona labels on signup — interest-specific terminology is for inside the app
+  const personaLabels = { sailor: 'Learner', coach: 'Coach', club: 'Organization' };
+  const personaSubtitles = {
+    sailor: 'Start learning and tracking your progress',
+    coach: 'Set up your coaching profile',
+    club: 'Set up your organization',
+  };
 
   const getSubtitle = () => personaSubtitles[persona];
 

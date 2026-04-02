@@ -2,16 +2,15 @@
  * Race Coaching Chat Edge Function
  *
  * Proxies AI completion requests for the RaceCoachingService.
- * Keeps the Anthropic API key server-side while allowing the
- * client to request coaching-related text generation.
+ * Uses Gemini Flash (free tier) for text generation.
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0';
+import { callGemini } from '../_shared/gemini.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const anthropicApiKey = Deno.env.get('ANTHROPIC_API_KEY') || '';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -45,13 +44,6 @@ serve(async (req: Request) => {
       );
     }
 
-    if (!anthropicApiKey) {
-      return new Response(
-        JSON.stringify({ error: 'Anthropic API key not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
     const { prompt, max_tokens = 512 } = await req.json();
 
     if (!prompt || typeof prompt !== 'string') {
@@ -61,32 +53,20 @@ serve(async (req: Request) => {
       );
     }
 
-    // Call Claude API
-    const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': anthropicApiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: Math.min(max_tokens, 1024),
-        messages: [{ role: 'user', content: prompt }],
-      }),
-    });
-
-    if (!claudeResponse.ok) {
-      const errorText = await claudeResponse.text();
-      console.error('Claude API error:', claudeResponse.status, errorText);
+    // Call Gemini Flash
+    let text: string;
+    try {
+      text = await callGemini({
+        userContent: [{ text: prompt }],
+        maxOutputTokens: Math.min(max_tokens, 1024),
+      });
+    } catch (aiError: any) {
+      console.error('Gemini API error:', aiError.message);
       return new Response(
         JSON.stringify({ error: 'AI service unavailable' }),
         { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-
-    const result = await claudeResponse.json();
-    const text = result.content?.[0]?.text || '';
 
     return new Response(
       JSON.stringify({ text }),

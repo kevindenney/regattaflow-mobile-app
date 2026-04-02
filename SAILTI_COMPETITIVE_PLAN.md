@@ -43,7 +43,7 @@
 | AI Race Strategy | ❌ | **Major differentiator** |
 | AI Post-Race Coaching | ❌ | **Unique value** |
 | 3D Bathymetry | ❌ | Premium visualization |
-| Weather Intelligence | Basic | StormGlass integration |
+| Weather Intelligence | Basic | Open-Meteo integration |
 | Tidal Analysis | ❌ | AI-powered recommendations |
 | GPS Track Recording | ❌ | Performance analytics |
 | Venue Intelligence (147+) | Similar | Our 3D + AI enhancement |
@@ -795,7 +795,7 @@ RegattaFlow: "AI-powered sailing intelligence + Complete regatta management"
 ### External Integrations
 - **World Sailing API** (future): For sailor ID validation
 - **Stripe**: Already integrated
-- **StormGlass**: Already integrated
+- **Open-Meteo**: Already integrated (FREE)
 - **Video Processing**: Cloud service (AWS/GCP) for video analysis
 
 ---

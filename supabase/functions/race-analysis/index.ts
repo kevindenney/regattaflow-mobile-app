@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { callGemini } from '../_shared/gemini.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -196,46 +197,22 @@ Deno.serve(async (req: Request) => {
       prepData = prep;
     }
 
-    // Call Claude API for race analysis
-    const anthropicApiKey = Deno.env.get('ANTHROPIC_API_KEY');
-    if (!anthropicApiKey) {
-      return new Response(
-        JSON.stringify({ error: 'Anthropic API key not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
     const prompt = buildRaceAnalysisPrompt(enrichedRaceData, pastLearnings || [], trackSummary, prepData, regattaPrepNotes);
 
-    const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': anthropicApiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 4096,
-        messages: [{
-          role: 'user',
-          content: prompt,
-        }],
-      }),
-    });
-
-    if (!claudeResponse.ok) {
-      const errorText = await claudeResponse.text();
-      console.error('Claude API error status:', claudeResponse.status);
-      console.error('Claude API error:', errorText);
+    // Call Gemini Flash for race analysis
+    let analysisText: string;
+    try {
+      analysisText = await callGemini({
+        userContent: [{ text: prompt }],
+        maxOutputTokens: 4096,
+      });
+    } catch (aiError: any) {
+      console.error('Gemini API error:', aiError.message);
       return new Response(
-        JSON.stringify({ error: 'Failed to generate analysis', details: `Claude API returned ${claudeResponse.status}` }),
+        JSON.stringify({ error: 'Failed to generate analysis', details: aiError.message }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-
-    const claudeResult = await claudeResponse.json();
-    const analysisText = claudeResult.content?.[0]?.text || '';
 
     // Parse the analysis and save to database
     const analysis = parseAnalysisResult(analysisText);
@@ -262,7 +239,7 @@ Deno.serve(async (req: Request) => {
         recommendations: analysis.recommendations,
         plan_vs_execution: analysis.plan_vs_execution || null,
         confidence_score: analysis.confidence_score,
-        model_used: 'claude-3-haiku-20240307',
+        model_used: 'gemini-2.0-flash',
         analysis_version: '2.0',
       })
       .select()

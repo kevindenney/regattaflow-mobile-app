@@ -27,10 +27,13 @@ import { ReverseTrialService } from '@/lib/subscriptions/reverseTrialService';
 import { supabase } from '@/services/supabase';
 import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { extractOAuthDisplayName } from '@/lib/utils/oauthName';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useInterest } from '@/providers/InterestProvider';
 
 export default function NamePhotoScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { addInterest, switchInterest } = useInterest();
 
   const [name, setName] = useState('');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
@@ -126,6 +129,17 @@ export default function NamePhotoScreen() {
         const alreadyHadTrial = await ReverseTrialService.hasHadTrial(user.id);
         if (!alreadyHadTrial) {
           await ReverseTrialService.startTrial(user.id);
+        }
+
+        // Commit the interest chosen during signup so the InterestSelection modal doesn't reappear
+        const onboardingSlug = await AsyncStorage.getItem('onboarding_interest_slug');
+        if (onboardingSlug) {
+          try {
+            await addInterest(onboardingSlug);
+            await switchInterest(onboardingSlug);
+          } catch (e) {
+            console.warn('[NamePhoto] Failed to commit onboarding interest:', e);
+          }
         }
       }
 

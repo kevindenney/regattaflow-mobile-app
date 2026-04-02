@@ -312,7 +312,12 @@ export default function CohortDetailScreen() {
               <Text style={styles.stateText}>No members in this cohort yet.</Text>
             ) : (
               cohortMembers.map((member) => (
-                <View key={member.id} style={styles.row}>
+                <TouchableOpacity
+                  key={member.id}
+                  style={styles.row}
+                  onPress={() => router.push({ pathname: '/organization/student/[studentId]', params: { studentId: member.user_id, orgId: resolvedActiveOrgId || '' } })}
+                  activeOpacity={0.6}
+                >
                   <View style={styles.rowTextWrap}>
                     <Text style={styles.rowTitle}>{member.user_name}</Text>
                     {member.user_email ? <Text style={styles.rowMeta}>{member.user_email}</Text> : null}
@@ -320,16 +325,19 @@ export default function CohortDetailScreen() {
                           {coachRoleLabel({ interestSlug: orgInterestSlug || '', role: member.role || 'member' })}
                         </Text>
                   </View>
-                  {canEdit ? (
-                    <TouchableOpacity
-                      style={[styles.secondaryButton, actionBusyUserId === member.user_id && styles.disabledButton]}
-                      onPress={() => void handleRemoveMember(member.user_id)}
-                      disabled={actionBusyUserId === member.user_id}
-                    >
-                      <Text style={styles.secondaryButtonText}>Remove</Text>
-                    </TouchableOpacity>
-                  ) : null}
-                </View>
+                  <View style={styles.rowActions}>
+                    {canEdit ? (
+                      <TouchableOpacity
+                        style={[styles.secondaryButton, actionBusyUserId === member.user_id && styles.disabledButton]}
+                        onPress={(e) => { e.stopPropagation(); void handleRemoveMember(member.user_id); }}
+                        disabled={actionBusyUserId === member.user_id}
+                      >
+                        <Text style={styles.secondaryButtonText}>Remove</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                    <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+                  </View>
+                </TouchableOpacity>
               ))
             )}
           </View>
@@ -429,6 +437,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 10,
   },
+  rowActions: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 8 },
   rowTextWrap: { flex: 1, gap: 4 },
   rowTitle: { fontSize: 14, fontWeight: '700', color: '#0F172A' },
   rowMeta: { fontSize: 12, color: '#64748B' },

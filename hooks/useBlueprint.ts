@@ -291,6 +291,7 @@ export function useSubscribe() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['blueprint-subscriptions'] });
+      queryClient.invalidateQueries({ queryKey: ['blueprint-subscribed'] });
       queryClient.invalidateQueries({ queryKey: keys.all });
       queryClient.invalidateQueries({ queryKey: ['for-you-suggestions'] });
     },
@@ -308,6 +309,7 @@ export function useUnsubscribe() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['blueprint-subscriptions'] });
+      queryClient.invalidateQueries({ queryKey: ['blueprint-subscribed'] });
       queryClient.invalidateQueries({ queryKey: keys.all });
     },
   });

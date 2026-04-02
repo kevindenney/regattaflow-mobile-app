@@ -5,7 +5,7 @@
  * Shows interest cards grouped by domain with "Added"/"Active" badges.
  */
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -64,6 +64,26 @@ export function DiscoverInterestsContent({
   const isLoggedIn = !!user && !isGuest;
 
   const [searchQuery, setSearchQuery] = React.useState('');
+  const [dbOrgsByInterest, setDbOrgsByInterest] = useState<Record<string, { name: string; slug: string }[]>>({});
+
+  // Fetch real organizations from DB grouped by interest_slug
+  useEffect(() => {
+    supabase
+      .from('organizations')
+      .select('name, slug, interest_slug')
+      .eq('is_active', true)
+      .not('interest_slug', 'is', null)
+      .then(({ data }) => {
+        if (!data) return;
+        const grouped: Record<string, { name: string; slug: string }[]> = {};
+        for (const org of data) {
+          const key = org.interest_slug as string;
+          if (!grouped[key]) grouped[key] = [];
+          grouped[key].push({ name: org.name, slug: org.slug });
+        }
+        setDbOrgsByInterest(grouped);
+      });
+  }, []);
 
   const userInterestSlugs = new Set(userInterests.map((i) => i.slug));
 
@@ -115,11 +135,19 @@ export function DiscoverInterestsContent({
     router.push(`/${slug}` as any);
   };
 
-  // Merge sample data with DB interests for display
+  // Merge sample data with DB interests and real orgs for display
   const displayInterests = SAMPLE_INTERESTS.map((sample) => {
     const dbInterest = allInterests.find((i) => i.slug === sample.slug);
+    const realOrgs = dbOrgsByInterest[sample.slug] || [];
+    // Merge: start with sample orgs, add any real orgs not already in sample data
+    const sampleSlugs = new Set(sample.organizations.map((o) => o.slug));
+    const extraOrgs = realOrgs
+      .filter((o) => !sampleSlugs.has(o.slug))
+      .map((o) => ({ slug: o.slug, name: o.name, groupLabel: 'Programs' as const, groups: [] }));
+    const mergedOrganizations = [...sample.organizations, ...extraOrgs];
     return {
       ...sample,
+      organizations: mergedOrganizations,
       isAdded: userInterestSlugs.has(sample.slug),
       isCurrent: currentInterest?.slug === sample.slug,
       accentColor: dbInterest?.accent_color || sample.color,

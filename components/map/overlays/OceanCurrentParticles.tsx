@@ -2,7 +2,7 @@
  * OceanCurrentParticles Component
  *
  * Animated particle flow visualization for ocean currents
- * Uses Storm Glass current data with real-time animation
+ * Uses current data with real-time animation
  */
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -313,7 +313,7 @@ export const OceanCurrentParticles: React.FC<OceanCurrentParticlesProps> = ({
 };
 
 /**
- * Helper: Generate current field from Storm Glass data
+ * Helper: Generate current field from weather data
  */
 export function generateCurrentField(
   centerLat: number,

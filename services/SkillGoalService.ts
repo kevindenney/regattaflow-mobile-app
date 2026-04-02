@@ -117,9 +117,11 @@ export async function createSkillGoalsBatch(
 
   if (!toInsert.length) return [];
 
+  // Use upsert with ignoreDuplicates to gracefully handle concurrent calls
+  // that race to insert the same (user_id, interest_id, title) row.
   const { data, error } = await supabase
     .from(TABLE)
-    .insert(toInsert)
+    .upsert(toInsert, { onConflict: 'user_id,interest_id,title', ignoreDuplicates: true })
     .select();
 
   if (error) throw error;
@@ -178,36 +180,44 @@ export async function recordRating(
   title: string,
   rating: number,
 ): Promise<void> {
-  // Upsert: create if doesn't exist, update if it does
-  const { error } = await supabase
+  // Try update first — most common case is the row already exists (ensureSkillGoals ran).
+  // This avoids insert conflicts when concurrent upserts race.
+  const { data: updated, error: updateErr } = await supabase
     .from(TABLE)
-    .upsert(
-      {
-        user_id: userId,
-        interest_id: interestId,
-        title: title.trim(),
-        current_rating: rating,
-        rating_count: 1, // will be overridden by RPC if row exists
-        last_rated_at: new Date().toISOString(),
-        source_type: 'manual',
-      },
-      { onConflict: 'user_id,interest_id,title' },
-    );
+    .update({
+      current_rating: rating,
+      last_rated_at: new Date().toISOString(),
+    })
+    .eq('user_id', userId)
+    .eq('interest_id', interestId)
+    .eq('title', title.trim())
+    .select('id')
+    .maybeSingle();
 
-  if (error) {
-    console.warn('[SkillGoalService] recordRating upsert failed, trying update:', error);
-    // Fallback: try direct update for existing rows
-    const { error: updateErr } = await supabase
+  if (updateErr) {
+    console.warn('[SkillGoalService] recordRating update failed:', updateErr);
+  }
+
+  // Row didn't exist yet — upsert to create it
+  if (!updated) {
+    const { error } = await supabase
       .from(TABLE)
-      .update({
-        current_rating: rating,
-        last_rated_at: new Date().toISOString(),
-      })
-      .eq('user_id', userId)
-      .eq('interest_id', interestId)
-      .eq('title', title.trim());
+      .upsert(
+        {
+          user_id: userId,
+          interest_id: interestId,
+          title: title.trim(),
+          current_rating: rating,
+          rating_count: 1,
+          last_rated_at: new Date().toISOString(),
+          source_type: 'manual',
+        },
+        { onConflict: 'user_id,interest_id,title' },
+      );
 
-    if (updateErr) throw updateErr;
+    if (error) {
+      console.warn('[SkillGoalService] recordRating upsert failed:', error);
+    }
   }
 }
 

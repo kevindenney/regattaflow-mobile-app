@@ -2,7 +2,7 @@
  * SwellOverlay Component
  *
  * Displays swell direction arrows with primary and secondary swell systems
- * Uses Storm Glass multi-swell data for comprehensive visualization
+ * Uses multi-swell data for comprehensive visualization
  */
 
 import React from 'react';

@@ -1,7 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { corsHeaders } from '../_shared/cors.ts';
-
-const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
+import { callGemini, GeminiPart } from '../_shared/gemini.ts';
 
 /**
  * Course Image/PDF Extraction Edge Function
@@ -48,13 +47,6 @@ Deno.serve(async (req) => {
       return new Response(
         JSON.stringify({ success: false, error: 'No image or PDF data provided' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    if (!ANTHROPIC_API_KEY) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'ANTHROPIC_API_KEY not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -148,78 +140,35 @@ IMPORTANT for PDFs with MULTIPLE courses: If the document contains multiple cour
 
 If there's only one course, return the standard single-course format.`;
 
-    // Build content array based on whether it's PDF or image
-    const contentArray: any[] = [];
-
-    if (isPdf) {
-      // Use Claude's document capability for PDFs
-      contentArray.push({
-        type: 'document',
-        source: {
-          type: 'base64',
-          media_type: 'application/pdf',
+    // Build Gemini parts with inline data
+    const geminiParts: GeminiPart[] = [
+      {
+        inlineData: {
+          mimeType: isPdf ? 'application/pdf' : mediaType,
           data: base64Data,
         },
-      });
-    } else {
-      // Use image capability for images
-      contentArray.push({
-        type: 'image',
-        source: {
-          type: 'base64',
-          media_type: mediaType,
-          data: base64Data,
-        },
-      });
-    }
-
-    contentArray.push({
-      type: 'text',
-      text: prompt,
-    });
-
-    // Call Claude Vision API
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
       },
-      body: JSON.stringify({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 4096,
-        temperature: 0.2,
-        messages: [
-          {
-            role: 'user',
-            content: contentArray,
-          },
-        ],
-      }),
-    });
+      { text: prompt },
+    ];
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('[extract-course-image] Claude API error:', {
-        status: response.status,
-        statusText: response.statusText,
-        errorBody: errorText,
+    // Call Gemini Flash
+    let content: string;
+    try {
+      content = await callGemini({
+        userContent: geminiParts,
+        maxOutputTokens: 4096,
+        temperature: 0.2,
       });
+    } catch (aiError: any) {
+      console.error('[extract-course-image] Gemini API error:', aiError.message);
       return new Response(
         JSON.stringify({
           success: false,
-          error: `Claude API error: ${response.status}`,
-          details: errorText.substring(0, 500),
+          error: `Gemini API error: ${aiError.message}`,
         }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-
-    const result = await response.json();
-
-    // Extract the text content
-    let content = result.content[0].text;
 
     // Clean up markdown code blocks if present
     content = content.trim();

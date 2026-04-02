@@ -15,9 +15,7 @@ import type {
 } from '@/lib/types/global-venues';
 import type { AdvancedWeatherConditions } from '@/lib/types/advanced-map';
 import { createLogger } from '@/lib/utils/logger';
-import { StormGlassService } from './StormGlassService';
 import { OpenMeteoService } from './OpenMeteoService';
-import Constants from 'expo-constants';
 
 // Weather forecast data types
 export interface WeatherForecast {
@@ -108,46 +106,12 @@ export class RegionalWeatherService {
   private weatherModels: Map<string, RegionalWeatherModel> = new Map();
   private cache: Map<string, WeatherData> = new Map();
   private cacheTimeout = 30 * 60 * 1000; // 30 minutes
-  private stormGlassService: StormGlassService | null = null;
   private openMeteoService: OpenMeteoService;
   private logger = createLogger('RegionalWeatherService');
 
   constructor() {
     this.openMeteoService = new OpenMeteoService();
     this.initializeWeatherModels();
-    this.initializeStormGlass();
-  }
-
-  /**
-   * Initialize Storm Glass service if API key is available
-   */
-  private initializeStormGlass(): void {
-    const apiKey = Constants.expoConfig?.extra?.stormglassApiKey || process.env.EXPO_PUBLIC_STORMGLASS_API_KEY;
-
-    if (apiKey) {
-      this.stormGlassService = new StormGlassService({
-        apiKey,
-        baseUrl: 'https://api.stormglass.io/v2',
-        timeout: 10000,
-        retryAttempts: 3
-      });
-      this.logger.info('Storm Glass marine weather API initialized');
-
-      const mockSettingEnv = process.env.EXPO_PUBLIC_USE_MOCK_WEATHER;
-      const mockSettingExtra = Constants.expoConfig?.extra?.useMockWeather;
-      const shouldEnableMock =
-        mockSettingEnv === 'true' ||
-        mockSettingEnv === '1' ||
-        mockSettingExtra === true ||
-        mockSettingExtra === 'true' ||
-        mockSettingExtra === 1;
-
-      if (shouldEnableMock) {
-        this.stormGlassService.enableMockMode('configuration override');
-      }
-    } else {
-      this.logger.warn('[RegionalWeatherService] No Storm Glass API key found - using simulated data. Set EXPO_PUBLIC_STORMGLASS_API_KEY in .env');
-    }
   }
 
   /**
@@ -347,7 +311,7 @@ export class RegionalWeatherService {
 
   /**
    * Aggregate weather data from multiple models
-   * Uses OpenMeteo as primary (FREE), Storm Glass as secondary enhancement
+   * Uses OpenMeteo as primary (FREE)
    */
   private async aggregateWeatherData(
     venue: SailingVenue,
@@ -361,9 +325,6 @@ export class RegionalWeatherService {
     // PRIMARY: Load OpenMeteo forecasts first (FREE, always available)
     const openMeteoForecasts = await this.loadOpenMeteoForecasts(venue, hoursAhead);
 
-    // SECONDARY: Load Storm Glass forecasts for enhancement (if available)
-    const stormGlassForecasts = await this.loadStormGlassForecasts(venue, hoursAhead);
-
     // Generate forecast points (every 3 hours)
     const now = new Date();
     for (let hour = 0; hour <= hoursAhead; hour += 3) {
@@ -376,14 +337,7 @@ export class RegionalWeatherService {
         continue;
       }
 
-      // Try Storm Glass second (secondary enhancement)
-      const stormGlassMatch = this.findClosestStormGlassForecast(stormGlassForecasts, timestamp);
-      if (stormGlassMatch) {
-        forecasts.push(this.transformToWeatherForecast(stormGlassMatch));
-        continue;
-      }
-
-      // Final fallback to venue-specific generation
+      // Fallback to venue-specific generation
       const fallbackForecast = await this.generateVenueSpecificForecast(venue, timestamp, models[0]);
       forecasts.push(fallbackForecast);
     }
@@ -405,8 +359,8 @@ export class RegionalWeatherService {
       marineConditions,
       lastUpdated: new Date(),
       sources: {
-        primary: 'OpenMeteo', // OpenMeteo is always primary (FREE, reliable)
-        secondary: this.stormGlassService ? ['Storm Glass', ...models.map(m => m.name)] : models.map(m => m.name),
+        primary: 'OpenMeteo',
+        secondary: models.map(m => m.name),
         reliability: 0.85
       },
       localObservations
@@ -415,7 +369,7 @@ export class RegionalWeatherService {
 
   /**
    * Generate venue-specific forecast based on typical conditions
-   * Uses OpenMeteo API as primary (FREE), Storm Glass as secondary enhancement
+   * Uses OpenMeteo API as primary (FREE)
    */
   private async generateVenueSpecificForecast(
     venue: SailingVenue,
@@ -459,7 +413,6 @@ export class RegionalWeatherService {
       }
     }
 
-    // Storm Glass API disabled - quota exceeded
     // Fallback: Use simulated data based on venue's typical conditions
     const conditions = venue.sailingConditions;
     const typical = conditions?.typicalConditions;
@@ -620,16 +573,6 @@ export class RegionalWeatherService {
     };
   }
 
-  /**
-   * Load Storm Glass forecasts (DISABLED - quota exceeded, using OpenMeteo only)
-   * Storm Glass API quota is exceeded. OpenMeteo provides equivalent data for free.
-   */
-  private async loadStormGlassForecasts(_venue: SailingVenue, _hoursAhead: number): Promise<AdvancedWeatherConditions[]> {
-    // Storm Glass API disabled - using OpenMeteo (free) as the only weather source
-    // This avoids 402 Payment Required errors and unnecessary API calls
-    return [];
-  }
-
   private resolveVenueLocation(venue: SailingVenue): { latitude: number; longitude: number } | null {
     const coordinates = venue.coordinates as any;
 
@@ -669,27 +612,6 @@ export class RegionalWeatherService {
 
     this.logger.warn('🔴 [resolveVenueLocation] Failed to resolve coordinates');
     return null;
-  }
-
-  private findClosestStormGlassForecast(forecasts: AdvancedWeatherConditions[], target: Date): AdvancedWeatherConditions | null {
-    if (!forecasts.length) {
-      return null;
-    }
-
-    let closest: AdvancedWeatherConditions | null = null;
-    let smallestDiff = Number.POSITIVE_INFINITY;
-
-    for (const forecast of forecasts) {
-      if (!forecast.timestamp) continue;
-      const diff = Math.abs(forecast.timestamp.getTime() - target.getTime());
-      if (diff < smallestDiff) {
-        smallestDiff = diff;
-        closest = forecast;
-      }
-    }
-
-    // Require the data point to be within 90 minutes of target to avoid stale matches
-    return smallestDiff <= 90 * 60 * 1000 ? closest : null;
   }
 
   private transformToWeatherForecast(weather: AdvancedWeatherConditions): WeatherForecast {

@@ -529,21 +529,22 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
         }
       }
 
-      // Check if user owns a club directly
-      const { data: ownedClub, error: ownedError } = await supabase
-        .from('clubs')
-        .select('*')
-        .eq('owner_id', currentUserId)
+      // Check if user owns a club via club_members with role='owner'
+      const { data: ownerMembership, error: ownerError } = await supabase
+        .from('club_members')
+        .select('*, clubs(*)')
+        .eq('user_id', currentUserId)
+        .eq('role', 'owner')
         .maybeSingle()
 
-      if (ownedError && ownedError.code !== 'PGRST116') {
-        authDebugLog('[loadPersonaContext] Owned club query error:', ownedError)
-        throw ownedError
+      if (ownerError && ownerError.code !== 'PGRST116') {
+        authDebugLog('[loadPersonaContext] Owner membership query error:', ownerError)
+        throw ownerError
       }
 
-      if (ownedClub) {
-        authDebugLog('[loadPersonaContext] Found owned club:', ownedClub.name)
-        return { club: ownedClub, membership: { role: 'owner' } }
+      if (ownerMembership?.clubs) {
+        authDebugLog('[loadPersonaContext] Found owned club:', (ownerMembership.clubs as any).name)
+        return { club: ownerMembership.clubs, membership: { role: 'owner' } }
       }
 
       authDebugLog('[loadPersonaContext] No club found for user')

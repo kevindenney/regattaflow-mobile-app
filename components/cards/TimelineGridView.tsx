@@ -97,9 +97,15 @@ function groupByMonthIndexed(
   preserveOrder = false,
 ): MonthGroup[] {
   const groups = new Map<string, MonthGroup>();
+  const undated: IndexedRace[] = [];
 
   indexedRaces.forEach(({ race, index }) => {
     const dateStr = (race as any).start_date || race.date;
+    if (!dateStr) {
+      // Steps without an explicit date — merge into first group later
+      undated.push({ race, index });
+      return;
+    }
     const d = new Date(dateStr);
     const year = d.getFullYear();
     const month = d.getMonth();
@@ -112,16 +118,35 @@ function groupByMonthIndexed(
     groups.get(key)!.races.push({ race, index });
   });
 
+  // Merge undated steps into the first group (by sort_order alongside others)
+  if (undated.length > 0) {
+    const firstGroup = groups.values().next().value;
+    if (firstGroup) {
+      firstGroup.races.push(...undated);
+    } else {
+      // All steps are undated — create a single group with no month label
+      groups.set('undated', { key: 'undated', label: '', races: undated });
+    }
+  }
+
   const result = Array.from(groups.values());
 
   if (!preserveOrder) {
     if (sortMode === 'planned') {
-      // Within each month: steps/actionable items first, then plan-phase items
+      // Within each month: timeline steps by sort_order, sailing races by status then date
       for (const group of result) {
         group.races.sort((a, b) => {
           const aIsStep = !!(a.race as any).isTimelineStep;
           const bIsStep = !!(b.race as any).isTimelineStep;
 
+          // Timeline steps: always sort by sort_order (user's chosen sequence)
+          if (aIsStep && bIsStep) {
+            const aSortOrder = (a.race as any).sort_order ?? 999;
+            const bSortOrder = (b.race as any).sort_order ?? 999;
+            return aSortOrder - bSortOrder;
+          }
+
+          // Sailing races: status-based sorting
           // Priority: NEXT item always first
           const aIsNext = a.index === nextRaceIdx;
           const bIsNext = b.index === nextRaceIdx;
@@ -136,15 +161,11 @@ function groupByMonthIndexed(
           if (aIsDoing && !bIsDoing) return -1;
           if (!aIsDoing && bIsDoing) return 1;
 
-          // Steps (non-plan-phase) before plan-phase items
-          const aIsPlanPhase = aIsStep && aStatus !== 'completed' && aStatus !== 'in_progress';
-          const bIsPlanPhase = bIsStep && bStatus !== 'completed' && bStatus !== 'in_progress';
-          if (!aIsPlanPhase && bIsPlanPhase) return -1;
-          if (aIsPlanPhase && !bIsPlanPhase) return 1;
-
-          // Within same category, sort by date ascending (soonest left)
           const aDate = (a.race as any).start_date || a.race.date;
           const bDate = (b.race as any).start_date || b.race.date;
+          if (!aDate && !bDate) return 0;
+          if (!aDate) return 1;
+          if (!bDate) return -1;
           return new Date(aDate).getTime() - new Date(bDate).getTime();
         });
       }
@@ -154,6 +175,9 @@ function groupByMonthIndexed(
         group.races.sort((a, b) => {
           const aDate = (a.race as any).start_date || a.race.date;
           const bDate = (b.race as any).start_date || b.race.date;
+          if (!aDate && !bDate) return 0;
+          if (!aDate) return 1;
+          if (!bDate) return -1;
           return new Date(aDate).getTime() - new Date(bDate).getTime();
         });
       }
@@ -889,8 +913,8 @@ export function TimelineGridView({
 
         {plannedGroups.map((group) => (
           <View key={group.key} style={gridStyles.monthSection}>
-            {/* Month header */}
-            <Text style={gridStyles.monthHeader}>{group.label}</Text>
+            {/* Month header — skip for undated groups */}
+            {group.label ? <Text style={gridStyles.monthHeader}>{group.label}</Text> : null}
             {blueprintTitle && group.races.some(({ race }) => (race as any).isTimelineStep) && (
               <Pressable
                 style={gridStyles.blueprintRow}
@@ -1330,9 +1354,11 @@ const gridStyles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: IOS_COLORS.systemGroupedBackground,
+    ...(Platform.OS === 'web' ? { overflow: 'hidden' as any } : {}),
   },
   scrollView: {
     flex: 1,
+    ...(Platform.OS === 'web' ? { overflow: 'auto' as any } : {}),
   },
   scrollContent: {
     paddingTop: 8,

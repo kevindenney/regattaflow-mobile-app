@@ -4,6 +4,10 @@ import { Platform } from 'react-native';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
 import { isMissingSupabaseColumn } from '@/lib/utils/supabaseSchemaFallback';
+import { createLogger } from '@/lib/utils/logger';
+import { isAbortError } from '@/lib/utils/fetchWithTimeout';
+
+const logger = createLogger('OrganizationProvider');
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 
 export type OrganizationType =
@@ -379,7 +383,7 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
   useEffect(() => {
     const mountedAt = new Date().toISOString();
     setProviderMountedAt(mountedAt);
-    console.log('[OrganizationProvider] mounted', mountedAt);
+    logger.debug('mounted', mountedAt);
   }, []);
 
   const refreshMemberships = useCallback(async () => {
@@ -438,7 +442,8 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
         timedOut,
         hasSession: false,
       };
-      console.error('[OrganizationProvider] Session load failed', payload);
+      if (isAbortError(error)) return;
+      logger.error('Session load failed', payload);
       setMembershipLoadError('Could not load organizations. Retry.');
       setMembershipLoadErrorPayload(payload);
       setMembershipLoadDebug({
@@ -584,7 +589,7 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
         timedOut,
         hasSession: latestHasSession,
       };
-      console.error('[OrganizationProvider] Membership load failed', payload);
+      if (!isAbortError(error)) logger.error('Membership load failed', payload);
       setMembershipLoadDebug({
         startedAt,
         finishedAt: new Date().toISOString(),
@@ -816,7 +821,7 @@ export function useOrganization() {
   const ctx = useContext(Ctx);
   if ((__DEV__ || process.env.NODE_ENV !== 'production') && !ctx.organizationProviderActive && !hasLoggedMissingOrganizationProvider) {
     hasLoggedMissingOrganizationProvider = true;
-    console.warn('[OrganizationProvider] useOrganization is running outside <OrganizationProvider>', {
+    logger.warn('useOrganization is running outside <OrganizationProvider>', {
       pathname: typeof window !== 'undefined' ? window.location?.pathname || null : null,
     });
   }

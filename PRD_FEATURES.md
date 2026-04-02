@@ -469,7 +469,7 @@ CREATE TABLE venue_favorites (
 ```
 
 **External Integrations**:
-- **StormGlass API**: Weather and ocean data
+- **Open-Meteo API**: Weather and ocean data
 - **GEBCO**: Bathymetric data (Global Bathymetry)
 - **OpenStreetMap**: Base maps and facility data
 
@@ -587,7 +587,7 @@ CREATE TABLE bathymetry_tiles (
 **Tier**: Pro (basic), Championship (advanced)
 
 #### Overview
-Real-time and historical weather data from StormGlass API, including wind, waves, temperature, and precipitation.
+Real-time and historical weather data from Open-Meteo API, including wind, waves, temperature, and precipitation.
 
 #### Functional Requirements
 
@@ -637,7 +637,7 @@ CREATE TABLE weather_cache (
   longitude DECIMAL(10, 7),
   timestamp TIMESTAMPTZ NOT NULL,
   forecast_data JSONB,
-  source TEXT DEFAULT 'stormglass',
+  source TEXT DEFAULT 'openmeteo',
   created_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(venue_id, timestamp)
 );
@@ -646,7 +646,7 @@ CREATE INDEX idx_weather_venue_timestamp ON weather_cache(venue_id, timestamp DE
 ```
 
 **External API**:
-- **StormGlass API**: Primary weather source
+- **Open-Meteo API**: Primary weather source
 - **Rate Limits**: 10,000 requests/day (paid plan)
 - **Caching Strategy**: Cache forecasts for 3 hours, historical data for 24 hours
 
@@ -666,7 +666,7 @@ CREATE INDEX idx_weather_venue_timestamp ON weather_cache(venue_id, timestamp DE
 - [ ] Historical data charts render in <2 seconds
 - [ ] Weather alerts sent within 5 minutes of trigger
 - [ ] Offline mode shows last cached data with timestamp
-- [ ] Graceful degradation if StormGlass API unavailable
+- [ ] Graceful degradation if weather API unavailable
 
 ---
 
@@ -1734,8 +1734,8 @@ Deno.serve(async (req) => {
 
 ### External API Integrations
 
-**1. StormGlass API** (Weather Data)
-- Base URL: `https://api.stormglass.io/v2`
+**1. Open-Meteo API** (Weather Data)
+- Base URL: `https://api.open-meteo.com/v1`
 - Authentication: API Key in header
 - Endpoints Used:
   - `/weather/point` - Forecast and current conditions

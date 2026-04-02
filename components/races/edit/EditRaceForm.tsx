@@ -83,6 +83,7 @@ import { supabase } from '@/services/supabase';
 import { useAuth } from '@/providers/AuthProvider';
 import { createLogger } from '@/lib/utils/logger';
 import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
+import { OpenMeteoService } from '@/services/weather/OpenMeteoService';
 
 const logger = createLogger('EditRaceForm');
 
@@ -348,10 +349,12 @@ export function EditRaceForm({
   // Date picker state
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
+  const [showWarningTimePicker, setShowWarningTimePicker] = useState(false);
 
   // Web-specific date/time input state
   const [webDateInput, setWebDateInput] = useState('');
   const [webTimeInput, setWebTimeInput] = useState('');
+  const [webWarningTimeInput, setWebWarningTimeInput] = useState('');
 
   // Location picker state
   const [showLocationPicker, setShowLocationPicker] = useState(false);
@@ -363,6 +366,45 @@ export function EditRaceForm({
   // Course position editor state
   const [showCoursePositionEditor, setShowCoursePositionEditor] = useState(false);
   const [positionedCourse, setPositionedCourse] = useState<PositionedCourse | null>(null);
+
+  // Forecast wind for course positioning
+  const [forecastWind, setForecastWind] = useState<{ direction: number; speed: number } | null>(null);
+
+  // ==========================================================================
+  // FORECAST WIND FOR COURSE POSITIONING
+  // ==========================================================================
+
+  useEffect(() => {
+    if (!showCoursePositionEditor) return;
+    if (!formData.venueCoordinates || !formData.date) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const timeStr = formData.startTime || formData.warningSignalTime || '12:00';
+        const raceDateTime = new Date(`${formData.date}T${timeStr.length === 5 ? timeStr + ':00' : timeStr}`);
+        if (isNaN(raceDateTime.getTime())) return;
+
+        const service = new OpenMeteoService();
+        const weather = await service.getWeatherAtTime(
+          { latitude: formData.venueCoordinates!.lat, longitude: formData.venueCoordinates!.lng },
+          raceDateTime,
+        );
+        if (!cancelled && weather?.wind) {
+          logger.debug('Forecast wind for race time:', {
+            date: formData.date,
+            time: timeStr,
+            direction: weather.wind.direction,
+            speed: weather.wind.speed,
+          });
+          setForecastWind({ direction: weather.wind.direction, speed: weather.wind.speed });
+        }
+      } catch (e) {
+        logger.warn('Failed to fetch forecast wind for course editor', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [showCoursePositionEditor, formData.date, formData.startTime, formData.warningSignalTime, formData.venueCoordinates]);
 
   // ==========================================================================
   // DATA LOADING
@@ -554,6 +596,41 @@ export function EditRaceForm({
       setOriginalData(loadedData);
       setRaceName(race.name || 'Edit Race');
 
+      // Load positioned course from DB
+      try {
+        const { data: courseData } = await supabase
+          .from('race_positioned_courses')
+          .select('*')
+          .eq('regatta_id', raceId)
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (courseData) {
+          setPositionedCourse({
+            id: courseData.id,
+            regattaId: courseData.regatta_id,
+            sourceDocumentId: courseData.source_document_id,
+            userId: courseData.user_id,
+            courseType: courseData.course_type,
+            marks: courseData.marks,
+            startLine: {
+              pin: { lat: courseData.start_pin_lat, lng: courseData.start_pin_lng },
+              committee: { lat: courseData.start_committee_lat, lng: courseData.start_committee_lng },
+            },
+            windDirection: courseData.wind_direction,
+            legLengthNm: parseFloat(courseData.leg_length_nm),
+            hasManualAdjustments: courseData.has_manual_adjustments,
+            startLineLengthM: courseData.start_line_length_m,
+            createdAt: courseData.created_at,
+            updatedAt: courseData.updated_at,
+          });
+          logger.debug('[EditRaceForm] Loaded positioned course');
+        }
+      } catch (courseErr) {
+        logger.warn('[EditRaceForm] Could not load positioned course:', courseErr);
+      }
+
       logger.debug('[EditRaceForm] Loaded race successfully');
     } catch (err) {
       logger.error('[EditRaceForm] Unexpected error:', err);
@@ -596,6 +673,15 @@ export function EditRaceForm({
       const hours = selectedTime.getHours().toString().padStart(2, '0');
       const minutes = selectedTime.getMinutes().toString().padStart(2, '0');
       updateField('startTime', `${hours}:${minutes}`);
+    }
+  }, [updateField]);
+
+  const handleWarningTimeChange = useCallback((event: any, selectedTime?: Date) => {
+    setShowWarningTimePicker(false);
+    if (selectedTime) {
+      const hours = selectedTime.getHours().toString().padStart(2, '0');
+      const minutes = selectedTime.getMinutes().toString().padStart(2, '0');
+      updateField('warningSignalTime', `${hours}:${minutes}`);
     }
   }, [updateField]);
 
@@ -1329,7 +1415,7 @@ export function EditRaceForm({
                   value={formatTime(formData.warningSignalTime)}
                   placeholder="Select time"
                   accessory="chevron"
-                  onPress={() => {/* Would open time picker */}}
+                  onPress={() => setShowWarningTimePicker(true)}
                 />
                 <EditFormRow
                   label="Preparatory Minutes"
@@ -1874,6 +1960,66 @@ export function EditRaceForm({
         </Modal>
       )}
 
+      {/* Warning Signal Time Picker - Native */}
+      {showWarningTimePicker && Platform.OS !== 'web' && DateTimePicker && (
+        <DateTimePicker
+          value={parseTime(formData.warningSignalTime)}
+          mode="time"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          onChange={handleWarningTimeChange}
+        />
+      )}
+
+      {/* Warning Signal Time Picker - Web */}
+      {showWarningTimePicker && Platform.OS === 'web' && (
+        <Modal
+          visible={showWarningTimePicker}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowWarningTimePicker(false)}
+        >
+          <TouchableOpacity
+            style={styles.webPickerOverlay}
+            activeOpacity={1}
+            onPress={() => setShowWarningTimePicker(false)}
+          >
+            <View style={styles.webPickerContainer}>
+              <Text style={styles.webPickerTitle}>Warning Signal Time</Text>
+              <TextInput
+                style={styles.webPickerInput}
+                value={webWarningTimeInput || formData.warningSignalTime}
+                onChangeText={setWebWarningTimeInput}
+                placeholder="HH:MM (24h format)"
+                autoFocus
+              />
+              <View style={styles.webPickerButtons}>
+                <TouchableOpacity
+                  style={styles.webPickerCancelButton}
+                  onPress={() => {
+                    setWebWarningTimeInput('');
+                    setShowWarningTimePicker(false);
+                  }}
+                >
+                  <Text style={styles.webPickerCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.webPickerConfirmButton}
+                  onPress={() => {
+                    if (webWarningTimeInput) {
+                      updateField('warningSignalTime', webWarningTimeInput);
+                    }
+                    setWebWarningTimeInput('');
+                    setShowWarningTimePicker(false);
+                  }}
+                >
+                  <Text style={styles.webPickerConfirmText}>Confirm</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+      )}
+
       {/* Location Map Picker */}
       <LocationMapPicker
         visible={showLocationPicker}
@@ -1893,6 +2039,9 @@ export function EditRaceForm({
             ? formData.courseType as any
             : 'windward_leeward'}
           initialLocation={formData.venueCoordinates}
+          initialWindDirection={forecastWind?.direction ?? positionedCourse?.windDirection}
+          initialWindSpeed={forecastWind?.speed}
+          existingCourse={positionedCourse}
           onSave={handlePositionedCourseSave}
           onCancel={() => setShowCoursePositionEditor(false)}
         />

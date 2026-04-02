@@ -4,7 +4,7 @@ import {supabase} from '@/services/supabase'
 import {logSession, dumpSbStorage} from '@/utils/authDebug'
 import {getDashboardRoute} from '@/lib/utils/userTypeRouting'
 import {extractOAuthDisplayName} from '@/lib/utils/oauthName'
-import {ActivityIndicator, View, Text,
+import {ActivityIndicator, Image, View, Text,
 } from "react-native"
 import {createLogger} from '@/lib/utils/logger'
 // Sample data is created in profile-setup.tsx or races.tsx fallback
@@ -36,7 +36,7 @@ const getPendingPersona = (): PersonaRole | null => {
 
 export default function Callback(){
   const ran = useRef(false)
-  const [status, setStatus] = useState('Processing authentication...')
+  const [status, setStatus] = useState('Signing you in...')
 
   useEffect(()=>{
     if (ran.current) {
@@ -68,12 +68,12 @@ export default function Callback(){
           }
 
           logger.error('No access token in OAuth callback')
-          setStatus('Invalid authentication response. Redirecting...')
+          setStatus('Something went wrong. Redirecting to login...')
           setTimeout(() => router.replace('/(auth)/login'), 2000)
           return
         }
 
-        setStatus('Exchanging OAuth tokens...')
+        setStatus('Signing you in...')
 
         const {data: tokenData, error: tokenError} = await supabase.auth.setSession({
           access_token: accessToken,
@@ -82,7 +82,7 @@ export default function Callback(){
 
         if (tokenError) {
           logger.error('Token exchange error:', tokenError)
-          setStatus('Authentication failed. Redirecting...')
+          setStatus('Something went wrong. Redirecting to login...')
           setTimeout(() => router.replace('/(auth)/login'), 2000)
           return
         }
@@ -93,7 +93,7 @@ export default function Callback(){
         const session = tokenData?.session
         if (!session?.user) {
           logger.warn('No session after OAuth callback')
-          setStatus('No session found. Redirecting to login...')
+          setStatus('Something went wrong. Redirecting to login...')
           setTimeout(() => router.replace('/(auth)/login'), 2000)
           return
         }
@@ -172,7 +172,7 @@ export default function Callback(){
           const hasGuestRace = await GuestStorageService.hasGuestRace()
           if (hasGuestRace) {
             logger.info('Found guest race data, migrating to account...')
-            setStatus('Migrating your race data...')
+            setStatus('Importing your data...')
             const newRaceId = await GuestStorageService.migrateToAccount(session.user.id)
             if (newRaceId) {
               logger.info('Successfully migrated guest race:', newRaceId)
@@ -224,7 +224,7 @@ export default function Callback(){
         const personaForOnboarding = pendingPersona || effectiveUserType
         if (needsOnboarding && personaForOnboarding) {
           logger.info('Routing user to onboarding for persona:', personaForOnboarding)
-          setStatus('Redirecting to setup...')
+          setStatus('Almost there...')
 
           let onboardingRoute: string
           if (personaForOnboarding === 'sailor') {
@@ -244,7 +244,7 @@ export default function Callback(){
         } else {
           const dest = getDashboardRoute(effectiveUserType ?? null)
           logger.info('Redirecting to dashboard:', dest)
-          setStatus('Redirecting to dashboard...')
+          setStatus('Almost there...')
           setTimeout(() => {
             router.replace(dest as any)
           }, 100)
@@ -259,7 +259,7 @@ export default function Callback(){
       }
     } catch (criticalError) {
       logger.error('Critical error in callback handler:', criticalError)
-      setStatus('Error occurred. Redirecting...')
+      setStatus('Something went wrong. Redirecting to login...')
       setTimeout(() => router.replace('/(auth)/login'), 2000)
       clearTimeout(safetyTimeout)
     }
@@ -272,7 +272,12 @@ export default function Callback(){
   },[])
 
   return (
-    <View style={{flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24}}>
+    <View style={{flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: '#FFFFFF'}}>
+      <Image
+        source={require('@/assets/images/logo-full.png')}
+        style={{width: 160, height: 48, marginBottom: 32}}
+        resizeMode="contain"
+      />
       <ActivityIndicator size="large" color="#3B82F6" />
       <Text style={{marginTop: 16, fontSize: 16, color: '#64748B'}}>{status}</Text>
     </View>

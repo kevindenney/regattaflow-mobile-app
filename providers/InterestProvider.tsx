@@ -5,6 +5,9 @@
  * Wraps inside AuthProvider and manages which "interest" (e.g. sail-racing,
  * nursing, drawing, fitness) is currently active for the user.
  *
+ * Users start with zero interests and explicitly "add" the ones they want
+ * to get better at. The user_interests DB table is the source of truth.
+ *
  * Resolution order for current interest:
  *   1. AsyncStorage cache (fast startup)
  *   2. user_preferences.preferred_interest_id (authenticated users)
@@ -25,6 +28,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/services/supabase'
 import { useAuth } from '@/providers/AuthProvider'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('InterestProvider')
 
 // ---------------------------------------------------------------------------
 // Types
@@ -56,20 +62,18 @@ export interface DomainWithInterests {
 interface InterestContextValue {
   /** The currently-active interest, or null while loading */
   currentInterest: Interest | null
-  /** Full public interest catalog */
+  /** Full public interest catalog (for browsing/discovery) */
   allInterests: Interest[]
-  /** All interests available to this user (public + org interests they belong to) */
+  /** Only interests the user has explicitly added */
   userInterests: Interest[]
   /** True while the initial interest data is being resolved */
   loading: boolean
   /** Switch the active interest by slug. Persists to AsyncStorage and (if signed in) user_preferences. */
   switchInterest: (slug: string) => Promise<void>
-  /** Add an interest back into the user's quick list */
+  /** Add an interest to the user's list (writes to user_interests table) */
   addInterest: (slug: string) => Promise<void>
-  /** Remove an interest from the user's quick list */
+  /** Remove an interest from the user's list (deletes from user_interests table) */
   removeInterest: (slug: string) => Promise<void>
-  /** Batch-set interest visibility: provide the complete set of visible and hidden slugs */
-  setInterestVisibility: (visibleSlugs: string[], hiddenSlugs: string[]) => Promise<void>
   /** Domain rows only (type='domain') */
   domains: Interest[]
   /** Interests grouped by their parent domain */
@@ -93,8 +97,8 @@ interface InterestContextValue {
 // ---------------------------------------------------------------------------
 
 const ASYNC_STORAGE_KEY = 'betterat_preferred_interest'
-const HIDDEN_INTERESTS_KEY_PREFIX = 'betterat_hidden_interests'
 const INTERESTS_QUERY_KEY = ['interests', 'all']
+const USER_INTERESTS_QUERY_KEY = ['user_interests']
 const EXISTING_PROFILE_AGE_THRESHOLD_MS = 5 * 60 * 1000
 
 function isValidDateValue(value: unknown): boolean {
@@ -138,7 +142,6 @@ const InterestContext = createContext<InterestContextValue>({
   switchInterest: async () => {},
   addInterest: async () => {},
   removeInterest: async () => {},
-  setInterestVisibility: async () => {},
   refreshInterests: async () => {},
   viewMode: 'interest' as const,
   domainInterestIds: [],
@@ -158,14 +161,12 @@ export function InterestProvider({ children }: PropsWithChildren) {
   // null means we haven't resolved yet.
   const [activeSlug, setActiveSlug] = useState<string | null>(null)
   const [resolving, setResolving] = useState(true)
-  const [hiddenSlugs, setHiddenSlugs] = useState<string[]>([])
-  const [hiddenResolved, setHiddenResolved] = useState(false)
 
   // Track whether we already ran the initial resolution so we don't re-run
   // every time `user` reference changes.
   const resolvedOnceRef = useRef(false)
 
-  // ---------- Fetch all available interests via react-query ----------
+  // ---------- Fetch all available interests (catalog) via react-query ----------
 
   const EMPTY_INTERESTS: Interest[] = useMemo(() => [], [])
 
@@ -200,6 +201,43 @@ export function InterestProvider({ children }: PropsWithChildren) {
   // Split into domains and selectable interests
   const domains = useMemo(() => allRows.filter((i) => i.type === 'domain'), [allRows])
   const interests = useMemo(() => allRows.filter((i) => i.type !== 'domain'), [allRows])
+
+  // ---------- Fetch user's added interests from DB ----------
+
+  const {
+    data: userInterestIds,
+    isLoading: userInterestsLoading,
+    refetch: refetchUserInterests,
+  } = useQuery<string[]>({
+    queryKey: [...USER_INTERESTS_QUERY_KEY, user?.id],
+    queryFn: async () => {
+      if (!signedIn || !user?.id) return []
+      const { data, error } = await supabase
+        .from('user_interests')
+        .select('interest_id')
+        .eq('user_id', user.id)
+
+      if (error) {
+        logger.warn('Failed to fetch user_interests:', error.message)
+        return []
+      }
+
+      return (data ?? []).map((row: any) => row.interest_id)
+    },
+    enabled: signedIn && !!user?.id,
+    staleTime: 2 * 60 * 1000, // 2 minutes
+  })
+
+  // Derive userInterests from the DB join
+  const userInterests = useMemo(() => {
+    if (!signedIn || !user?.id) {
+      // Guest users: show all interests (they'll be prompted to sign up)
+      return interests
+    }
+    if (!userInterestIds || userInterestIds.length === 0) return []
+    const idSet = new Set(userInterestIds)
+    return interests.filter((interest) => idSet.has(interest.id))
+  }, [interests, userInterestIds, signedIn, user?.id])
 
   // Group interests by parent domain
   // Handles two-level nesting: if an interest's parent_id points to another
@@ -266,63 +304,13 @@ export function InterestProvider({ children }: PropsWithChildren) {
     [interests, domains],
   )
 
-  const hiddenStorageKey = useMemo(
-    () => `${HIDDEN_INTERESTS_KEY_PREFIX}:${signedIn && user?.id ? user.id : 'guest'}`,
-    [signedIn, user?.id],
-  )
-
-  useEffect(() => {
-    let cancelled = false
-
-    const loadHiddenInterests = async () => {
-      setHiddenResolved(false)
-      try {
-        const raw = await AsyncStorage.getItem(hiddenStorageKey)
-        const parsed = raw ? JSON.parse(raw) : []
-        const normalized = Array.isArray(parsed)
-          ? parsed
-              .map((value) => normalizeSlug(value))
-              .filter((value): value is string => !!value)
-          : []
-        if (!cancelled) {
-          setHiddenSlugs(Array.from(new Set(normalized)))
-        }
-      } catch {
-        if (!cancelled) {
-          setHiddenSlugs([])
-        }
-      } finally {
-        if (!cancelled) {
-          setHiddenResolved(true)
-        }
-      }
-    }
-
-    void loadHiddenInterests()
-    return () => {
-      cancelled = true
-    }
-  }, [hiddenStorageKey])
-
-  const persistHiddenSlugs = useCallback(
-    async (nextHidden: string[]) => {
-      await AsyncStorage.setItem(hiddenStorageKey, JSON.stringify(nextHidden))
-      setHiddenSlugs(nextHidden)
-    },
-    [hiddenStorageKey],
-  )
-
-  const userInterests = useMemo(() => {
-    if (hiddenSlugs.length === 0) return interests
-    const hidden = new Set(hiddenSlugs)
-    return interests.filter((interest) => !hidden.has(interest.slug))
-  }, [hiddenSlugs, interests])
-
   // ---------- Resolve which interest should be active on mount ----------
 
   useEffect(() => {
     // Don't resolve until interests have loaded at least once.
     if (interestsLoading || interests.length === 0) return
+    // Wait for user interests to load for signed-in users
+    if (signedIn && userInterestsLoading) return
     // Only resolve once (or when sign-in state meaningfully changes).
     if (resolvedOnceRef.current) return
 
@@ -405,7 +393,9 @@ export function InterestProvider({ children }: PropsWithChildren) {
               { onConflict: 'user_id' },
             )
           } else if (!cancelled && hasExistingProfileSignal(currentProfile)) {
+            // Existing user with no preference — pick first added interest or fall back
             const defaultInterest =
+              (userInterests.length > 0 ? userInterests[0] : null) ??
               interests.find((interest) => interest.slug === 'sail-racing') ??
               interests[0] ??
               null
@@ -429,10 +419,11 @@ export function InterestProvider({ children }: PropsWithChildren) {
             const normalizedProfile = currentProfile as any
             const onboardingComplete = normalizedProfile?.onboarding_completed === true
             const profileExists = !!normalizedProfile?.id
-            console.log('[InterestRouting]', {
+            logger.debug('InterestRouting', {
               userId: user.id,
               profileExists,
               interestsCount: interests.length,
+              userInterestsCount: userInterests.length,
               onboardingComplete,
               chosenRoute,
             })
@@ -457,7 +448,7 @@ export function InterestProvider({ children }: PropsWithChildren) {
     return () => {
       cancelled = true
     }
-  }, [interestsLoading, interests, signedIn, user?.id])
+  }, [interestsLoading, userInterestsLoading, interests, userInterests, signedIn, user?.id])
 
   // Re-resolve when the user signs in / out
   useEffect(() => {
@@ -469,8 +460,11 @@ export function InterestProvider({ children }: PropsWithChildren) {
 
   const currentInterest = useMemo(() => {
     if (!activeSlug) return null
-    return userInterests.find((i) => i.slug === activeSlug) ?? null
-  }, [activeSlug, userInterests])
+    // For signed-in users, current interest must be one they've added.
+    // For guests, check all interests.
+    const pool = signedIn && user?.id ? (userInterests.length > 0 ? userInterests : interests) : interests
+    return pool.find((i) => i.slug === activeSlug) ?? null
+  }, [activeSlug, userInterests, interests, signedIn, user?.id])
 
   const [viewMode, setViewMode] = useState<'interest' | 'domain'>('interest')
 
@@ -497,25 +491,30 @@ export function InterestProvider({ children }: PropsWithChildren) {
     setViewMode('interest')
   }, [activeSlug])
 
+  // Auto-select first user interest if active slug is invalid
   useEffect(() => {
-    if (!hiddenResolved) return
+    if (!signedIn || !user?.id) return
+    if (userInterestsLoading) return
     if (userInterests.length === 0) {
-      console.log('[InterestProvider] auto-set: no userInterests, clearing activeSlug')
-      setActiveSlug(null)
+      // User has no interests — activeSlug should be null to trigger onboarding
+      if (activeSlug) {
+        logger.debug('auto-set: no userInterests, clearing activeSlug')
+        setActiveSlug(null)
+      }
       return
     }
     if (!activeSlug || !userInterests.some((interest) => interest.slug === activeSlug)) {
-      console.log('[InterestProvider] auto-set: activeSlug was', JSON.stringify(activeSlug), '→ setting to', userInterests[0].slug, '(userInterests[0])')
+      logger.debug('auto-set: activeSlug was', JSON.stringify(activeSlug), '→ setting to', userInterests[0].slug, '(userInterests[0])')
       setActiveSlug(userInterests[0].slug)
     }
-  }, [activeSlug, hiddenResolved, userInterests])
+  }, [activeSlug, userInterests, userInterestsLoading, signedIn, user?.id])
 
   // ---------- switchInterest ----------
 
   const switchInterest = useCallback(
     async (slug: string) => {
-      console.log('[InterestProvider] switchInterest called with:', slug, '| current activeSlug:', activeSlug, '| userInterests count:', userInterests.length)
-      const target = userInterests.find((i) => i.slug === slug)
+      logger.debug('switchInterest called with:', slug, '| current activeSlug:', activeSlug, '| userInterests count:', userInterests.length)
+      const target = interests.find((i) => i.slug === slug)
       if (!target) {
         throw new Error(`Interest with slug "${slug}" not found`)
       }
@@ -541,12 +540,14 @@ export function InterestProvider({ children }: PropsWithChildren) {
 
         if (error) {
           // Non-fatal — the local state is already updated
-          console.warn('[InterestProvider] Failed to persist interest to DB:', error.message)
+          logger.warn('Failed to persist interest to DB:', error.message)
         }
       }
     },
-    [userInterests, signedIn, user?.id],
+    [interests, userInterests, signedIn, user?.id],
   )
+
+  // ---------- addInterest (writes to user_interests table) ----------
 
   const addInterest = useCallback(
     async (slug: string) => {
@@ -554,48 +555,79 @@ export function InterestProvider({ children }: PropsWithChildren) {
       if (!normalized) return
       const target = interests.find((interest) => interest.slug === normalized)
       if (!target) return
-      if (!hiddenSlugs.includes(normalized)) return
-      const nextHidden = hiddenSlugs.filter((entry) => entry !== normalized)
-      await persistHiddenSlugs(nextHidden)
+
+      if (signedIn && user?.id) {
+        // Write to DB
+        const { error } = await supabase
+          .from('user_interests')
+          .upsert(
+            { user_id: user.id, interest_id: target.id },
+            { onConflict: 'user_id,interest_id' },
+          )
+
+        if (error) {
+          logger.warn('Failed to add interest:', error.message)
+          return
+        }
+
+        // Refresh the user interests query
+        await queryClient.invalidateQueries({ queryKey: [...USER_INTERESTS_QUERY_KEY, user.id] })
+      }
     },
-    [hiddenSlugs, interests, persistHiddenSlugs],
+    [interests, signedIn, user?.id, queryClient],
   )
+
+  // ---------- removeInterest (deletes from user_interests table) ----------
 
   const removeInterest = useCallback(
     async (slug: string) => {
       const normalized = normalizeSlug(slug)
       if (!normalized) return
-      if (!interests.some((interest) => interest.slug === normalized)) return
-      // Keep at least one interest available.
-      const visibleCount = interests.filter((interest) => !hiddenSlugs.includes(interest.slug)).length
-      if (visibleCount <= 1 && !hiddenSlugs.includes(normalized)) return
-      const nextHidden = Array.from(new Set([...hiddenSlugs, normalized]))
-      await persistHiddenSlugs(nextHidden)
-    },
-    [hiddenSlugs, interests, persistHiddenSlugs],
-  )
+      const target = interests.find((interest) => interest.slug === normalized)
+      if (!target) return
 
-  const setInterestVisibility = useCallback(
-    async (visibleSlugs: string[], newHiddenSlugs: string[]) => {
-      // Guard: ensure at least one interest remains visible
-      if (visibleSlugs.length === 0) return
-      const normalizedHidden = newHiddenSlugs
-        .map((s) => normalizeSlug(s))
-        .filter((s): s is string => !!s)
-      await persistHiddenSlugs(Array.from(new Set(normalizedHidden)))
+      // Don't allow removing the last interest
+      if (userInterests.length <= 1) return
+
+      if (signedIn && user?.id) {
+        const { error } = await supabase
+          .from('user_interests')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('interest_id', target.id)
+
+        if (error) {
+          logger.warn('Failed to remove interest:', error.message)
+          return
+        }
+
+        // Refresh the user interests query
+        await queryClient.invalidateQueries({ queryKey: [...USER_INTERESTS_QUERY_KEY, user.id] })
+
+        // If we just removed the active interest, switch to the first remaining
+        if (activeSlug === normalized) {
+          const remaining = userInterests.filter((i) => i.slug !== normalized)
+          if (remaining.length > 0) {
+            await switchInterest(remaining[0].slug)
+          }
+        }
+      }
     },
-    [persistHiddenSlugs],
+    [interests, userInterests, signedIn, user?.id, activeSlug, queryClient, switchInterest],
   )
 
   // ---------- refreshInterests ----------
 
   const refreshInterests = useCallback(async () => {
-    await refetchInterests()
-  }, [refetchInterests])
+    await Promise.all([
+      refetchInterests(),
+      refetchUserInterests(),
+    ])
+  }, [refetchInterests, refetchUserInterests])
 
   // ---------- Loading state ----------
 
-  const loading = interestsLoading || resolving || !hiddenResolved
+  const loading = interestsLoading || resolving || (signedIn ? userInterestsLoading : false)
 
   // ---------- Context value (memoised) ----------
 
@@ -611,14 +643,13 @@ export function InterestProvider({ children }: PropsWithChildren) {
       switchInterest,
       addInterest,
       removeInterest,
-      setInterestVisibility,
       refreshInterests,
       viewMode,
       domainInterestIds,
       effectiveInterestIds,
       toggleDomainView,
     }),
-    [currentInterest, interests, userInterests, domains, groupedInterests, getDomainForInterest, loading, switchInterest, addInterest, removeInterest, setInterestVisibility, refreshInterests, viewMode, domainInterestIds, effectiveInterestIds, toggleDomainView],
+    [currentInterest, interests, userInterests, domains, groupedInterests, getDomainForInterest, loading, switchInterest, addInterest, removeInterest, refreshInterests, viewMode, domainInterestIds, effectiveInterestIds, toggleDomainView],
   )
 
   return (

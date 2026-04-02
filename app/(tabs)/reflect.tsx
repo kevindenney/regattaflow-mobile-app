@@ -38,8 +38,8 @@ import { useInterestEventConfig } from '@/hooks/useInterestEventConfig';
 import { supabase } from '@/services/supabase';
 import { showAlert, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 
-import { CompetencyDashboard } from '@/components/competency';
-import { useCompetencyProgress } from '@/hooks/useCompetencyProgress';
+import { PersonalAchievementMatrix } from '@/components/competency';
+import { useAllInterestCompetencies } from '@/hooks/useAllInterestCompetencies';
 import {
   WeeklyCalendar,
   MonthlyStatsCard,
@@ -89,10 +89,6 @@ const DEFAULT_REFLECT_SEGMENTS = [
   { value: 'profile' as const, label: 'Profile' },
 ];
 
-function isNursingInterestSlug(slug?: string | null): boolean {
-  return slug === 'nursing' || slug === 'jhu-msn-nursing';
-}
-
 // =============================================================================
 // PROGRESS VIEW
 // =============================================================================
@@ -110,8 +106,7 @@ function ProgressView({ toolbarHeight, onScroll, isDesktop }: ProgressViewProps)
   const progressEventConfig = useInterestEventConfig();
   const labels = progressEventConfig.reflectConfig?.progressLabels;
   const pStats = progressEventConfig.reflectConfig?.progressStats;
-  const isNursing = isNursingInterestSlug(currentInterest?.slug);
-  const { competencies, summary } = useCompetencyProgress();
+  const { data: allCompetencyData, aggregate: competencyAggregate, isLoading: competencyLoading } = useAllInterestCompetencies();
   const [refreshing, setRefreshing] = useState(false);
 
   const handleRefresh = useCallback(async () => {
@@ -136,7 +131,7 @@ function ProgressView({ toolbarHeight, onScroll, isDesktop }: ProgressViewProps)
     router.push('/(tabs)/my-learning');
   };
 
-  if (loading) {
+  if (loading || competencyLoading) {
     return (
       <View style={[styles.loadingContainer, { paddingTop: toolbarHeight + 20 }]}>
         <Text style={styles.loadingText}>Loading your data...</Text>
@@ -144,7 +139,7 @@ function ProgressView({ toolbarHeight, onScroll, isDesktop }: ProgressViewProps)
     );
   }
 
-  if (!data) {
+  if (!data && allCompetencyData.length === 0) {
     return (
       <View style={[styles.emptyContainer, { paddingTop: toolbarHeight + 20 }]}>
         <Ionicons name={(labels?.emptyIcon ?? 'boat-outline') as any} size={48} color={IOS_COLORS.systemGray3} />
@@ -156,55 +151,6 @@ function ProgressView({ toolbarHeight, onScroll, isDesktop }: ProgressViewProps)
           <Text style={styles.emptyPrimaryButtonText}>Go to {progressEventConfig.eventNoun} tab</Text>
         </TouchableOpacity>
       </View>
-    );
-  }
-
-  if (isNursing) {
-    return (
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingTop: toolbarHeight },
-        ]}
-        showsVerticalScrollIndicator={false}
-        onScroll={onScroll}
-        scrollEventThrottle={16}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor={IOS_COLORS.systemBlue}
-          />
-        }
-      >
-        <View style={[styles.content, isDesktop && styles.contentDesktop]}>
-          {competencies && competencies.length > 0 ? (
-            <CompetencyDashboard
-              competencies={competencies}
-              summary={summary ?? null}
-              onSelectCompetency={(c) =>
-                router.push({ pathname: '/competency-detail', params: { competencyId: c.id } })
-              }
-              accentColor={currentInterest?.accent_color}
-            />
-          ) : (
-            <View style={styles.nursingCard}>
-              <Text style={styles.nursingCardTitle}>Competency Progress</Text>
-              <Text style={styles.nursingCardBody}>
-                No competency data available yet for this account.
-              </Text>
-            </View>
-          )}
-
-          <View style={styles.nursingCard}>
-            <Text style={styles.nursingCardTitle}>Clinical Progress</Text>
-            <Text style={styles.nursingCardBody}>
-              Nursing reflect is active. Sailing race analytics are hidden for this interest.
-            </Text>
-          </View>
-        </View>
-      </ScrollView>
     );
   }
 
@@ -227,6 +173,12 @@ function ProgressView({ toolbarHeight, onScroll, isDesktop }: ProgressViewProps)
       }
     >
       <View style={[styles.content, isDesktop && styles.contentDesktop]}>
+        {/* Capability Achievement Matrix — across all interests */}
+        <PersonalAchievementMatrix
+          data={allCompetencyData}
+          aggregate={competencyAggregate}
+        />
+
         {/* Weekly Activity Calendar */}
         <WeeklyCalendar
           sailingDays={data.sailingDays}
@@ -259,20 +211,8 @@ function ProgressView({ toolbarHeight, onScroll, isDesktop }: ProgressViewProps)
         {/* AI Coaching Insight - Pattern-based recommendations */}
         <CoachingInsightCard sailorId={userProfile?.id} />
 
-        {/* My Skills — user-defined skill goals (non-nursing) */}
-        {!isNursing && <MySkillsSection />}
-
-        {/* Competency Dashboard - Nursing interests only */}
-        {isNursing && competencies && competencies.length > 0 && (
-          <CompetencyDashboard
-            competencies={competencies}
-            summary={summary ?? null}
-            onSelectCompetency={(c) =>
-              router.push({ pathname: '/competency-detail', params: { competencyId: c.id } })
-            }
-            accentColor={currentInterest?.accent_color}
-          />
-        )}
+        {/* My Skills — user-defined skill goals */}
+        <MySkillsSection />
 
         {/* Relative Effort */}
         <RelativeEffortCard
@@ -333,8 +273,6 @@ interface ProfileViewProps {
 function ProfileView({ toolbarHeight, onScroll, isDesktop }: ProfileViewProps) {
   const { data, loading, refresh } = useReflectProfile();
   const { userProfile } = useAuth();
-  const { currentInterest } = useInterest();
-  const isNursing = isNursingInterestSlug(currentInterest?.slug);
   const {
     insights: coachingInsights,
     coachingData,
@@ -646,50 +584,6 @@ function ProfileView({ toolbarHeight, onScroll, isDesktop }: ProfileViewProps) {
     );
   }
 
-  if (isNursing) {
-    const displayName = userProfile?.full_name || userProfile?.email || 'Nursing Learner';
-    return (
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingTop: toolbarHeight },
-        ]}
-        showsVerticalScrollIndicator={false}
-        onScroll={onScroll}
-        scrollEventThrottle={16}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor={IOS_COLORS.systemBlue}
-          />
-        }
-      >
-        <View style={[styles.content, isDesktop && styles.contentDesktop]}>
-          <View style={styles.nursingCard}>
-            <Text style={styles.nursingCardTitle}>Nursing Profile</Text>
-            <Text style={styles.nursingCardBody}>{displayName}</Text>
-            <TouchableOpacity
-              style={styles.nursingActionButton}
-              onPress={handleEditProfile}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.nursingActionButtonText}>Edit Profile</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.nursingCard}>
-            <Text style={styles.nursingCardTitle}>Context</Text>
-            <Text style={styles.nursingCardBody}>
-              This view is scoped to Nursing. Sailing profile sections are hidden in this interest.
-            </Text>
-          </View>
-        </View>
-      </ScrollView>
-    );
-  }
-
   return (
     <ScrollView
       style={styles.scrollView}
@@ -884,8 +778,6 @@ interface RaceLogViewProps {
 
 function RaceLogView({ toolbarHeight, onScroll, isDesktop }: RaceLogViewProps) {
   const { data, loading, refresh } = useReflectData();
-  const { currentInterest } = useInterest();
-  const isNursing = isNursingInterestSlug(currentInterest?.slug);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -927,27 +819,6 @@ function RaceLogView({ toolbarHeight, onScroll, isDesktop }: RaceLogViewProps) {
     return (
       <View style={[styles.loadingContainer, { paddingTop: toolbarHeight + 20 }]}>
         <Text style={styles.loadingText}>Loading your race history...</Text>
-      </View>
-    );
-  }
-
-  if (isNursing) {
-    return (
-      <View style={styles.raceLogContainer}>
-        <View
-          style={[
-            styles.searchContainer,
-            { marginTop: toolbarHeight + 8 },
-            isDesktop && styles.searchContainerDesktop,
-          ]}
-        >
-          <View style={styles.nursingCard}>
-            <Text style={styles.nursingCardTitle}>Shift Log</Text>
-            <Text style={styles.nursingCardBody}>
-              Shift-level logging is not enabled in this demo account yet.
-            </Text>
-          </View>
-        </View>
       </View>
     );
   }
@@ -1323,35 +1194,5 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#3B82F6',
     marginTop: 2,
-  },
-  nursingCard: {
-    backgroundColor: IOS_COLORS.secondarySystemGroupedBackground,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-  },
-  nursingCardTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: IOS_COLORS.label,
-    marginBottom: 8,
-  },
-  nursingCardBody: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: IOS_COLORS.secondaryLabel,
-  },
-  nursingActionButton: {
-    marginTop: 12,
-    alignSelf: 'flex-start',
-    backgroundColor: IOS_COLORS.systemBlue,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  nursingActionButtonText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
   },
 });

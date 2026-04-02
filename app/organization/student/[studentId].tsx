@@ -141,7 +141,10 @@ export default function StudentDetailScreen() {
 
         // Check for competency assessment in review data
         const assessmentResults = (meta.review?.competency_assessment?.planned_competency_results ?? []) as any[];
-        const match = assessmentResults.find((r: any) => r.competency_id === comp.id);
+        const match = assessmentResults.find((r: any) =>
+          (r.competency_id && r.competency_id === comp.id) ||
+          (!r.competency_id && r.competency_title && r.competency_title === comp.title)
+        );
 
         relevant.push({
           stepId: step.id,
@@ -172,7 +175,27 @@ export default function StudentDetailScreen() {
         decision,
         notes: reviewNotes.trim() || undefined,
       });
-      setSelectedComp(null);
+
+      // Map faculty decision to new competency status for optimistic update
+      const newStatus: CompetencyStatus =
+        decision === 'approved' ? 'competent'
+          : decision === 'needs_more_practice' ? 'practicing'
+            : 'learning'; // remediation_required
+
+      // Optimistically update the competency in local state
+      setCompetencies(prev => prev.map(c =>
+        c.id === selectedComp.id && c.progress
+          ? { ...c, progress: { ...c.progress, status: newStatus } }
+          : c
+      ));
+
+      // Update the selected comp so the modal reflects the change immediately
+      setSelectedComp(prev =>
+        prev?.progress
+          ? { ...prev, progress: { ...prev.progress, status: newStatus } }
+          : prev
+      );
+
       showAlert(
         'Review Submitted',
         decision === 'approved'
@@ -181,7 +204,7 @@ export default function StudentDetailScreen() {
             ? `Sent back for more practice.`
             : `Remediation required — student notified.`,
       );
-      // Reload data to reflect changes
+      // Reload data in background to sync with server
       void loadData();
     } catch (err: any) {
       showAlert('Error', err?.message || 'Failed to submit review');

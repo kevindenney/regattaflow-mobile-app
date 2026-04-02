@@ -117,17 +117,49 @@ interface SubStepEditorProps {
   readOnly?: boolean;
 }
 
+const MIN_SLOTS = 3; // Always show at least this many text entry fields
+
+function makeEmptySlot(index: number): SubStep {
+  return {
+    id: `ss_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    text: '',
+    sort_order: index,
+    completed: false,
+  };
+}
+
 export function SubStepEditor({ subSteps, onChange, readOnly }: SubStepEditorProps) {
   const subStepsRef = useRef(subSteps);
   subStepsRef.current = subSteps;
 
+  // Ensure we always have at least MIN_SLOTS entries in edit mode
+  const ensuredRef = useRef(false);
+  useEffect(() => {
+    if (readOnly || ensuredRef.current) return;
+    if (subSteps.length < MIN_SLOTS) {
+      const padded = [...subSteps];
+      for (let i = subSteps.length; i < MIN_SLOTS; i++) {
+        padded.push(makeEmptySlot(i));
+      }
+      onChange(padded);
+      ensuredRef.current = true;
+    } else {
+      ensuredRef.current = true;
+    }
+  }, [readOnly, subSteps, onChange]);
+
+  // Reset the ensured flag when subSteps arrive from outside (e.g., AI-generated)
+  const prevLengthRef = useRef(subSteps.length);
+  useEffect(() => {
+    if (subSteps.length > 0 && prevLengthRef.current === 0) {
+      // New content arrived — re-check padding
+      ensuredRef.current = false;
+    }
+    prevLengthRef.current = subSteps.length;
+  }, [subSteps.length]);
+
   const addSubStep = useCallback(() => {
-    const newStep: SubStep = {
-      id: `ss_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-      text: '',
-      sort_order: subStepsRef.current.length,
-      completed: false,
-    };
+    const newStep = makeEmptySlot(subStepsRef.current.length);
     onChange([...subStepsRef.current, newStep]);
   }, [onChange]);
 
@@ -136,11 +168,19 @@ export function SubStepEditor({ subSteps, onChange, readOnly }: SubStepEditorPro
   }, [onChange]);
 
   const removeSubStep = useCallback((id: string) => {
-    onChange(
-      subStepsRef.current
-        .filter((s) => s.id !== id)
-        .map((s, i) => ({ ...s, sort_order: i })),
-    );
+    const filtered = subStepsRef.current
+      .filter((s) => s.id !== id)
+      .map((s, i) => ({ ...s, sort_order: i }));
+    // Never go below MIN_SLOTS in edit mode
+    if (filtered.length < MIN_SLOTS) {
+      const padded = [...filtered];
+      for (let i = filtered.length; i < MIN_SLOTS; i++) {
+        padded.push(makeEmptySlot(i));
+      }
+      onChange(padded);
+    } else {
+      onChange(filtered);
+    }
   }, [onChange]);
 
   const moveUp = useCallback((id: string) => {
@@ -159,9 +199,12 @@ export function SubStepEditor({ subSteps, onChange, readOnly }: SubStepEditorPro
     onChange(items.map((s, i) => ({ ...s, sort_order: i })));
   }, [onChange]);
 
+  // In read-only mode, only show sub-steps with text
+  const displaySteps = readOnly ? subSteps.filter((s) => s.text.trim()) : subSteps;
+
   return (
     <View style={styles.container}>
-      {subSteps.map((step, index) => (
+      {displaySteps.map((step, index) => (
         readOnly ? (
           <View key={step.id} style={styles.row}>
             <Text style={{ fontSize: 13, color: STEP_COLORS.secondaryLabel, width: 18 }}>{index + 1}.</Text>
@@ -172,7 +215,7 @@ export function SubStepEditor({ subSteps, onChange, readOnly }: SubStepEditorPro
             key={step.id}
             step={step}
             index={index}
-            total={subSteps.length}
+            total={displaySteps.length}
             onTextChange={updateText}
             onRemove={removeSubStep}
             onMoveUp={moveUp}

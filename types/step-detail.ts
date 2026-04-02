@@ -76,9 +76,16 @@ export interface StepPlanData {
   conversation_id?: string;               // AI conversation that created this plan
 }
 
+export interface Observation {
+  id: string;
+  text: string;
+  timestamp: string;
+}
+
 export interface StepActData {
   started_at?: string;
   notes?: string;
+  observations?: Observation[];            // timestamped observation entries (matches Telegram log_observation format)
   media_uploads?: MediaUpload[];
   media_links?: MediaLink[];
   sub_step_progress?: Record<string, boolean>;

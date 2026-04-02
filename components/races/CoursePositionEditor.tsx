@@ -1028,6 +1028,20 @@ export function CoursePositionEditor({
       CoursePositioningService.calculateStartLineLength(initialNumberOfBoats, initialBoatLengthM)
   );
 
+  // Sync forecast wind when it arrives after mount and recalculate course
+  const prevInitialWindRef = useRef(initialWindDirection);
+  useEffect(() => {
+    if (
+      initialWindDirection != null &&
+      initialWindDirection !== prevInitialWindRef.current &&
+      !existingCourse?.windDirection &&
+      !hasManualAdjustments
+    ) {
+      prevInitialWindRef.current = initialWindDirection;
+      setWindDirection(initialWindDirection);
+    }
+  }, [initialWindDirection]);
+
   // Map refs and state
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
@@ -1129,15 +1143,20 @@ export function CoursePositionEditor({
     }
   }, [numberOfBoats, startLine, initialLocation, windDirection]);
 
-  // Initialize course on first render or when dependencies change
+  // Initialize course on first render or when wind direction changes from forecast
+  const prevWindRef = useRef(windDirection);
   useEffect(() => {
     if (!visible || !initialLocation) return;
 
-    // Only calculate if we don't have existing marks
+    // Calculate if no marks yet, or if wind direction changed (forecast arrived)
     if (marks.length === 0) {
       calculateCourse();
+    } else if (windDirection !== prevWindRef.current && !hasManualAdjustments) {
+      prevWindRef.current = windDirection;
+      calculateCourse();
     }
-  }, [visible, initialLocation, calculateCourse, marks.length]);
+    prevWindRef.current = windDirection;
+  }, [visible, initialLocation, calculateCourse, marks.length, windDirection, hasManualAdjustments]);
 
   // Handle course type change
   const handleCourseTypeChange = useCallback(

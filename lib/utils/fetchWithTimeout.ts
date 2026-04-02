@@ -16,6 +16,22 @@ export interface FetchWithTimeoutInit extends RequestInit {
   timeout?: number;
 }
 
+/**
+ * Returns true if the error is an AbortError (request cancelled due to
+ * component unmount, navigation, or React Query cancellation).
+ * These are expected and should be silently ignored rather than logged.
+ */
+export function isAbortError(error: unknown): boolean {
+  if (!error) return false;
+  if (error instanceof DOMException && error.name === 'AbortError') return true;
+  if (error instanceof Error && error.name === 'AbortError') return true;
+  const msg = (error as { message?: string })?.message;
+  if (typeof msg === 'string' && msg.includes('AbortError')) return true;
+  const detail = (error as { details?: string })?.details;
+  if (typeof detail === 'string' && detail.includes('AbortError')) return true;
+  return false;
+}
+
 export async function fetchWithTimeout(
   input: RequestInfo | URL,
   init?: FetchWithTimeoutInit,

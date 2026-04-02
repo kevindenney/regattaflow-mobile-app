@@ -4,7 +4,7 @@
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import Anthropic from 'npm:@anthropic-ai/sdk@0.26.1';
+import { callGemini, GeminiPart } from '../_shared/gemini.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -185,60 +185,38 @@ serve(async (req: Request) => {
       );
     }
 
-    const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
-    if (!apiKey) {
-      return new Response(
-        JSON.stringify({ error: 'AI service not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    // Prepare Gemini parts
+    const geminiParts: GeminiPart[] = [];
 
-    const anthropic = new Anthropic({ apiKey });
-
-    // Prepare the content for Claude
-    const messageContent: any[] = [];
-    
     // Add context about the race type
-    const raceContext = raceType === 'distance' 
+    const raceContext = raceType === 'distance'
       ? 'This is a DISTANCE/OFFSHORE race. Look for route waypoints, turning marks, and course coordinates that define a long-distance sailing route.'
       : 'This is a FLEET race. Look for windward/leeward marks, gate marks, start/finish lines, and buoy racing course elements.';
 
     if (fileType?.startsWith('image/') || fileContent.startsWith('data:image')) {
-      // Image file - use vision
-      const base64Data = fileContent.includes('base64,') 
-        ? fileContent.split('base64,')[1] 
+      // Image file
+      const base64Data = fileContent.includes('base64,')
+        ? fileContent.split('base64,')[1]
         : fileContent;
-      
-      const mediaType = fileType?.replace('image/', '') || 'jpeg';
-      
-      messageContent.push({
-        type: 'image',
-        source: {
-          type: 'base64',
-          media_type: `image/${mediaType}`,
-          data: base64Data,
-        },
+
+      const mediaType = fileType || 'image/jpeg';
+
+      geminiParts.push({
+        inlineData: { mimeType: mediaType, data: base64Data },
       });
-      messageContent.push({
-        type: 'text',
+      geminiParts.push({
         text: `${EXTRACTION_PROMPT}\n\n${raceContext}\n\nAnalyze this image (${fileName || 'course image'}) and extract all course waypoints and coordinates.`,
       });
     } else if (fileType === 'application/pdf' || fileContent.startsWith('data:application/pdf')) {
-      // PDF file - extract as document
-      const base64Data = fileContent.includes('base64,') 
-        ? fileContent.split('base64,')[1] 
+      // PDF file
+      const base64Data = fileContent.includes('base64,')
+        ? fileContent.split('base64,')[1]
         : fileContent;
-      
-      messageContent.push({
-        type: 'document',
-        source: {
-          type: 'base64',
-          media_type: 'application/pdf',
-          data: base64Data,
-        },
+
+      geminiParts.push({
+        inlineData: { mimeType: 'application/pdf', data: base64Data },
       });
-      messageContent.push({
-        type: 'text',
+      geminiParts.push({
         text: `${EXTRACTION_PROMPT}\n\n${raceContext}\n\nAnalyze this PDF document (${fileName || 'sailing instructions'}) and extract all course waypoints and coordinates.`,
       });
     } else {
@@ -246,30 +224,26 @@ serve(async (req: Request) => {
       const textContent = fileContent.includes('base64,')
         ? atob(fileContent.split('base64,')[1])
         : fileContent;
-      
-      messageContent.push({
-        type: 'text',
+
+      geminiParts.push({
         text: `${EXTRACTION_PROMPT}\n\n${raceContext}\n\nDocument content (${fileName || 'course document'}):\n\n${textContent}`,
       });
     }
 
-    // Call Claude for extraction
-    const response = await anthropic.messages.create({
-      model: 'claude-3-haiku-20240307',
-      max_tokens: 4096,
-      messages: [
-        {
-          role: 'user',
-          content: messageContent,
-        },
-      ],
-    });
-
-    // Extract the response text
-    const responseText = response.content
-      .filter((block: any) => block.type === 'text')
-      .map((block: any) => block.text)
-      .join('\n');
+    // Call Gemini Flash for extraction
+    let responseText: string;
+    try {
+      responseText = await callGemini({
+        userContent: geminiParts,
+        maxOutputTokens: 4096,
+      });
+    } catch (aiError: any) {
+      console.error('[extract-course] Gemini error:', aiError.message);
+      return new Response(
+        JSON.stringify({ error: 'AI service unavailable' }),
+        { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     // Parse JSON from response
     let result: ExtractionResult;

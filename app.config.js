@@ -109,7 +109,6 @@ module.exports = {
       eas: {
         projectId: 'bab702c1-4ae8-42aa-ae6a-7982de755dd7',
       },
-      stormglassApiKey: process.env.EXPO_PUBLIC_STORMGLASS_API_KEY,
       openWeatherMapApiKey: process.env.EXPO_PUBLIC_OPENWEATHERMAP_API_KEY,
       supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
       supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,

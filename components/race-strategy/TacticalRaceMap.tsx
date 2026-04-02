@@ -106,7 +106,7 @@ interface TacticalRaceMapProps {
   onMarkDeleted?: (markId: string) => void; // Callback when mark is deleted
   racingAreaPolygon?: { lat: number; lng: number }[]; // Current racing area for auto-regeneration
   waterAnalysis?: UnderwaterAnalysis;
-  stormGlassWeather?: WeatherData | null;
+  venueWeather?: WeatherData | null;
 }
 
 interface MapLayer {
@@ -145,7 +145,7 @@ export default function TacticalRaceMap({
   onMarkDeleted,
   racingAreaPolygon,
   waterAnalysis,
-  stormGlassWeather
+  venueWeather
 }: TacticalRaceMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const maplibreNsRef = useRef<any>(null);
@@ -230,8 +230,8 @@ export default function TacticalRaceMap({
   }, [marks, getMarkCoordinate]);
 
   const predictiveCurrentSet = useMemo(
-    () => buildPredictiveCurrentSet(stormGlassWeather),
-    [stormGlassWeather]
+    () => buildPredictiveCurrentSet(venueWeather),
+    [venueWeather]
   );
 
   const bathymetryVenue = useMemo(() => {
@@ -800,16 +800,16 @@ export default function TacticalRaceMap({
 
   const addWaveHeatmapOverlay = useCallback(
     (force = false) => {
-      if (!isWeb || !mapLoaded || !stormGlassWeather) {
+      if (!isWeb || !mapLoaded || !venueWeather) {
         return false;
       }
 
       const map = mapRef.current;
-      if (!map || !Array.isArray(stormGlassWeather.coordinates)) {
+      if (!map || !Array.isArray(venueWeather.coordinates)) {
         return false;
       }
 
-      const forecast = stormGlassWeather.forecast?.[0];
+      const forecast = venueWeather.forecast?.[0];
       if (!forecast?.waveHeight) {
         removeOverlay('waveHeatmap');
         return false;
@@ -824,7 +824,7 @@ export default function TacticalRaceMap({
         removeOverlay('waveHeatmap');
       }
 
-      const [lng, lat] = stormGlassWeather.coordinates as [number, number];
+      const [lng, lat] = venueWeather.coordinates as [number, number];
       if (typeof lat !== 'number' || typeof lng !== 'number') {
         return false;
       }
@@ -870,21 +870,21 @@ export default function TacticalRaceMap({
       overlaySignatureRef.current.waveHeatmap = signature;
       return true;
     },
-    [mapLoaded, stormGlassWeather, addLayerWithSource, getLayerInsertionReference, removeOverlay]
+    [mapLoaded, venueWeather, addLayerWithSource, getLayerInsertionReference, removeOverlay]
   );
 
   const addSeaTemperatureOverlay = useCallback(
     (force = false) => {
-      if (!isWeb || !mapLoaded || !stormGlassWeather) {
+      if (!isWeb || !mapLoaded || !venueWeather) {
         return false;
       }
 
       const map = mapRef.current;
-      if (!map || !Array.isArray(stormGlassWeather.coordinates)) {
+      if (!map || !Array.isArray(venueWeather.coordinates)) {
         return false;
       }
 
-      const forecast = stormGlassWeather.forecast?.[0];
+      const forecast = venueWeather.forecast?.[0];
       const baseTemperature = forecast?.waterTemperature ?? forecast?.airTemperature;
       if (baseTemperature == null) {
         removeOverlay('seaTemperature');
@@ -900,7 +900,7 @@ export default function TacticalRaceMap({
         removeOverlay('seaTemperature');
       }
 
-      const [lng, lat] = stormGlassWeather.coordinates as [number, number];
+      const [lng, lat] = venueWeather.coordinates as [number, number];
       if (typeof lat !== 'number' || typeof lng !== 'number') {
         return false;
       }
@@ -942,32 +942,32 @@ export default function TacticalRaceMap({
       overlaySignatureRef.current.seaTemperature = signature;
       return true;
     },
-    [mapLoaded, stormGlassWeather, addLayerWithSource, getLayerInsertionReference, removeOverlay]
+    [mapLoaded, venueWeather, addLayerWithSource, getLayerInsertionReference, removeOverlay]
   );
 
   const addSwellOverlay = useCallback(
     (force = false) => {
-      if (!isWeb || !mapLoaded || !stormGlassWeather) {
+      if (!isWeb || !mapLoaded || !venueWeather) {
         return false;
       }
 
       const map = mapRef.current;
-      if (!map || !Array.isArray(stormGlassWeather.coordinates)) {
+      if (!map || !Array.isArray(venueWeather.coordinates)) {
         return false;
       }
 
-      const forecast = stormGlassWeather.forecast?.[0];
-      const primaryHeight = forecast?.waveHeight ?? stormGlassWeather.marineConditions?.swellHeight ?? 0;
-      const primaryDirection = forecast?.waveDirection ?? stormGlassWeather.marineConditions?.swellDirection ?? 0;
-      const primaryPeriod = forecast?.wavePeriod ?? stormGlassWeather.marineConditions?.swellPeriod ?? 0;
+      const forecast = venueWeather.forecast?.[0];
+      const primaryHeight = forecast?.waveHeight ?? venueWeather.marineConditions?.swellHeight ?? 0;
+      const primaryDirection = forecast?.waveDirection ?? venueWeather.marineConditions?.swellDirection ?? 0;
+      const primaryPeriod = forecast?.wavePeriod ?? venueWeather.marineConditions?.swellPeriod ?? 0;
       if (!primaryHeight || primaryHeight < 0.2) {
         removeOverlay('swell');
         return false;
       }
 
-      const secondaryHeight = stormGlassWeather.marineConditions?.swellHeight;
-      const secondaryDirection = stormGlassWeather.marineConditions?.swellDirection;
-      const secondaryPeriod = stormGlassWeather.marineConditions?.swellPeriod;
+      const secondaryHeight = venueWeather.marineConditions?.swellHeight;
+      const secondaryDirection = venueWeather.marineConditions?.swellDirection;
+      const secondaryPeriod = venueWeather.marineConditions?.swellPeriod;
       const signature = [
         forecast?.timestamp?.toISOString?.() ?? '',
         primaryHeight,
@@ -1035,7 +1035,7 @@ export default function TacticalRaceMap({
       overlaySignatureRef.current.swell = signature;
       return true;
     },
-    [mapLoaded, stormGlassWeather, addLayerWithSource, getLayerInsertionReference, removeOverlay]
+    [mapLoaded, venueWeather, addLayerWithSource, getLayerInsertionReference, removeOverlay]
   );
 
   const ensureCurrentArrowImage = useCallback(() => {
@@ -1712,7 +1712,7 @@ export default function TacticalRaceMap({
     }
   }, [
     mapLoaded,
-    stormGlassWeather,
+    venueWeather,
     predictiveCurrentSet,
     layers,
     addWaveHeatmapOverlay,

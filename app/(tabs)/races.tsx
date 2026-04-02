@@ -30,7 +30,6 @@ import {
   PostRaceAnalysisSection,
   RaceModalsSection,
   RacesFloatingHeader,
-  type RecommendedStepTemplate,
   RealRacesCarousel,
   RegulatoryDigestCard,
   SocialTimelineView,
@@ -106,6 +105,7 @@ import {
   type RegulatoryAcknowledgements
 } from '@/lib/races';
 import { createLogger } from '@/lib/utils/logger';
+import { isAbortError } from '@/lib/utils/fetchWithTimeout';
 import { isMissingSupabaseColumn } from '@/lib/utils/supabaseSchemaFallback';
 import { showAlert, showConfirm, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 import { useToast } from '@/components/ui/AppToast';
@@ -165,7 +165,6 @@ export default function RacesScreen() {
   const { vocab } = useVocabulary();
   const queryClient = useQueryClient();
   const toast = useToast();
-  const [recommendedOrgTemplates, setRecommendedOrgTemplates] = useState<RecommendedStepTemplate[]>([]);
 
   // Blueprint publishing
   const [showBlueprintSheet, setShowBlueprintSheet] = useState(false);
@@ -597,25 +596,32 @@ export default function RacesScreen() {
     const newSteps = timelineStepCards.filter((s) => !existingIds.has(s.id));
     if (newSteps.length === 0) return regattas.length > 0 ? regattas : EMPTY_RACES;
     // Sort with status-aware partitioning: completed/done steps first, then
-    // pending/planned steps. Within each group, sort by date ascending.
-    // This ensures completed steps are always to the left of the now bar
-    // and planned steps to the right.
+    // pending/planned steps. Within each group, timeline steps sort by sort_order,
+    // sailing races sort by date ascending.
     const now = Date.now();
     const merged = [...regattas, ...newSteps].sort((a: any, b: any) => {
       const aCompleted = a.stepStatus === 'completed' || a.status === 'completed' ||
-        (!a.isTimelineStep && new Date(a.date).getTime() + 3 * 60 * 60 * 1000 < now);
+        (!a.isTimelineStep && a.date && new Date(a.date).getTime() + 3 * 60 * 60 * 1000 < now);
       const bCompleted = b.stepStatus === 'completed' || b.status === 'completed' ||
-        (!b.isTimelineStep && new Date(b.date).getTime() + 3 * 60 * 60 * 1000 < now);
+        (!b.isTimelineStep && b.date && new Date(b.date).getTime() + 3 * 60 * 60 * 1000 < now);
       if (aCompleted !== bCompleted) return aCompleted ? -1 : 1;
-      return new Date(a.date).getTime() - new Date(b.date).getTime();
+      // Timeline steps: use sort_order (DB-persisted sequence)
+      const aSortOrder = a.sort_order ?? 999;
+      const bSortOrder = b.sort_order ?? 999;
+      if (a.isTimelineStep && b.isTimelineStep) return aSortOrder - bSortOrder;
+      // Sailing races: use date
+      const aDate = a.date ? new Date(a.date).getTime() : Infinity;
+      const bDate = b.date ? new Date(b.date).getTime() : Infinity;
+      return aDate - bDate;
     });
     // Final dedup pass — guard against same ID appearing from multiple sources
     const seen = new Set<string>();
-    return merged.filter((r: any) => {
+    const result = merged.filter((r: any) => {
       if (seen.has(r.id)) return false;
       seen.add(r.id);
       return true;
     });
+    return result;
   }, [liveRaces, isSailingInterest, interestSlug, timelineStepCards]);
 
   // Track if races have been loaded at least once to prevent flash of demo content
@@ -626,30 +632,11 @@ export default function RacesScreen() {
     }
   }, [liveRacesLoading, interestFilteredRaces]);
 
+  // DB sort_order is now the source of truth for step ordering.
+  // Clear any stale AsyncStorage custom order so it doesn't override DB order.
   useEffect(() => {
-    let cancelled = false;
-    const loadTimelineOrder = async () => {
-      try {
-        const raw = await AsyncStorage.getItem(timelineOrderStorageKey);
-        const parsed = raw ? JSON.parse(raw) : [];
-        const normalized = Array.isArray(parsed)
-          ? parsed
-              .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
-              .filter((entry) => entry.length > 0)
-          : [];
-        if (!cancelled) {
-          setTimelineCustomOrderIds(normalized);
-        }
-      } catch {
-        if (!cancelled) {
-          setTimelineCustomOrderIds([]);
-        }
-      }
-    };
-    void loadTimelineOrder();
-    return () => {
-      cancelled = true;
-    };
+    void AsyncStorage.removeItem(timelineOrderStorageKey).catch(() => {});
+    setTimelineCustomOrderIds([]);
   }, [timelineOrderStorageKey]);
 
   const scrollToPosition = useCallback((position: number) => {
@@ -825,7 +812,7 @@ export default function RacesScreen() {
 
   // Log dashboard errors only when they change (not on every render)
   useEffect(() => {
-    if (error) {
+    if (error && !isAbortError(error)) {
       logger.error('Dashboard error:', error?.message || error, { name: error?.name });
     }
   }, [error]);
@@ -1195,7 +1182,19 @@ export default function RacesScreen() {
     } catch (error) {
       logger.warn('Unable to persist timeline reorder', { error });
     }
-  }, [baseCardGridRaces, isViewingOtherTimeline, logger, timelineOrderStorageKey]);
+
+    // Persist sort_order to database in parallel (fire-and-forget for speed)
+    const updates = nextOrder.map((id, idx) => ({ id, sort_order: idx + 1 }));
+    Promise.all(
+      updates.map(({ id, sort_order }) =>
+        supabase.from('timeline_steps').update({ sort_order }).eq('id', id)
+      )
+    ).then(() => {
+      queryClient.invalidateQueries({ queryKey: ['timeline-steps'] });
+    }).catch((err) => {
+      console.error('[Reorder] DB persistence failed:', err);
+    });
+  }, [baseCardGridRaces, isViewingOtherTimeline, logger, timelineOrderStorageKey, queryClient]);
 
   // Move a step one position earlier or later in the custom order
   const handleMoveStep = useCallback((raceId: string, direction: 'earlier' | 'later') => {
@@ -1644,7 +1643,6 @@ export default function RacesScreen() {
         title: `New ${practiceLabel}`,
         category: 'practice',
         status: 'pending',
-        starts_at: new Date().toISOString(),
         metadata: { plan: {}, act: {}, review: {} },
       });
 
@@ -1655,7 +1653,7 @@ export default function RacesScreen() {
       setSelectedRaceData({
         id: newStep.id,
         name: newStep.title,
-        date: newStep.starts_at,
+        date: newStep.starts_at || undefined,
         isTimelineStep: true,
         stepStatus: 'pending',
         status: 'pending',
@@ -1685,7 +1683,6 @@ export default function RacesScreen() {
         title: 'New Step',
         category: 'general',
         status: 'pending',
-        starts_at: new Date().toISOString(),
         metadata: {
           plan: {},
           act: {},
@@ -1707,7 +1704,7 @@ export default function RacesScreen() {
       setSelectedRaceData({
         id: newStep.id,
         name: newStep.title,
-        date: newStep.starts_at,
+        date: newStep.starts_at || undefined,
         isTimelineStep: true,
         stepStatus: 'pending',
         status: 'pending',
@@ -1738,7 +1735,6 @@ export default function RacesScreen() {
         title: `New ${subtypeLabel} Step`,
         category: subtypeId,
         status: 'pending',
-        starts_at: new Date().toISOString(),
         metadata: {
           plan: {},
           act: {},
@@ -1758,7 +1754,7 @@ export default function RacesScreen() {
       setSelectedRaceData({
         id: newStep.id,
         name: newStep.title,
-        date: newStep.starts_at,
+        date: newStep.starts_at || undefined,
         isTimelineStep: true,
         stepStatus: 'pending',
         status: 'pending',
@@ -2661,67 +2657,6 @@ export default function RacesScreen() {
     },
   });
 
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadRecommendedOrgTemplates = async () => {
-      if (currentInterest?.slug !== 'nursing' || !activeOrganization?.id || !signedIn) {
-        if (!cancelled) {
-          setRecommendedOrgTemplates([]);
-        }
-        return;
-      }
-
-      try {
-        const { data, error } = await supabase
-          .from('betterat_org_step_templates')
-          .select('id,title,description,step_type,module_ids,suggested_competency_ids')
-          .eq('org_id', activeOrganization.id)
-          .eq('interest_slug', 'nursing')
-          .eq('is_published', true)
-          .order('created_at', { ascending: false })
-          .limit(6);
-
-        if (error) throw error;
-        if (cancelled) return;
-
-        const templates = (data || []).map((row: any) => ({
-          id: row.id,
-          title: row.title,
-          description: row.description,
-          stepType: row.step_type,
-          moduleIds: Array.isArray(row.module_ids) ? row.module_ids.filter((item: any) => typeof item === 'string') : [],
-          suggestedCompetencyIds: Array.isArray(row.suggested_competency_ids)
-            ? row.suggested_competency_ids.filter((item: any) => typeof item === 'string')
-            : [],
-        })) as RecommendedStepTemplate[];
-
-        setRecommendedOrgTemplates(templates);
-      } catch {
-        if (!cancelled) {
-          setRecommendedOrgTemplates([]);
-        }
-      }
-    };
-
-    loadRecommendedOrgTemplates();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeOrganization?.id, currentInterest?.slug, signedIn]);
-
-  const handleSelectRecommendedTemplate = useCallback((template: RecommendedStepTemplate) => {
-    handleShowAddRaceSheet({
-      templateId: template.id,
-      templateTitle: template.title,
-      templateDescription: template.description || undefined,
-      templateStepType: template.stepType,
-      templateModuleIds: template.moduleIds,
-      templateSuggestedCompetencyIds: template.suggestedCompetencyIds,
-    });
-  }, [handleShowAddRaceSheet]);
-
   // Smart Add Step: adopt suggestion from blueprint
   const handleAdoptSuggestion = useCallback(async (suggestion: import('@/types/blueprint').BlueprintSuggestedNextStep) => {
     if (!currentInterest?.id) return;
@@ -2738,7 +2673,7 @@ export default function RacesScreen() {
       setSelectedRaceData({
         id: adopted.id,
         name: adopted.title,
-        date: adopted.starts_at,
+        date: adopted.starts_at || undefined,
         isTimelineStep: true,
         stepStatus: 'pending',
         status: 'pending',
@@ -3845,7 +3780,7 @@ export default function RacesScreen() {
           </View>
 
           {isGridView ? (
-            <>
+            <View style={{ flex: 1 }}>
               {!isSailingInterest && hasTimelineSteps && (
                 <View style={{ paddingTop: totalHeaderHeight + 8 }}>
                   {/* Faculty banner: nudge to publish blueprint */}
@@ -3926,7 +3861,7 @@ export default function RacesScreen() {
                   />
                 ) : undefined}
               />
-            </>
+            </View>
           ) : (
             <CardGrid
               races={cardGridRaces}
@@ -4388,8 +4323,6 @@ export default function RacesScreen() {
           onPublishBlueprint={currentInterest?.id ? () => setShowBlueprintSheet(true) : undefined}
           blueprintLabel={hasPublishedBlueprint ? 'Manage Blueprints' : existingBlueprintsForInterest.length > 0 ? 'Manage Blueprints' : 'Publish as Blueprint'}
           isBlueprintPublished={hasPublishedBlueprint}
-          recommendedTemplates={recommendedOrgTemplates}
-          onSelectRecommendedTemplate={handleSelectRecommendedTemplate}
           onAddButtonLayout={setAddButtonLayout}
           totalRaces={headerTotalRaces}
           upcomingRaces={seasonUpcomingRacesCount}
@@ -4459,8 +4392,6 @@ export default function RacesScreen() {
         suggestedNextSteps={suggestedNextSteps ?? []}
         onAdoptSuggestion={handleAdoptSuggestion}
         onDismissSuggestion={handleDismissSuggestion}
-        recommendedTemplates={recommendedOrgTemplates}
-        onSelectRecommendedTemplate={handleSelectRecommendedTemplate}
         onAddStep={isSailingInterest ? handleAddStep : handleAddStep}
         onAddStepWithSubtype={handleAddStepWithSubtype}
         onAddRace={isSailingInterest ? handleShowAddRaceSheet : undefined}

@@ -33,6 +33,7 @@ import { BrainDumpEntry } from './BrainDumpEntry';
 import { ConversationalCapture } from './ConversationalCapture';
 import { CrossInterestSuggestions } from './CrossInterestSuggestions';
 import { DateEnrichmentCard } from './DateEnrichmentCard';
+import { CompetencyPickerModal } from '@/components/competency/CompetencyPickerModal';
 import { createStep, enableStepSharing } from '@/services/TimelineStepService';
 import { LocationMapPicker as LocationMapPickerModal } from '@/components/races/LocationMapPicker';
 import { supabase } from '@/services/supabase';
@@ -69,6 +70,7 @@ export function StepPlanQuestions({
   const catLabels = getStepCategoryLabels(step?.category);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showResourcePicker, setShowResourcePicker] = useState(false);
+  const [showCompetencyPicker, setShowCompetencyPicker] = useState(false);
   const [linkedResources, setLinkedResources] = useState<LibraryResourceRecord[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiSuggestion, setAiSuggestion] = useState('');
@@ -86,6 +88,7 @@ export function StepPlanQuestions({
   // ---------------------------------------------------------------------------
   const [localWhat, setLocalWhat] = useState('');
   const [localWhy, setLocalWhy] = useState('');
+  const [localSubSteps, setLocalSubSteps] = useState<SubStep[]>([]);
   const [localCollaborators, setLocalCollaborators] = useState<StepCollaborator[]>([]);
   const [localConnectionSpace, setLocalConnectionSpace] = useState('');
   const [showCollaboratorPicker, setShowCollaboratorPicker] = useState(false);
@@ -112,6 +115,7 @@ export function StepPlanQuestions({
     if (!initializedRef.current || externalUpdate) {
       setLocalWhat(plan.what_will_you_do ?? '');
       setLocalWhy(plan.why_reasoning ?? '');
+      setLocalSubSteps(plan.how_sub_steps ?? []);
       setLocalConnectionSpace(plan.connection_space ?? '');
       // Migrate legacy who_collaborators to structured collaborators
       if (plan.collaborators?.length) {
@@ -194,14 +198,37 @@ export function StepPlanQuestions({
   const planDataRef = useRef(planData);
   planDataRef.current = planData;
 
-  // Debounced save — reads planDataRef.current at fire time, not at schedule time
+  // Accumulate pending changes so rapid saves for different fields don't cancel each other
+  const pendingChangesRef = useRef<Partial<StepPlanData>>({});
+
+  // Debounced save — accumulates partial updates, then flushes everything at once
   const debouncedSave = useCallback((partial: Partial<StepPlanData>) => {
     if (readOnly) return;
+    // Merge into pending changes (latest value wins per field)
+    pendingChangesRef.current = { ...pendingChangesRef.current, ...partial };
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
-      updateMetadata.mutate({ plan: { ...planDataRef.current, ...partial } });
+      const merged = { ...planDataRef.current, ...pendingChangesRef.current };
+      pendingChangesRef.current = {};
+      updateMetadata.mutate({ plan: merged });
     }, 800);
   }, [updateMetadata, readOnly]);
+
+  // Keep a ref to updateMetadata so the cleanup effect uses the latest instance
+  const updateMetadataRef = useRef(updateMetadata);
+  updateMetadataRef.current = updateMetadata;
+
+  // Flush pending changes on unmount — prevents data loss when navigating away
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      if (Object.keys(pendingChangesRef.current).length > 0) {
+        const merged = { ...planDataRef.current, ...pendingChangesRef.current };
+        pendingChangesRef.current = {};
+        updateMetadataRef.current.mutate({ plan: merged });
+      }
+    };
+  }, [stepId]);
 
   // Auto-attach relevant Reflect skills when step has a description but no goals yet
   useEffect(() => {
@@ -371,6 +398,7 @@ export function StepPlanQuestions({
             sort_order: idx,
             completed: false,
           }));
+          setLocalSubSteps(subSteps);
           debouncedSave({ how_sub_steps: subSteps });
         }
         if (plan.why_reasoning) {
@@ -398,6 +426,7 @@ export function StepPlanQuestions({
   }, [debouncedSave]);
 
   const handleSubStepsChange = useCallback((subSteps: SubStep[]) => {
+    setLocalSubSteps(subSteps);
     debouncedSave({ how_sub_steps: subSteps });
   }, [debouncedSave]);
 
@@ -594,7 +623,7 @@ RULES:
       }));
       if (newSubSteps.length > 0) {
         // Merge with existing sub-steps (append AI-generated ones)
-        const existing = planData.how_sub_steps ?? [];
+        const existing = localSubSteps;
         const nonEmpty = existing.filter((s) => s.text.trim());
         const merged = nonEmpty.length > 0
           ? [...nonEmpty, ...newSubSteps.map((s, i) => ({ ...s, sort_order: nonEmpty.length + i }))]
@@ -606,10 +635,10 @@ RULES:
     } finally {
       setExercisesLoading(false);
     }
-  }, [exercisesLoading, localWhat, buildEnrichedCtx, planData.how_sub_steps, handleSubStepsChange, step?.category]);
+  }, [exercisesLoading, localWhat, buildEnrichedCtx, localSubSteps, handleSubStepsChange, step?.category]);
 
   const q1Complete = Boolean(localWhat.trim() || linkedIds.length > 0);
-  const q2Complete = Boolean(planData.how_sub_steps?.length && planData.how_sub_steps.some((s) => s.text.trim()));
+  const q2Complete = Boolean(localSubSteps.length && localSubSteps.some((s) => s.text.trim()));
   const q3Complete = Boolean(localWhy.trim());
   const q4Complete = localCollaborators.length > 0;
   const qWhereComplete = Boolean(localWhereLocation?.name?.trim());
@@ -857,7 +886,7 @@ RULES:
         defaultExpanded={q1Complete && !q2Complete}
       >
         <SubStepEditor
-          subSteps={planData.how_sub_steps ?? []}
+          subSteps={localSubSteps}
           onChange={readOnly ? () => {} : handleSubStepsChange}
           readOnly={readOnly}
         />
@@ -1199,6 +1228,36 @@ RULES:
                 Add skills you want to improve. You'll rate your progress during review.
               </Text>
             )}
+
+            {/* Browse all competencies button */}
+            {interestId && (
+              <Pressable
+                style={styles.browseCompetenciesBtn}
+                onPress={() => setShowCompetencyPicker(true)}
+              >
+                <Ionicons name="grid-outline" size={14} color={STEP_COLORS.accent} />
+                <Text style={styles.browseCompetenciesText}>Browse All Competencies</Text>
+              </Pressable>
+            )}
+
+            <CompetencyPickerModal
+              visible={showCompetencyPicker}
+              onClose={() => setShowCompetencyPicker(false)}
+              selectedIds={planData.competency_ids ?? []}
+              onToggle={(compId, compTitle) => {
+                const existingIds = planDataRef.current.competency_ids ?? [];
+                if (existingIds.includes(compId)) {
+                  // Remove
+                  handleRemoveGoal(compTitle);
+                } else {
+                  // Add
+                  handleAddGoal(compTitle);
+                  // Ensure competencyMapRef has the mapping
+                  competencyMapRef.current.set(compTitle, compId);
+                }
+              }}
+              interestId={interestId ?? ''}
+            />
           </>
         )}
       </PlanQuestionCard>
@@ -1220,7 +1279,7 @@ RULES:
         interestId={interestId}
         onApplyToStep={(text) => {
           // Add the suggestion as a sub-step so it's visible in "How will you do it?"
-          const existing = planDataRef.current.how_sub_steps ?? [];
+          const existing = localSubSteps;
           const newSubStep: SubStep = {
             id: `cross_${Date.now()}`,
             text,
@@ -1228,6 +1287,7 @@ RULES:
             completed: false,
           };
           const updated = [...existing, newSubStep];
+          setLocalSubSteps(updated);
           debouncedSave({ how_sub_steps: updated });
         }}
         onCreateStep={async (suggestion) => {
@@ -1569,6 +1629,23 @@ const styles = StyleSheet.create({
     color: IOS_COLORS.tertiaryLabel,
     fontStyle: 'italic',
     marginTop: 4,
+  },
+  browseCompetenciesBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: STEP_COLORS.accent,
+    alignSelf: 'flex-start',
+  },
+  browseCompetenciesText: {
+    fontSize: 13,
+    color: STEP_COLORS.accent,
+    fontWeight: '600',
   },
   collaboratorChipContainer: {
     flexDirection: 'row',

@@ -1,7 +1,7 @@
 /**
  * WeatherConfidenceIndicator Component
  *
- * Displays confidence levels from Storm Glass's multi-source weather aggregation
+ * Displays confidence levels from multi-source weather aggregation
  * Shows data source quality, agreement, and reliability metrics
  */
 
@@ -546,14 +546,14 @@ const styles = StyleSheet.create({
 });
 
 /**
- * Generate confidence metrics from Storm Glass data
+ * Generate confidence metrics from multi-source weather data
  */
 export function generateConfidenceMetrics(
-  stormGlassResponse: any,
+  _weatherResponse: any,
   availableSources: string[] = []
 ): ConfidenceMetrics {
-  // Storm Glass typically includes sources like:
-  // NOAA, Météo-France, UK Met Office, DWD, FCOO, FMI, YR, SMHI
+  // Weather sources include:
+  // NOAA, Meteo-France, UK Met Office, DWD, FCOO, FMI, YR, SMHI
 
   const allSources: DataSource[] = [
     { name: 'NOAA', priority: 1, available: availableSources.includes('noaa') },
@@ -572,7 +572,7 @@ export function generateConfidenceMetrics(
   // Calculate metrics
   const coverage = availableCount / totalCount;
   const agreement = Math.min(1, availableCount / 5); // 5+ sources = high agreement
-  const recency = 0.95; // Assume recent (Storm Glass handles this)
+  const recency = 0.95; // Assume recent data
 
   // Overall confidence is weighted average
   const overall = coverage * 0.4 + agreement * 0.4 + recency * 0.2;
@@ -585,7 +585,7 @@ export function generateConfidenceMetrics(
     coverage,
     forecast: {
       confidence: overall,
-      source: 'Storm Glass',
+      source: 'Open-Meteo',
       model: 'Multi-Source Aggregation',
       modelRun: new Date(),
       validTime: new Date(),

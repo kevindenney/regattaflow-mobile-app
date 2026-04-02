@@ -14,6 +14,7 @@ import {
   StyleSheet,
   Platform,
   ActivityIndicator,
+  Modal,
   type ViewStyle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -29,7 +30,8 @@ import {
   useUnsubscribe,
   useAdoptBlueprintStep,
 } from '@/hooks/useBlueprint';
-import { getBlueprintAccessInfo } from '@/services/BlueprintService';
+import { getBlueprintAccessInfo, checkBlueprintPurchase } from '@/services/BlueprintService';
+import { blueprintPaymentService } from '@/services/BlueprintPaymentService';
 import { NotificationService } from '@/services/NotificationService';
 import { PublishBlueprintSheet } from '@/components/blueprint/PublishBlueprintSheet';
 import { StudentProgressSection } from '@/components/blueprint/StudentProgressSection';
@@ -82,12 +84,56 @@ export default function BlueprintPage() {
   const [adoptingAll, setAdoptingAll] = useState(false);
   const [adoptedCount, setAdoptedCount] = useState(0);
   const [showEditSheet, setShowEditSheet] = useState(false);
+  const [purchasing, setPurchasing] = useState(false);
+  const [hasPurchased, setHasPurchased] = useState(false);
+  const [previewStep, setPreviewStep] = useState<TimelineStepRecord | null>(null);
 
   useEffect(() => {
     if (!blueprintLoading && !blueprint && slug) {
       getBlueprintAccessInfo(slug).then(setAccessInfo);
     }
   }, [blueprintLoading, blueprint, slug]);
+
+  // Check purchase status for paid blueprints
+  useEffect(() => {
+    if (blueprint?.access_level === 'paid' && user?.id) {
+      checkBlueprintPurchase(user.id, blueprint.id).then(({ purchased }) => {
+        setHasPurchased(purchased);
+      });
+    }
+  }, [blueprint?.id, blueprint?.access_level, user?.id]);
+
+  // Handle return from Stripe checkout
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get('session_id');
+    const bpId = params.get('blueprint_id');
+    const purchasedParam = params.get('purchased');
+    console.log('[BlueprintPage] Stripe return check:', { sessionId, bpId, purchasedParam, blueprintId: blueprint?.id, userId: user?.id });
+    if (sessionId && bpId) {
+      console.log('[BlueprintPage] Verifying purchase via session_id...');
+      blueprintPaymentService.verifyPurchase(sessionId, bpId).then((verified) => {
+        console.log('[BlueprintPage] verifyPurchase result:', verified);
+        if (verified) {
+          setHasPurchased(true);
+          setJustSubscribed(true);
+        }
+      });
+      // Clean up URL params
+      window.history.replaceState({}, '', window.location.pathname);
+    } else if (purchasedParam === 'true' && blueprint?.id && user?.id) {
+      console.log('[BlueprintPage] Checking purchase via purchased=true fallback...');
+      checkBlueprintPurchase(user.id, blueprint.id).then(({ purchased }) => {
+        console.log('[BlueprintPage] checkBlueprintPurchase result:', purchased);
+        if (purchased) {
+          setHasPurchased(true);
+          setJustSubscribed(true);
+        }
+      });
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, [blueprint?.id, user?.id]);
 
   const isSubscribed = !!subscription;
   const isOwner = user?.id === blueprint?.user_id;
@@ -120,6 +166,45 @@ export default function BlueprintPage() {
       }
     }
   }, [user, blueprint, isSubscribed, subscribeMutation, unsubscribeMutation, router]);
+
+  const handlePurchase = useCallback(async () => {
+    if (!user) {
+      router.push('/(auth)/signup');
+      return;
+    }
+    if (!blueprint) return;
+
+    setPurchasing(true);
+    try {
+      const baseUrl = Platform.OS === 'web' ? window.location.origin : 'betterat://';
+      const blueprintUrl = `${baseUrl}/blueprint/${blueprint.slug}`;
+      const result = await blueprintPaymentService.purchaseBlueprint(
+        user.id,
+        blueprint.id,
+        `${blueprintUrl}?purchased=true&blueprint_id=${blueprint.id}`,
+        blueprintUrl,
+      );
+
+      if (result.free) {
+        // Org member bypass or free blueprint — auto-subscribed
+        setHasPurchased(true);
+        setJustSubscribed(true);
+        return;
+      }
+
+      if (result.url && Platform.OS === 'web') {
+        window.location.href = result.url;
+        return;
+      }
+
+      if (!result.success) {
+        // TODO: show error toast
+        console.error('Purchase failed:', result.error);
+      }
+    } finally {
+      setPurchasing(false);
+    }
+  }, [user, blueprint, router]);
 
   const navigateToTimeline = useCallback(async () => {
     // Switch to the blueprint's interest before navigating to timeline
@@ -171,24 +256,37 @@ export default function BlueprintPage() {
   if (!blueprint) {
     // Check if it's access-restricted vs truly not found
     const isRestricted = accessInfo?.exists && accessInfo?.access_level !== 'public';
+    const isPaid = accessInfo?.access_level === 'paid';
+    const priceCents = (accessInfo as any)?.price_cents;
 
     return (
       <Container style={containerStyle}>
         <View style={styles.emptyContainer}>
           <Ionicons
-            name={isRestricted ? 'lock-closed-outline' : 'layers-outline'}
+            name={isPaid ? 'pricetag-outline' : isRestricted ? 'lock-closed-outline' : 'layers-outline'}
             size={48}
-            color={C.labelLight}
+            color={isPaid ? C.gold : C.labelLight}
           />
           <Text style={styles.emptyTitle}>
-            {isRestricted ? 'Members Only Blueprint' : 'Blueprint not found'}
+            {isPaid ? 'Premium Blueprint' : isRestricted ? 'Members Only Blueprint' : 'Blueprint not found'}
           </Text>
           <Text style={styles.emptySubtitle}>
-            {isRestricted
-              ? `"${accessInfo?.title}" is available to members of ${accessInfo?.org_name ?? 'this organization'}. Join to subscribe.`
-              : 'This blueprint may have been unpublished or the URL is incorrect.'}
+            {isPaid
+              ? `"${accessInfo?.title}" is available for purchase${priceCents ? ` ($${(priceCents / 100).toFixed(priceCents % 100 === 0 ? 0 : 2)})` : ''}. Sign in to buy.`
+              : isRestricted
+                ? `"${accessInfo?.title}" is available to members of ${accessInfo?.org_name ?? 'this organization'}. Join to subscribe.`
+                : 'This blueprint may have been unpublished or the URL is incorrect.'}
           </Text>
-          {isRestricted && accessInfo?.org_slug && (
+          {isPaid && !user && (
+            <Pressable
+              style={styles.joinOrgBtn}
+              onPress={() => router.push('/(auth)/signup')}
+            >
+              <Ionicons name="log-in-outline" size={16} color="#FFFFFF" />
+              <Text style={styles.joinOrgBtnText}>Sign in to purchase</Text>
+            </Pressable>
+          )}
+          {isRestricted && !isPaid && accessInfo?.org_slug && (
             <Pressable
               style={styles.joinOrgBtn}
               onPress={() => router.push(`/org/${accessInfo.org_slug}` as any)}
@@ -285,22 +383,77 @@ export default function BlueprintPage() {
             </View>
           </Pressable>
 
-          {/* Subscribe / Post-subscribe CTA */}
-          {!isOwner && !isSubscribed && (
-            <Pressable
-              style={styles.subscribeBtn}
-              onPress={handleSubscribe}
-              disabled={subscribeMutation.isPending}
-            >
-              {subscribeMutation.isPending ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <>
-                  <Ionicons name="add-circle-outline" size={18} color="#FFFFFF" />
-                  <Text style={styles.subscribeBtnText}>Subscribe to Blueprint</Text>
-                </>
-              )}
-            </Pressable>
+          {/* Price badge for paid blueprints */}
+          {blueprint.access_level === 'paid' && blueprint.price_cents && blueprint.price_cents > 0 && !isOwner && !isSubscribed && !hasPurchased && (
+            <View style={styles.priceBadge}>
+              <Text style={styles.priceText}>
+                ${(blueprint.price_cents / 100).toFixed(blueprint.price_cents % 100 === 0 ? 0 : 2)}
+              </Text>
+              <Text style={styles.priceSubtext}>one-time purchase</Text>
+            </View>
+          )}
+
+          {/* Subscribe / Purchase / Post-subscribe CTA */}
+          {!isOwner && !isSubscribed && !hasPurchased && (
+            blueprint.access_level === 'paid' && blueprint.price_cents && blueprint.price_cents > 0 ? (
+              <Pressable
+                style={styles.purchaseBtn}
+                onPress={handlePurchase}
+                disabled={purchasing}
+              >
+                {purchasing ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Ionicons name="cart-outline" size={18} color="#FFFFFF" />
+                    <Text style={styles.subscribeBtnText}>
+                      Buy for ${(blueprint.price_cents / 100).toFixed(blueprint.price_cents % 100 === 0 ? 0 : 2)}
+                    </Text>
+                  </>
+                )}
+              </Pressable>
+            ) : (
+              <Pressable
+                style={styles.subscribeBtn}
+                onPress={handleSubscribe}
+                disabled={subscribeMutation.isPending}
+              >
+                {subscribeMutation.isPending ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Ionicons name="add-circle-outline" size={18} color="#FFFFFF" />
+                    <Text style={styles.subscribeBtnText}>Subscribe to Blueprint</Text>
+                  </>
+                )}
+              </Pressable>
+            )
+          )}
+
+          {/* Purchased but not yet subscribed (post-checkout return) */}
+          {!isOwner && hasPurchased && !isSubscribed && (
+            <View style={styles.subscribedSection}>
+              <View style={styles.successBanner}>
+                <Ionicons name="checkmark-circle" size={20} color={C.green} />
+                <Text style={styles.successText}>Purchase complete! You now have access.</Text>
+              </View>
+              <Pressable
+                style={styles.adoptBtn}
+                onPress={handleAdoptAll}
+                disabled={adoptingAll}
+              >
+                {adoptingAll ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Ionicons name="download-outline" size={16} color="#FFFFFF" />
+                    <Text style={styles.adoptBtnText}>
+                      Add {steps?.length ?? 0} steps to my timeline
+                    </Text>
+                  </>
+                )}
+              </Pressable>
+            </View>
           )}
 
           {!isOwner && isSubscribed && (
@@ -451,7 +604,7 @@ export default function BlueprintPage() {
                   step={step}
                   index={index}
                   total={totalCount}
-                  onPress={() => router.push(`/step/${step.id}` as any)}
+                  onPress={() => setPreviewStep(step)}
                 />
               ))}
             </ScrollView>
@@ -468,6 +621,24 @@ export default function BlueprintPage() {
           existingBlueprint={blueprint}
         />
       )}
+
+      {/* Step Preview Modal */}
+      <StepPreviewModal
+        step={previewStep}
+        stepIndex={previewStep && steps ? steps.findIndex(s => s.id === previewStep.id) : 0}
+        totalSteps={steps?.length ?? 0}
+        onClose={() => setPreviewStep(null)}
+        onPrev={() => {
+          if (!previewStep || !steps) return;
+          const idx = steps.findIndex(s => s.id === previewStep.id);
+          if (idx > 0) setPreviewStep(steps[idx - 1]);
+        }}
+        onNext={() => {
+          if (!previewStep || !steps) return;
+          const idx = steps.findIndex(s => s.id === previewStep.id);
+          if (idx < steps.length - 1) setPreviewStep(steps[idx + 1]);
+        }}
+      />
     </Container>
   );
 }
@@ -487,11 +658,8 @@ function StepCard({
   total: number;
   onPress: () => void;
 }) {
-  const cfg = STATUS_CONFIG[step.status] ?? STATUS_CONFIG.pending;
   const metadata = step.metadata as Record<string, any> | undefined;
   const howSubSteps: any[] = metadata?.plan?.how_sub_steps || [];
-  const subStepProgress: Record<string, boolean> = metadata?.act?.sub_step_progress || {};
-  const completedSubs = Object.values(subStepProgress).filter(Boolean).length;
 
   return (
     <View style={styles.stepCardWrapper}>
@@ -505,19 +673,9 @@ function StepCard({
         ]}
         onPress={onPress}
       >
-        {/* Status badge */}
-        <View style={[styles.stepCardStatusBadge, { backgroundColor: cfg.color }]}>
-          <Text style={styles.stepCardStatusText}>{cfg.label.toUpperCase()}</Text>
-        </View>
-
-        {/* Phase icon */}
-        <View style={styles.stepCardPhaseRow}>
-          <View style={[styles.stepCardPhaseBadge, { backgroundColor: `${cfg.color}18` }]}>
-            <Ionicons name={cfg.icon as any} size={12} color={cfg.color} />
-            <Text style={[styles.stepCardPhaseText, { color: cfg.color }]}>
-              {step.status === 'completed' ? 'Done' : step.status === 'in_progress' ? 'Do' : 'Plan'}
-            </Text>
-          </View>
+        {/* Step number badge */}
+        <View style={[styles.stepCardStatusBadge, { backgroundColor: C.accent }]}>
+          <Text style={styles.stepCardStatusText}>STEP {index + 1}</Text>
         </View>
 
         {/* Title */}
@@ -528,12 +686,12 @@ function StepCard({
           <Text style={styles.stepCardDesc} numberOfLines={2}>{step.description}</Text>
         )}
 
-        {/* Sub-step progress */}
+        {/* Sub-step count */}
         {howSubSteps.length > 0 && (
           <View style={styles.stepCardProgressRow}>
-            <Ionicons name="checkmark-circle-outline" size={12} color={C.labelMid} />
+            <Ionicons name="list-outline" size={12} color={C.labelMid} />
             <Text style={styles.stepCardProgressText}>
-              {completedSubs}/{howSubSteps.length}
+              {howSubSteps.length} sub-steps
             </Text>
           </View>
         )}
@@ -542,8 +700,149 @@ function StepCard({
         {step.category && step.category !== 'general' && (
           <Text style={styles.stepCardCategory} numberOfLines={1}>{step.category}</Text>
         )}
+
+        {/* Tap to preview hint */}
+        <Text style={styles.stepCardPreviewHint}>Tap to preview</Text>
       </Pressable>
     </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Step Preview Modal
+// ---------------------------------------------------------------------------
+
+function StepPreviewModal({
+  step,
+  stepIndex,
+  totalSteps,
+  onClose,
+  onPrev,
+  onNext,
+}: {
+  step: TimelineStepRecord | null;
+  stepIndex: number;
+  totalSteps: number;
+  onClose: () => void;
+  onPrev: () => void;
+  onNext: () => void;
+}) {
+  if (!step) return null;
+
+  const metadata = step.metadata as Record<string, any> | undefined;
+  const planData = metadata?.plan ?? {};
+  const howSubSteps: { text: string }[] = planData.how_sub_steps || [];
+  const whatWillYouDo: string = planData.what_will_you_do || '';
+  const whyReasoning: string = planData.why_reasoning || '';
+  const capabilityGoals: string[] = planData.capability_goals || [];
+
+  return (
+    <Modal
+      visible={true}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <Pressable style={styles.previewOverlay} onPress={onClose}>
+        <Pressable style={styles.previewSheet} onPress={(e) => e.stopPropagation()}>
+          {/* Header */}
+          <View style={styles.previewHeader}>
+            <View style={styles.previewStepBadge}>
+              <Text style={styles.previewStepBadgeText}>
+                Step {stepIndex + 1} of {totalSteps}
+              </Text>
+            </View>
+            <Pressable onPress={onClose} hitSlop={12}>
+              <Ionicons name="close" size={22} color={C.labelMid} />
+            </Pressable>
+          </View>
+
+          <ScrollView style={styles.previewScroll} showsVerticalScrollIndicator={false}>
+            {/* Title */}
+            <Text style={styles.previewTitle}>{step.title}</Text>
+
+            {/* Description */}
+            {step.description ? (
+              <Text style={styles.previewDescription}>{step.description}</Text>
+            ) : null}
+
+            {/* Category */}
+            {step.category && step.category !== 'general' && (
+              <View style={styles.previewCategoryRow}>
+                <View style={styles.previewCategoryBadge}>
+                  <Text style={styles.previewCategoryText}>{step.category.replace(/_/g, ' ')}</Text>
+                </View>
+              </View>
+            )}
+
+            {/* What will you do */}
+            {whatWillYouDo ? (
+              <View style={styles.previewSection}>
+                <Text style={styles.previewSectionTitle}>What you'll do</Text>
+                <Text style={styles.previewSectionBody}>{whatWillYouDo}</Text>
+              </View>
+            ) : null}
+
+            {/* Sub-steps */}
+            {howSubSteps.length > 0 && (
+              <View style={styles.previewSection}>
+                <Text style={styles.previewSectionTitle}>Steps to follow</Text>
+                {howSubSteps.map((sub, i) => (
+                  <View key={i} style={styles.previewSubStep}>
+                    <View style={styles.previewSubStepNum}>
+                      <Text style={styles.previewSubStepNumText}>{i + 1}</Text>
+                    </View>
+                    <Text style={styles.previewSubStepText}>{sub.text}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* Skills / capabilities */}
+            {capabilityGoals.length > 0 && (
+              <View style={styles.previewSection}>
+                <Text style={styles.previewSectionTitle}>Skills you'll build</Text>
+                <View style={styles.previewSkillsRow}>
+                  {capabilityGoals.map((skill, i) => (
+                    <View key={i} style={styles.previewSkillBadge}>
+                      <Text style={styles.previewSkillText}>{skill}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {/* Why */}
+            {whyReasoning ? (
+              <View style={styles.previewSection}>
+                <Text style={styles.previewSectionTitle}>Why this matters</Text>
+                <Text style={styles.previewSectionBody}>{whyReasoning}</Text>
+              </View>
+            ) : null}
+          </ScrollView>
+
+          {/* Navigation footer */}
+          <View style={styles.previewFooter}>
+            <Pressable
+              style={[styles.previewNavBtn, stepIndex === 0 && styles.previewNavBtnDisabled]}
+              onPress={onPrev}
+              disabled={stepIndex === 0}
+            >
+              <Ionicons name="chevron-back" size={18} color={stepIndex === 0 ? C.labelLight : C.accent} />
+              <Text style={[styles.previewNavBtnText, stepIndex === 0 && { color: C.labelLight }]}>Previous</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.previewNavBtn, stepIndex >= totalSteps - 1 && styles.previewNavBtnDisabled]}
+              onPress={onNext}
+              disabled={stepIndex >= totalSteps - 1}
+            >
+              <Text style={[styles.previewNavBtnText, stepIndex >= totalSteps - 1 && { color: C.labelLight }]}>Next</Text>
+              <Ionicons name="chevron-forward" size={18} color={stepIndex >= totalSteps - 1 ? C.labelLight : C.accent} />
+            </Pressable>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -716,6 +1015,34 @@ const styles = StyleSheet.create({
   authorMeta: {
     fontSize: 11,
     color: C.labelMid,
+  },
+  priceBadge: {
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  priceText: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: C.labelDark,
+  },
+  priceSubtext: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: C.labelMid,
+    marginTop: 2,
+  },
+  purchaseBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: C.gold,
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    width: '100%',
+    maxWidth: 300,
   },
   subscribeBtn: {
     flexDirection: 'row',
@@ -1065,5 +1392,180 @@ const styles = StyleSheet.create({
     color: C.labelLight,
     textAlign: 'center',
     marginTop: 2,
+  },
+  stepCardPreviewHint: {
+    fontSize: 9,
+    color: C.accent,
+    textAlign: 'center',
+    marginTop: 4,
+    fontWeight: '500',
+  },
+
+  // Step Preview Modal
+  previewOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  previewSheet: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    width: '100%',
+    maxWidth: 480,
+    maxHeight: '80%',
+    ...Platform.select({
+      web: {
+        boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+      } as any,
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.2,
+        shadowRadius: 24,
+        elevation: 10,
+      },
+    }),
+  },
+  previewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+  },
+  previewStepBadge: {
+    backgroundColor: C.accentBg,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  previewStepBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: C.accent,
+  },
+  previewScroll: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  previewTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: C.labelDark,
+    marginBottom: 6,
+  },
+  previewDescription: {
+    fontSize: 14,
+    color: C.labelMid,
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  previewCategoryRow: {
+    flexDirection: 'row',
+    marginBottom: 16,
+  },
+  previewCategoryBadge: {
+    backgroundColor: C.accentBg,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
+  },
+  previewCategoryText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: C.accent,
+    textTransform: 'capitalize',
+  },
+  previewSection: {
+    marginBottom: 18,
+  },
+  previewSectionTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: C.labelMid,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  previewSectionBody: {
+    fontSize: 14,
+    color: C.labelDark,
+    lineHeight: 20,
+  },
+  previewSubStep: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginBottom: 8,
+  },
+  previewSubStepNum: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: C.accentBg,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexShrink: 0,
+  },
+  previewSubStepNumText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: C.accent,
+  },
+  previewSubStepText: {
+    fontSize: 13,
+    color: C.labelDark,
+    lineHeight: 18,
+    flex: 1,
+    paddingTop: 2,
+  },
+  previewSkillsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  previewSkillBadge: {
+    backgroundColor: '#F0F9FF',
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  previewSkillText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#0369A1',
+  },
+  previewFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: C.border,
+  },
+  previewNavBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    ...Platform.select({ web: { cursor: 'pointer' } as any }),
+  },
+  previewNavBtnDisabled: {
+    opacity: 0.5,
+    ...Platform.select({ web: { cursor: 'default' } as any }),
+  },
+  previewNavBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: C.accent,
   },
 });

@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { createLogger } from '@/lib/utils/logger';
+import { isAbortError } from '@/lib/utils/fetchWithTimeout';
 import type {
   RaceIntentions,
   RaceIntentionUpdate,
@@ -79,12 +80,14 @@ class SailorRacePreparationService {
         .maybeSingle();
 
       if (error) {
+        if (isAbortError(error)) return null;
         logger.error('Error fetching race preparation:', error);
         throw error;
       }
 
       return data;
     } catch (error) {
+      if (isAbortError(error)) return null;
       logger.error('Failed to get race preparation:', error);
       return null;
     }
@@ -110,8 +113,8 @@ class SailorRacePreparationService {
       .maybeSingle();
 
     if (regattaCheckError) {
+      if (isAbortError(regattaCheckError)) return null;
       logger.error('[SailorRacePreparationService] Error checking regatta existence:', regattaCheckError);
-      logger.error('Error checking regatta existence:', regattaCheckError);
       return null;
     }
 
@@ -143,6 +146,7 @@ class SailorRacePreparationService {
       .single();
 
     if (error) {
+      if (isAbortError(error)) return null;
       // RLS policy violations (42501) are expected in some scenarios:
       // - User session is transitioning (sign-in/sign-out)
       // - Sample data creation where race doesn't exist yet

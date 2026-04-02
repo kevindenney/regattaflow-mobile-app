@@ -23,11 +23,11 @@ RegattaFlow is a comprehensive sailing race management and analysis platform bui
 ### AI & ML
 - **AI Provider**: Anthropic Claude (via MCP - Model Context Protocol)
 - **Skills System**: Custom Claude skills for race strategy, coaching, tuning analysis
-- **Weather Intelligence**: StormGlass API integration with AI analysis
+- **Weather Intelligence**: Open-Meteo API integration with AI analysis
 - **Edge Functions**: AI proxy for secure API key handling
 
 ### External Services
-- **Weather Data**: StormGlass API (marine weather, currents, tides)
+- **Weather Data**: Open-Meteo API (marine weather, waves)
 - **Mapping**: Custom bathymetry visualization with GEBCO data
 - **MCP Servers**:
   - Supabase MCP (database operations)
@@ -62,7 +62,7 @@ See `project_structure.txt` for complete file tree (1316 lines).
 
 #### `/services` - Business Logic & API Clients
 - `ai/` - AI service clients (Claude, MCP, skills management)
-- `weather/` - Weather service providers (StormGlass, OpenWeatherMap)
+- `weather/` - Weather service providers (OpenMeteo, OpenWeatherMap)
 - `tides/` - Tidal data services
 - `agents/` - AI agent implementations
 - Core services:
@@ -208,7 +208,6 @@ Key tables:
 
 ## 🚀 Recent Major Features
 
-1. ✅ **StormGlass Weather Integration** - Professional marine weather data
 2. ✅ **Claude Skills System** - 15+ specialized AI coaching skills
 3. ✅ **3D Map Visualization** - Bathymetry and environmental overlays
 4. ✅ **Racing Console** - Live race mode with phase detection
@@ -230,7 +229,6 @@ Key variables (see `.env.example`):
 - `EXPO_PUBLIC_SUPABASE_ANON_KEY` - Supabase anon key
 - `SUPABASE_SERVICE_ROLE_KEY` - Service role (Edge Functions only)
 - `ANTHROPIC_API_KEY` - Claude API key
-- `STORMGLASS_API_KEY` - Weather data API key
 
 ### Key Scripts
 - `npm start` - Start Expo dev server
@@ -243,7 +241,6 @@ Key variables (see `.env.example`):
 See `/docs` folder for detailed guides:
 - `AI_INTEGRATION_GUIDE.md` - AI features implementation
 - `CLAUDE_SKILLS_SETUP.md` - Skills system configuration
-- `STORMGLASS_MIGRATION_PLAN.md` - Weather service setup
 - `MCP_CLAUDE_SKILLS_INTEGRATION.md` - MCP server setup
 - `VERCEL_MCP_SETUP.md` - Wire the Vercel MCP server into Codex
 
@@ -274,7 +271,7 @@ For quick navigation:
 - Main app entry: `app/_layout.tsx`
 - Supabase config: `services/supabase.ts`
 - AI client: `services/ai/EnhancedClaudeClient.ts`
-- Weather service: `services/weather/StormGlassService.ts`
+- Weather service: `services/weather/OpenMeteoService.ts`
 - Race detail UI: `components/race-detail/`
 - Database schema: `supabase/migrations/`
 

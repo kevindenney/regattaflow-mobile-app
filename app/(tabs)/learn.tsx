@@ -60,19 +60,6 @@ const SAILING_EXTRA_COACH_ROLES = new Set([
   'team_captain',
 ]);
 
-type OrgStepTemplate = {
-  id: string;
-  org_id: string;
-  interest_slug: string;
-  title: string;
-  description: string | null;
-  step_type: string | null;
-  module_ids: string[] | null;
-  suggested_competency_ids: string[] | null;
-  is_published: boolean;
-  created_at: string;
-};
-
 type UserCohort = {
   id: string;
   name: string;
@@ -93,14 +80,8 @@ export default function LearnScreen() {
   const [joinBusyOrgId, setJoinBusyOrgId] = useState<string | null>(null);
   const [leaveBusyMembershipId, setLeaveBusyMembershipId] = useState<string | null>(null);
   const [joinNotice, setJoinNotice] = useState<string | null>(null);
-  const [orgTemplates, setOrgTemplates] = useState<OrgStepTemplate[]>([]);
-  const [orgTemplatesLoading, setOrgTemplatesLoading] = useState(false);
-  const [orgTemplatesError, setOrgTemplatesError] = useState<string | null>(null);
   const [pendingAccessCount, setPendingAccessCount] = useState(0);
   const [userCohorts, setUserCohorts] = useState<UserCohort[]>([]);
-  const [cohortTemplates, setCohortTemplates] = useState<OrgStepTemplate[]>([]);
-  const [cohortTemplatesLoading, setCohortTemplatesLoading] = useState(false);
-  const [cohortTemplatesError, setCohortTemplatesError] = useState<string | null>(null);
   const [userCohortsLoading, setUserCohortsLoading] = useState(false);
   const [userCohortsError, setUserCohortsError] = useState<string | null>(null);
 
@@ -108,17 +89,11 @@ export default function LearnScreen() {
 
   const { currentInterest } = useInterest();
   const interestSlug = String(currentInterest?.slug || '').trim().toLowerCase();
-  const isNursingInterest = interestSlug === 'nursing';
   const isSailingInterest = interestSlug === 'sail-racing' || interestSlug.includes('sail');
   const { data: betterAtCourses, isLoading: betterAtLoading } = useCourses();
   const filteredCourses = useMemo(() => betterAtCourses ?? [], [betterAtCourses]);
   const courseTabLabel = isSailingInterest ? 'Training' : 'Courses';
   const courseSectionLabel = isSailingInterest ? 'Training' : 'Courses';
-  const templateSectionLabel = isNursingInterest
-    ? 'Recommended from your program'
-    : isSailingInterest
-      ? 'Recommended drills & playbooks'
-      : 'Recommended for your organization';
   const learnSegments = useMemo(
     () => [
       { value: 'courses' as const, label: courseTabLabel },
@@ -152,58 +127,6 @@ export default function LearnScreen() {
   useEffect(() => {
     setMounted(true);
   }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadOrgTemplates = async () => {
-      if (!activeOrganizationId || !isUuid(activeOrganizationId) || !interestSlug) {
-        if (!cancelled) {
-          setOrgTemplates([]);
-          setOrgTemplatesError(null);
-          setOrgTemplatesLoading(false);
-        }
-        return;
-      }
-
-      setOrgTemplatesLoading(true);
-      setOrgTemplatesError(null);
-      try {
-        const { data, error } = await supabase
-          .from('betterat_org_step_templates')
-          .select('id,org_id,interest_slug,title,description,step_type,module_ids,suggested_competency_ids,is_published,created_at')
-          .eq('org_id', activeOrganizationId)
-          .eq('interest_slug', interestSlug)
-          .eq('is_published', true)
-          .order('created_at', { ascending: false })
-          .limit(20);
-
-        if (error) {
-          throw error;
-        }
-        if (!cancelled) {
-          setOrgTemplates((data || []) as OrgStepTemplate[]);
-        }
-      } catch (templateError: any) {
-        if (!cancelled) {
-          setOrgTemplates([]);
-          setOrgTemplatesError(templateError?.message || 'Could not load recommendations.');
-        }
-      } finally {
-        if (!cancelled) {
-          setOrgTemplatesLoading(false);
-        }
-      }
-    };
-
-    if (activeSegment === 'courses') {
-      void loadOrgTemplates();
-    }
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeOrganizationId, activeSegment, interestSlug]);
 
   useEffect(() => {
     let cancelled = false;
@@ -280,91 +203,6 @@ export default function LearnScreen() {
       cancelled = true;
     };
   }, [activeOrganizationId, activeSegment, signedIn, user?.id]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadCohortTemplates = async () => {
-      if (
-        activeSegment !== 'courses'
-        || !activeOrganizationId
-        || !isUuid(activeOrganizationId)
-        || !interestSlug
-        || !userCohorts.length
-      ) {
-        if (!cancelled) {
-          setCohortTemplates([]);
-          setCohortTemplatesError(null);
-          setCohortTemplatesLoading(false);
-        }
-        return;
-      }
-
-      const cohortIds = userCohorts.map((cohort) => cohort.id).filter((id) => isUuid(id));
-      if (cohortIds.length === 0) {
-        if (!cancelled) {
-          setCohortTemplates([]);
-          setCohortTemplatesError(null);
-          setCohortTemplatesLoading(false);
-        }
-        return;
-      }
-
-      setCohortTemplatesLoading(true);
-      setCohortTemplatesError(null);
-      try {
-        const { data: linkRows, error: linkError } = await supabase
-          .from('betterat_org_step_template_cohorts')
-          .select('org_template_id')
-          .in('cohort_id', cohortIds);
-        if (linkError) throw linkError;
-
-        const templateIds = Array.from(
-          new Set(
-            (linkRows || [])
-              .map((row: any) => String(row.org_template_id || ''))
-              .filter((id) => isUuid(id))
-          )
-        );
-
-        if (templateIds.length === 0) {
-          if (!cancelled) {
-            setCohortTemplates([]);
-          }
-          return;
-        }
-
-        const { data: templatesRows, error: templatesError } = await supabase
-          .from('betterat_org_step_templates')
-          .select('id,org_id,interest_slug,title,description,step_type,module_ids,suggested_competency_ids,is_published,created_at')
-          .in('id', templateIds)
-          .eq('org_id', activeOrganizationId)
-          .eq('interest_slug', interestSlug)
-          .eq('is_published', true)
-          .order('created_at', { ascending: false })
-          .limit(20);
-
-        if (templatesError) throw templatesError;
-        if (!cancelled) {
-          setCohortTemplates((templatesRows || []) as OrgStepTemplate[]);
-        }
-      } catch (error: any) {
-        if (!cancelled) {
-          setCohortTemplates([]);
-          setCohortTemplatesError(error?.message || 'Could not load cohort recommendations.');
-        }
-      } finally {
-        if (!cancelled) {
-          setCohortTemplatesLoading(false);
-        }
-      }
-    };
-
-    void loadCohortTemplates();
-    return () => {
-      cancelled = true;
-    };
-  }, [activeOrganizationId, activeSegment, interestSlug, userCohorts]);
 
   const sortedMemberships = [...memberships].sort((a, b) => {
     const aStatus = String(a.membership_status || a.status || '').toLowerCase();
@@ -678,15 +516,6 @@ export default function LearnScreen() {
 
   const isMemberActive = (status: string) => status === 'active' || status === 'verified';
   const statusLabel = (status: string) => (isMemberActive(status) ? 'Active' : status === 'pending' ? 'Pending' : 'Inactive');
-  const cohortTemplateIds = useMemo(
-    () => new Set(cohortTemplates.map((template) => template.id)),
-    [cohortTemplates]
-  );
-  const programTemplates = useMemo(
-    () => orgTemplates.filter((template) => !cohortTemplateIds.has(template.id)),
-    [cohortTemplateIds, orgTemplates]
-  );
-
   return (
     <View style={styles.container}>
       {/* Scroll content first — flows behind absolutely-positioned toolbar */}
@@ -805,7 +634,7 @@ export default function LearnScreen() {
                         <Ionicons name="chevron-forward" size={16} color={IOS_COLORS.tertiaryLabel} />
                       </TouchableOpacity>
                       <TouchableOpacity style={styles.adminToolRow} onPress={() => router.push('/organization/templates')}>
-                        <Text style={styles.adminToolLabel}>Templates</Text>
+                        <Text style={styles.adminToolLabel}>Blueprints</Text>
                         <Ionicons name="chevron-forward" size={16} color={IOS_COLORS.tertiaryLabel} />
                       </TouchableOpacity>
                     </View>
@@ -925,71 +754,6 @@ export default function LearnScreen() {
                 ) : userCohortsError ? (
                   <Text style={styles.orgError}>{userCohortsError}</Text>
                 ) : null}
-                {cohortTemplates.length > 0 ? (
-                  <>
-                    <View style={styles.sectionHeader}>
-                      <Text style={styles.sectionLabel}>RECOMMENDED FOR YOUR COHORT</Text>
-                      <Text style={styles.sectionCount}>{cohortTemplates.length}</Text>
-                    </View>
-                    <View style={styles.coursesList}>
-                      {cohortTemplates.map((template) => (
-                        <View key={template.id} style={styles.templateRow}>
-                          <View style={styles.templateIconContainer}>
-                            <Ionicons name="people-outline" size={14} color={IOS_COLORS.systemBlue} />
-                          </View>
-                          <View style={styles.templateBody}>
-                            <Text style={styles.templateTitle}>{template.title}</Text>
-                            {template.description ? (
-                              <Text style={styles.templateDescription} numberOfLines={2}>
-                                {template.description}
-                              </Text>
-                            ) : null}
-                          </View>
-                        </View>
-                      ))}
-                    </View>
-                  </>
-                ) : null}
-                {cohortTemplatesError ? <Text style={styles.orgError}>{cohortTemplatesError}</Text> : null}
-
-                <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionLabel}>{templateSectionLabel.toUpperCase()}</Text>
-                  <Text style={styles.sectionCount}>{programTemplates.length}</Text>
-                </View>
-                <View style={styles.coursesList}>
-                  {!activeOrganizationId ? (
-                    <Text style={styles.orgHint}>Set an active organization to see recommendations.</Text>
-                  ) : cohortTemplatesLoading ? (
-                    <View style={styles.orgSearchLoading}>
-                      <ActivityIndicator size="small" color={IOS_COLORS.systemBlue} />
-                    </View>
-                  ) : orgTemplatesLoading ? (
-                    <View style={styles.orgSearchLoading}>
-                      <ActivityIndicator size="small" color={IOS_COLORS.systemBlue} />
-                    </View>
-                  ) : orgTemplatesError ? (
-                    <Text style={styles.orgError}>{orgTemplatesError}</Text>
-                  ) : programTemplates.length === 0 ? (
-                    <Text style={styles.orgHint}>No published recommendations for this interest yet.</Text>
-                  ) : (
-                    programTemplates.map((template) => (
-                      <View key={template.id} style={styles.templateRow}>
-                        <View style={styles.templateIconContainer}>
-                          <Ionicons name="sparkles-outline" size={14} color={IOS_COLORS.systemBlue} />
-                        </View>
-                        <View style={styles.templateBody}>
-                          <Text style={styles.templateTitle}>{template.title}</Text>
-                          {template.description ? (
-                            <Text style={styles.templateDescription} numberOfLines={2}>
-                              {template.description}
-                            </Text>
-                          ) : null}
-                        </View>
-                      </View>
-                    ))
-                  )}
-                </View>
-
                 <View style={styles.sectionHeader}>
                   <Text style={styles.sectionLabel}>{courseSectionLabel.toUpperCase()}</Text>
                   <Text style={styles.sectionCount}>{filteredCourses.length}</Text>

@@ -603,7 +603,7 @@ export const KNITTING_EVENT_CONFIG: InterestEventConfig = {
     { id: 'stitch_patterns', label: 'Stitch Patterns', icon: 'apps' },
     { id: 'colorwork', label: 'Colorwork', icon: 'color-palette' },
     { id: 'shaping', label: 'Shaping', icon: 'resize' },
-    { id: 'finishing', label: 'Finishing', icon: 'checkmark-done' },
+    { id: 'finishing', label: 'Finishing', icon: 'check-all' },
     { id: 'fixing_mistakes', label: 'Fixing Mistakes', icon: 'build' },
   ],
 

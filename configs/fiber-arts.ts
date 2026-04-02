@@ -636,7 +636,7 @@ export const FIBER_ARTS_EVENT_CONFIG: InterestEventConfig = {
     { id: 'warping', label: 'Warping', icon: 'grid' },
     { id: 'pattern_drafting', label: 'Pattern Drafting', icon: 'document-text' },
     { id: 'color_theory', label: 'Color Theory', icon: 'color-palette' },
-    { id: 'finishing', label: 'Finishing', icon: 'checkmark-done' },
+    { id: 'finishing', label: 'Finishing', icon: 'check-all' },
   ],
 
   // ---------------------------------------------------------------------------

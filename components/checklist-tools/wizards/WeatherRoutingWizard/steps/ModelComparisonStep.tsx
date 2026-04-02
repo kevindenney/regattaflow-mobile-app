@@ -43,7 +43,6 @@ const MODEL_COLORS: Record<string, string> = {
   NAM: '#20B2AA',
   ICON: '#FF6B6B',
   OPENMETEO: '#34C759',
-  STORMGLASS: '#FF9500',
 };
 
 interface ModelComparisonStepProps {

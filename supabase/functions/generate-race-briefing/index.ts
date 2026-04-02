@@ -1,7 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { corsHeaders } from '../_shared/cors.ts';
-
-const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
+import { callGemini } from '../_shared/gemini.ts';
 
 /**
  * Generate Race Briefing Edge Function
@@ -25,33 +24,10 @@ Deno.serve(async (req) => {
       );
     }
 
-    if (!ANTHROPIC_API_KEY) {
-      return new Response(
-        JSON.stringify({ error: 'ANTHROPIC_API_KEY not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
     // Build context for the AI
     const raceContext = buildRaceContext(race, weather, raceType);
 
-    // Generate strategy using Claude
-    // FIX 5: Upgraded from claude-3-haiku-20240307 to claude-sonnet-4-20250514 for better quality
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 4096,
-        temperature: 0.3,
-        messages: [
-          {
-            role: 'user',
-            content: `You are an expert sailing tactician helping a sailor prepare for a race. Generate strategic recommendations based on the race conditions.
+    const briefingPrompt = `You are an expert sailing tactician helping a sailor prepare for a race. Generate strategic recommendations based on the race conditions.
 
 RACE CONTEXT:
 ${raceContext}
@@ -93,23 +69,22 @@ ${raceType === 'distance' ? `
 Generate 3-5 key points, 2-3 decision points, and 1-3 warnings based on the conditions.
 Be specific and actionable - avoid generic advice. Reference the actual conditions provided.
 
-Return ONLY valid JSON, no other text.`,
-          },
-        ],
-      }),
-    });
+Return ONLY valid JSON, no other text.`;
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('[generate-race-briefing] Anthropic API error:', response.status, errorText);
+    let content: string;
+    try {
+      content = await callGemini({
+        userContent: [{ text: briefingPrompt }],
+        maxOutputTokens: 4096,
+        temperature: 0.3,
+      });
+    } catch (aiError: any) {
+      console.error('[generate-race-briefing] Gemini API error:', aiError.message);
       return new Response(
         JSON.stringify({ error: 'Failed to generate briefing' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-
-    const data = await response.json();
-    const content = data.content?.[0]?.text;
 
     if (!content) {
       console.error('[generate-race-briefing] No content in response');

@@ -1,7 +1,7 @@
 /**
  * Map Overlay Components Index
  *
- * Enhanced weather and marine overlays leveraging Storm Glass data
+ * Enhanced weather and marine overlays for professional racing visualization
  * Complete professional racing visualization suite
  */
 

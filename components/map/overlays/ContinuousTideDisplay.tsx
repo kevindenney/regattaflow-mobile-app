@@ -2,7 +2,7 @@
  * ContinuousTideDisplay Component
  *
  * Real-time tide height visualization with predicted tide curves
- * Uses Storm Glass continuous tide height data
+ * Uses continuous tide height data
  */
 
 import React, { useMemo } from 'react';

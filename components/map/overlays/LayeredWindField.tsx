@@ -3,7 +3,7 @@
  *
  * Displays wind field with multiple altitude layers
  * Useful for identifying wind shear and optimal sailing height
- * Uses Storm Glass wind data with altitude variations
+ * Uses wind data with altitude variations
  */
 
 import React, { useMemo } from 'react';

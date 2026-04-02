@@ -43,7 +43,6 @@ export function WeatherOverlay3D({
   const [loading, setLoading] = useState(false);
 
   const weatherService = useRef(new ProfessionalWeatherService({
-    stormglass: process.env.EXPO_PUBLIC_STORMGLASS_API_KEY || 'demo-key',
     openweathermap: process.env.EXPO_PUBLIC_OPENWEATHERMAP_API_KEY || '',
     meteomatics: process.env.EXPO_PUBLIC_METEOMATICS_API_KEY || 'demo-key',
   }));

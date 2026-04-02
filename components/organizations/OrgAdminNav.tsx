@@ -21,11 +21,12 @@ interface OrgTab {
 }
 
 const ORG_ADMIN_TABS: OrgTab[] = [
+  { key: 'dashboard', label: 'Dashboard', route: '/organization/cohort-dashboard', icon: 'bar-chart-outline' },
   { key: 'members', label: 'Members', route: '/organization/members', icon: 'people-outline' },
   { key: 'requests', label: 'Requests', route: '/organization/access-requests', icon: 'mail-outline' },
   { key: 'cohorts', label: 'Cohorts', route: '/organization/cohorts', icon: 'layers-outline' },
   { key: 'competencies', label: 'Competencies', route: '/organization/competencies', icon: 'ribbon-outline' },
-  { key: 'templates', label: 'Templates', route: '/organization/templates', icon: 'document-text-outline' },
+  { key: 'blueprints', label: 'Blueprints', route: '/organization/templates', icon: 'map-outline' },
   { key: 'billing', label: 'Billing', route: '/organization/billing', icon: 'card-outline' },
   { key: 'settings', label: 'Settings', route: '/settings/organization-access', icon: 'settings-outline' },
 ];

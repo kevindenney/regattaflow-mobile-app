@@ -76,6 +76,8 @@ serve(async (req: Request) => {
       );
     }
 
+    console.log(`[stripe-webhook] Processing event: ${event.type} (${event.id})`);
+
     // Handle different event types
     switch (event.type) {
       // Payment Intent Events
@@ -222,6 +224,16 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
       paymentIntent.amount
     );
   }
+
+  // Handle blueprint purchase
+  if (metadata.type === 'blueprint_purchase' && metadata.blueprint_id && metadata.user_id) {
+    await handleBlueprintPurchaseSuccess(
+      metadata.blueprint_id,
+      metadata.user_id,
+      paymentIntent.id,
+      paymentIntent.amount
+    );
+  }
 }
 
 /**
@@ -292,6 +304,117 @@ async function handleCoursePurchaseSuccess(
 }
 
 /**
+ * Handle successful blueprint purchase
+ */
+async function handleBlueprintPurchaseSuccess(
+  blueprintId: string,
+  userId: string,
+  paymentIntentId: string,
+  amountPaid: number
+) {
+  // Calculate platform fee (15%)
+  const platformFeeCents = Math.round(amountPaid * 0.15);
+
+  console.log(`[handleBlueprintPurchaseSuccess] Creating purchase: blueprint=${blueprintId}, user=${userId}, amount=${amountPaid}, paymentIntent=${paymentIntentId}`);
+
+  // Create/update purchase record
+  const { error: purchaseError } = await supabase
+    .from('blueprint_purchases')
+    .upsert({
+      blueprint_id: blueprintId,
+      buyer_id: userId,
+      stripe_payment_intent_id: paymentIntentId,
+      amount_paid_cents: amountPaid,
+      platform_fee_cents: platformFeeCents,
+      status: 'completed',
+      purchased_at: new Date().toISOString(),
+    }, {
+      onConflict: 'blueprint_id,buyer_id',
+    });
+
+  if (purchaseError) {
+    console.error('[handleBlueprintPurchaseSuccess] Failed to create blueprint purchase:', JSON.stringify(purchaseError));
+    return;
+  }
+  console.log(`[handleBlueprintPurchaseSuccess] Purchase record created successfully`);
+
+  // Auto-subscribe the buyer
+  await supabase
+    .from('blueprint_subscriptions')
+    .upsert({
+      blueprint_id: blueprintId,
+      subscriber_id: userId,
+      subscribed_at: new Date().toISOString(),
+    }, {
+      onConflict: 'blueprint_id,subscriber_id',
+    });
+
+  // Increment subscriber count
+  await supabase.rpc('increment_blueprint_subscriber_count', {
+    p_blueprint_id: blueprintId,
+  }).then(({ error }) => {
+    if (error) console.error('Failed to increment subscriber count:', error);
+  });
+
+  // Get blueprint and user info for notifications
+  const { data: blueprint } = await supabase
+    .from('timeline_blueprints')
+    .select('title, user_id')
+    .eq('id', blueprintId)
+    .single();
+
+  const { data: buyer } = await supabase
+    .from('users')
+    .select('email, full_name')
+    .eq('id', userId)
+    .single();
+
+  // Notify the buyer
+  if (buyer?.email) {
+    try {
+      await supabase.functions.invoke('send-email', {
+        body: {
+          to: buyer.email,
+          subject: `Access Confirmed: ${blueprint?.title || 'Your Blueprint'}`,
+          html: `
+            <h2>Welcome to Your New Blueprint!</h2>
+            <p>Hi ${buyer.full_name || 'there'},</p>
+            <p>Your payment has been received and you now have access to:</p>
+            <h3>${blueprint?.title || 'Your Blueprint'}</h3>
+            <p>Add the steps to your timeline and start making progress!</p>
+            <p>Thank you for choosing BetterAt!</p>
+          `,
+        },
+      });
+    } catch (emailError) {
+      console.error('Failed to send blueprint purchase confirmation email:', emailError);
+    }
+  }
+
+  // Notify the creator
+  if (blueprint?.user_id) {
+    const formattedAmount = (amountPaid / 100).toFixed(2);
+    try {
+      await supabase.functions.invoke('send-push-notification', {
+        body: {
+          recipients: [
+            {
+              userId: blueprint.user_id,
+              title: 'New Blueprint Sale!',
+              body: `${buyer?.full_name || 'Someone'} purchased "${blueprint.title}" for $${formattedAmount}`,
+              data: { type: 'blueprint_purchase', blueprintId },
+              category: 'payments',
+            },
+          ],
+        },
+      });
+    } catch (pushError) {
+      console.error('Failed to send blueprint sale push notification:', pushError);
+    }
+  }
+}
+
+/**
  * Handle failed payment intent
  */
 async function handlePaymentIntentFailed(paymentIntent: Stripe.PaymentIntent) {
@@ -342,6 +465,31 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) 
       })
       .eq('user_id', metadata.user_id)
       .eq('course_id', metadata.course_id);
+  }
+
+  // Handle blueprint purchase checkout
+  console.log(`[checkout.session.completed] metadata:`, JSON.stringify(metadata));
+  console.log(`[checkout.session.completed] payment_status: ${session.payment_status}, amount_total: ${session.amount_total}`);
+  if (metadata.type === 'blueprint_purchase' && metadata.blueprint_id && metadata.user_id) {
+    console.log(`[checkout.session.completed] Processing blueprint purchase: blueprint=${metadata.blueprint_id}, user=${metadata.user_id}`);
+    await handleBlueprintPurchaseSuccess(
+      metadata.blueprint_id,
+      metadata.user_id,
+      session.payment_intent as string || session.id,
+      session.amount_total || 0
+    );
+
+    // Store checkout session ID on purchase
+    const { error: updateError } = await supabase
+      .from('blueprint_purchases')
+      .update({
+        stripe_checkout_session_id: session.id,
+      })
+      .eq('buyer_id', metadata.user_id)
+      .eq('blueprint_id', metadata.blueprint_id);
+    console.log(`[checkout.session.completed] Update checkout session ID result: ${updateError ? updateError.message : 'success'}`);
+  } else {
+    console.log(`[checkout.session.completed] Not a blueprint purchase or missing metadata fields. type=${metadata.type}, blueprint_id=${metadata.blueprint_id}, user_id=${metadata.user_id}`);
   }
 }
 

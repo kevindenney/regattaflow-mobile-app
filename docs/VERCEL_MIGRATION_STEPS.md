@@ -78,7 +78,6 @@ Go to **Settings** → **Environment Variables** and add all required variables 
 - `EXPO_PUBLIC_GEMINI_API_KEY`
 
 **Weather & Maps**:
-- `EXPO_PUBLIC_STORMGLASS_API_KEY`
 - `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY`
 - `EXPO_PUBLIC_MAP_STYLE_URL`
 

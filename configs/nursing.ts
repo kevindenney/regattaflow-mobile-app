@@ -89,7 +89,7 @@ export const NURSING_EVENT_CONFIG: InterestEventConfig = {
     {
       id: 'simulation',
       label: 'Simulation',
-      icon: 'desktop-computer',
+      icon: 'monitor',
       description: 'High-fidelity simulation scenario',
       formFields: [
         { id: 'date', type: 'date', label: 'Date', required: true },
@@ -126,7 +126,7 @@ export const NURSING_EVENT_CONFIG: InterestEventConfig = {
     {
       id: 'competency_checkoff',
       label: 'Competency Checkoff',
-      icon: 'checkmark-done',
+      icon: 'check-all',
       description: 'Competency validation assessment',
       formFields: [
         { id: 'date', type: 'date', label: 'Date', required: true },
@@ -177,7 +177,7 @@ export const NURSING_EVENT_CONFIG: InterestEventConfig = {
     {
       id: 'blank_activity',
       label: 'Blank Activity',
-      icon: 'add-circle-outline',
+      icon: 'plus-circle-outline',
       description: 'Create your own — define what, why, who, and how',
       formFields: [
         { id: 'date', type: 'date', label: 'Date', required: true },

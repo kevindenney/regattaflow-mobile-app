@@ -599,7 +599,7 @@ export function AfterRaceContent({
         {/* Race Summary tile */}
         {isExpanded && (
           <RaceSummaryTile
-            raceDate={race.date}
+            raceDate={race.date ?? ''}
             resultText={resultText || undefined}
             hasResult={!!hasResult}
             wind={race.wind}
@@ -715,7 +715,7 @@ export function AfterRaceContent({
         onClose={() => setShowResultSheet(false)}
         raceId={race.id}
         raceName={race.name}
-        raceDate={race.date}
+        raceDate={race.date ?? ''}
         userId={userId}
         analysisData={analysisData}
         timerSessionId={analysisData?.timerSessionId}
@@ -803,7 +803,7 @@ export function AfterRaceContent({
             <RaceContentActions
               regattaId={race.id}
               raceName={race.name}
-              raceDate={race.date}
+              raceDate={race.date ?? ''}
               variant="full"
               onContentSaved={() => {
                 // Refresh content status for the tile

@@ -122,9 +122,9 @@ export function ProfessionalMapScreen({
     weather: {
       sources: [
         {
-          id: 'stormglass',
-          name: 'Storm Glass',
-          url: 'https://api.stormglass.io/v2',
+          id: 'openmeteo',
+          name: 'Open-Meteo',
+          url: 'https://api.open-meteo.com/v1',
           priority: 1,
           updateInterval: 900 // 15 minutes
         }

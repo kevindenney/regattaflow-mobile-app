@@ -19,7 +19,6 @@ import {
   TideState,
   ConfidenceLevel
 } from '@/types/environmental';
-import { StormGlassService } from './weather/StormGlassService';
 import { OpenMeteoService } from './weather/OpenMeteoService';
 import type { AdvancedWeatherConditions } from '@/lib/types/advanced-map';
 import { createLogger } from '@/lib/utils/logger';
@@ -28,7 +27,6 @@ const logger = createLogger('WeatherAggregationService');
 
 // Regional weather provider configuration
 // OpenMeteo is FREE and primary for weather/waves
-// StormGlass is only used for tide data (to minimize quota usage)
 const REGIONAL_PROVIDERS = {
   'asia_pacific': ['OpenMeteo', 'HKO', 'NOAA', 'OpenWeatherMap'],
   'europe': ['OpenMeteo', 'ECMWF', 'Met_Office', 'Meteo_France', 'OpenWeatherMap'],
@@ -42,13 +40,11 @@ const REGIONAL_PROVIDERS = {
 export class WeatherAggregationService {
   private providers: string[];
   private venueRegion: string;
-  private stormGlassService: StormGlassService | null;
   private openMeteoService: OpenMeteoService;
 
   constructor(venue: { region?: string; country?: string }) {
     this.venueRegion = venue.region || 'global';
     this.providers = this.selectProvidersForRegion(this.venueRegion);
-    this.stormGlassService = this.createStormGlassService();
     this.openMeteoService = new OpenMeteoService();
   }
 
@@ -192,8 +188,6 @@ export class WeatherAggregationService {
     switch (provider) {
       case 'OpenMeteo':
         return this.fetchOpenMeteo(lat, lng, time);
-      case 'StormGlass':
-        return this.fetchStormGlass(lat, lng, time);
       case 'HKO':
         return this.fetchHKO(lat, lng, time);
       case 'NOAA':
@@ -205,20 +199,6 @@ export class WeatherAggregationService {
       default:
         return null;
     }
-  }
-
-  private createStormGlassService(): StormGlassService | null {
-    const apiKey = process.env.EXPO_PUBLIC_STORMGLASS_API_KEY || process.env.STORMGLASS_API_KEY;
-    if (!apiKey) {
-      logger.warn('No Storm Glass API key configured');
-      return null;
-    }
-
-    return new StormGlassService({
-      apiKey,
-      timeout: 10000,
-      retryAttempts: 2,
-    });
   }
 
   /**
@@ -257,7 +237,6 @@ export class WeatherAggregationService {
     };
 
     // Note: Open-Meteo doesn't provide tide data, leave undefined
-    // Tide data should be fetched separately from StormGlass when needed
     const tide: TideData | undefined = undefined;
 
     const wave: WaveData | undefined = weather.waves
@@ -280,57 +259,6 @@ export class WeatherAggregationService {
       cloud_cover: weather.cloudCover ?? weather.cloudLayerProfile?.total,
       confidence,
       provider: 'OpenMeteo',
-    };
-  }
-
-  private async fetchStormGlass(_lat: number, _lng: number, _time: Date): Promise<WeatherForecast | null> {
-    // Storm Glass API disabled - quota exceeded. Using OpenMeteo (free) instead.
-    return null;
-  }
-
-  private transformStormGlassForecast(weather: AdvancedWeatherConditions): WeatherForecast {
-    const confidenceRatio = weather.forecast?.confidence ?? 0.9;
-    const confidence: ConfidenceLevel = confidenceRatio >= 0.75
-      ? ConfidenceLevel.HIGH
-      : confidenceRatio >= 0.5
-        ? ConfidenceLevel.MEDIUM
-        : ConfidenceLevel.LOW;
-
-    const wind: WindData = {
-      speed: weather.wind?.speed ?? 0,
-      direction: weather.wind?.direction ?? 0,
-      gust: weather.wind?.gusts ?? undefined,
-    };
-
-    const tide: TideData | undefined = weather.tide
-      ? {
-          height: weather.tide.height ?? 0,
-          current_speed: weather.tide.speed ?? undefined,
-          current_direction: typeof weather.tide.direction === 'number' ? weather.tide.direction : undefined,
-          state: this.mapTideState(weather.tide.direction),
-        }
-      : undefined;
-
-    const wave: WaveData | undefined = weather.waves
-      ? {
-          height: weather.waves.height ?? 0,
-          period: weather.waves.period ?? 0,
-          direction: weather.waves.direction ?? 0,
-          swell_height: weather.waves.swellHeight,
-          swell_direction: weather.waves.swellDirection,
-        }
-      : undefined;
-
-    return {
-      time: (weather.timestamp ?? new Date()).toISOString(),
-      wind,
-      tide,
-      wave,
-      temperature: weather.temperature ?? weather.temperatureProfile?.air,
-      pressure: weather.pressure?.sealevel,
-      cloud_cover: weather.cloudCover ?? weather.cloudLayerProfile?.total,
-      confidence,
-      provider: 'StormGlass',
     };
   }
 

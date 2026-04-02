@@ -21,6 +21,8 @@ export interface BlueprintRecord {
   organization_id: string | null;
   program_id: string | null;
   access_level: BlueprintAccessLevel;
+  price_cents: number | null;
+  currency: string;
   created_at: string;
   updated_at: string;
 }
@@ -36,6 +38,8 @@ export interface CreateBlueprintInput {
   organization_id?: string | null;
   program_id?: string | null;
   access_level?: BlueprintAccessLevel;
+  price_cents?: number | null;
+  currency?: string;
 }
 
 export interface UpdateBlueprintInput {
@@ -47,6 +51,21 @@ export interface UpdateBlueprintInput {
   access_level?: BlueprintAccessLevel;
   organization_id?: string | null;
   program_id?: string | null;
+  price_cents?: number | null;
+  currency?: string;
+}
+
+export interface BlueprintPurchaseRecord {
+  id: string;
+  blueprint_id: string;
+  buyer_id: string;
+  stripe_checkout_session_id: string | null;
+  stripe_payment_intent_id: string | null;
+  amount_paid_cents: number;
+  platform_fee_cents: number;
+  currency: string;
+  status: 'pending' | 'completed' | 'refunded';
+  purchased_at: string;
 }
 
 export interface BlueprintSubscriptionRecord {

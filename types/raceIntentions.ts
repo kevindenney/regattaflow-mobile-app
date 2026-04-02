@@ -126,7 +126,7 @@ export interface ForecastSnapshot {
   /** Low tide time and height */
   lowTide?: TideTimeData;
   /** Data source */
-  source?: 'stormglass' | 'regional' | 'mock';
+  source?: 'openmeteo' | 'regional' | 'mock';
   /** Confidence level 0-1 */
   confidence?: number;
 }
@@ -267,6 +267,9 @@ export interface RaceIntentions {
 
   /** Briefing Comms - user-entered communications data from Pre-Race Briefing wizard */
   briefingComms?: BriefingComms;
+
+  /** Briefing Sections Reviewed - which sections of the Pre-Race Briefing have been marked reviewed */
+  briefingSectionsReviewed?: string[];
 
   /** Last update timestamp */
   updatedAt: string;

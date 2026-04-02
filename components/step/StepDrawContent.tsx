@@ -4,7 +4,7 @@
  * session notes, and plan summary.
  */
 
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { View, Text, TextInput, Pressable, Image, StyleSheet, Platform, Linking, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -16,7 +16,8 @@ import { useUpdateStep } from '@/hooks/useTimelineSteps';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
 import { getResourcesByIds } from '@/services/LibraryService';
-import type { StepPlanData, StepActData, StepMetadata, MediaLink, MediaLinkPlatform, MediaUpload } from '@/types/step-detail';
+import type { StepPlanData, StepActData, StepMetadata, MediaLink, MediaLinkPlatform, MediaUpload, Observation } from '@/types/step-detail';
+import { ObservationLog } from './ObservationLog';
 import type { LibraryResourceRecord } from '@/types/library';
 import { TrainChatPanel } from '@/components/practice/phases/TrainChatPanel';
 
@@ -133,7 +134,8 @@ export function StepDrawContent({ stepId, readOnly, interestId, interestName, in
   const metadata = (step?.metadata ?? {}) as StepMetadata;
   const planData: StepPlanData = metadata.plan ?? {};
   const actData: StepActData = metadata.act ?? {};
-  const subSteps = planData.how_sub_steps ?? [];
+  // Only show sub-steps with actual text on the Act tab (empty planning slots are hidden)
+  const subSteps = (planData.how_sub_steps ?? []).filter((s) => s.text.trim());
   const subStepProgress = actData.sub_step_progress ?? {};
   const linkedIds = planData.linked_resource_ids ?? [];
   const mediaLinks = actData.media_links ?? [];
@@ -185,6 +187,81 @@ export function StepDrawContent({ stepId, readOnly, interestId, interestName, in
     const updated = { ...current, [subStepId]: !current[subStepId] };
     debouncedSaveAct({ sub_step_progress: updated });
   }, [debouncedSaveAct]);
+
+  // --- Sub-step expanded actions ---
+  const [expandedSubStep, setExpandedSubStep] = useState<string | null>(null);
+  const [editingSubStep, setEditingSubStep] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState('');
+  const [deviatingSubStep, setDeviatingSubStep] = useState<string | null>(null);
+  const [deviationText, setDeviationText] = useState('');
+  const [pendingAiQuestion, setPendingAiQuestion] = useState('');
+  const chatSectionRef = useRef<View>(null);
+  const scrollViewRef = useRef<any>(null);
+
+  const subStepDeviations = useMemo(() => actData.sub_step_deviations ?? {}, [actData.sub_step_deviations]);
+  const subStepOverrides = useMemo(() => actData.sub_step_overrides ?? {}, [actData.sub_step_overrides]);
+
+  const handleToggleExpand = useCallback((subStepId: string) => {
+    setExpandedSubStep((prev) => prev === subStepId ? null : subStepId);
+    setEditingSubStep(null);
+    setDeviatingSubStep(null);
+  }, []);
+
+  const handleStartDeviation = useCallback((subStepId: string) => {
+    setDeviatingSubStep(subStepId);
+    setDeviationText(subStepDeviations[subStepId] ?? '');
+  }, [subStepDeviations]);
+
+  const handleSaveDeviation = useCallback((subStepId: string) => {
+    const current = metadataRef.current.act?.sub_step_deviations ?? {};
+    const trimmed = deviationText.trim();
+    const updated = { ...current };
+    if (trimmed) {
+      updated[subStepId] = trimmed;
+    } else {
+      delete updated[subStepId];
+    }
+    saveAct({ sub_step_deviations: updated });
+    // Also mark as completed since they did it (differently)
+    const progress = metadataRef.current.act?.sub_step_progress ?? {};
+    if (trimmed && !progress[subStepId]) {
+      saveAct({ sub_step_progress: { ...progress, [subStepId]: true }, sub_step_deviations: updated });
+    }
+    setDeviatingSubStep(null);
+  }, [deviationText, saveAct]);
+
+  const handleStartEdit = useCallback((subStepId: string, currentText: string) => {
+    setEditingSubStep(subStepId);
+    setEditingText(subStepOverrides[subStepId] ?? currentText);
+  }, [subStepOverrides]);
+
+  const handleSaveEdit = useCallback((subStepId: string) => {
+    const current = metadataRef.current.act?.sub_step_overrides ?? {};
+    const trimmed = editingText.trim();
+    if (trimmed) {
+      saveAct({ sub_step_overrides: { ...current, [subStepId]: trimmed } });
+    }
+    setEditingSubStep(null);
+  }, [editingText, saveAct]);
+
+  const handleAskAi = useCallback((subStepText: string) => {
+    setPendingAiQuestion(`About this sub-step: "${subStepText}" — can you help me with this?`);
+    setExpandedSubStep(null);
+    // Scroll to chat section
+    setTimeout(() => {
+      chatSectionRef.current?.measureLayout?.(
+        scrollViewRef.current as any,
+        (_x: number, y: number) => {
+          scrollViewRef.current?.scrollTo?.({ y, animated: true });
+        },
+        () => {},
+      );
+    }, 150);
+  }, []);
+
+  const handleClearPendingQuestion = useCallback(() => {
+    setPendingAiQuestion('');
+  }, []);
 
   const handleNotesChange = useCallback((text: string) => {
     setLocalNotes(text);
@@ -370,6 +447,22 @@ export function StepDrawContent({ stepId, readOnly, interestId, interestName, in
   }, [user?.id, stepId, saveAct]);
 
   const mediaUploads = actData.media_uploads ?? [];
+  const observations = actData.observations ?? [];
+
+  const handleAddObservation = useCallback((obs: Observation) => {
+    const current = metadataRef.current.act?.observations ?? [];
+    const updated = [...current, obs];
+    // Also append to legacy notes string for Telegram compatibility
+    const existingNotes = metadataRef.current.act?.notes ?? '';
+    const formatted = `[${new Date(obs.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}] ${obs.text}`;
+    const updatedNotes = existingNotes ? `${existingNotes}\n${formatted}` : formatted;
+    saveAct({ observations: updated, notes: updatedNotes });
+  }, [saveAct]);
+
+  const handleRemoveObservation = useCallback((obsId: string) => {
+    const current = metadataRef.current.act?.observations ?? [];
+    saveAct({ observations: current.filter((o) => o.id !== obsId) });
+  }, [saveAct]);
 
   const completedCount = subSteps.filter((s) => subStepProgress[s.id]).length;
   const totalSteps = subSteps.length;
@@ -393,22 +486,166 @@ export function StepDrawContent({ stepId, readOnly, interestId, interestName, in
           )}
           {subSteps.map((s) => {
             const isDone = subStepProgress[s.id];
+            const isExpanded = expandedSubStep === s.id;
+            const hasDeviation = !!subStepDeviations[s.id];
+            const displayText = subStepOverrides[s.id] || s.text || 'Untitled sub-step';
+            const isDeviating = deviatingSubStep === s.id;
+            const isEditing = editingSubStep === s.id;
+
             return (
-              <Pressable
-                key={s.id}
-                style={styles.checklistRow}
-                onPress={readOnly ? undefined : () => handleToggleSubStep(s.id)}
-                disabled={readOnly}
-              >
-                <Ionicons
-                  name={isDone ? 'checkmark-circle' : 'ellipse-outline'}
-                  size={22}
-                  color={isDone ? IOS_COLORS.systemGreen : IOS_COLORS.systemGray3}
-                />
-                <Text style={[styles.checklistText, isDone && styles.checklistTextDone]}>
-                  {s.text || 'Untitled sub-step'}
-                </Text>
-              </Pressable>
+              <View key={s.id} style={[styles.subStepContainer, isExpanded && styles.subStepContainerExpanded]}>
+                {/* Main row */}
+                <View style={styles.checklistRow}>
+                  <Pressable
+                    onPress={readOnly ? undefined : () => handleToggleSubStep(s.id)}
+                    disabled={readOnly}
+                    hitSlop={4}
+                  >
+                    <Ionicons
+                      name={isDone ? 'checkmark-circle' : 'ellipse-outline'}
+                      size={22}
+                      color={isDone ? IOS_COLORS.systemGreen : IOS_COLORS.systemGray3}
+                    />
+                  </Pressable>
+                  <Pressable
+                    style={styles.checklistTextWrapper}
+                    onPress={readOnly ? undefined : () => handleToggleExpand(s.id)}
+                    disabled={readOnly}
+                  >
+                    <View style={styles.checklistTextRow}>
+                      <Text style={[styles.checklistText, isDone && styles.checklistTextDone, hasDeviation && styles.checklistTextDeviated]}>
+                        {displayText}
+                      </Text>
+                      {hasDeviation && (
+                        <View style={styles.deviationBadge}>
+                          <Ionicons name="swap-horizontal" size={10} color={IOS_COLORS.systemOrange} />
+                        </View>
+                      )}
+                    </View>
+                    {hasDeviation && !isExpanded && (
+                      <Text style={styles.deviationPreview} numberOfLines={1}>
+                        Did instead: {subStepDeviations[s.id]}
+                      </Text>
+                    )}
+                  </Pressable>
+                  {!readOnly && (
+                    <Pressable
+                      onPress={() => handleToggleExpand(s.id)}
+                      hitSlop={8}
+                      style={styles.expandButton}
+                    >
+                      <Ionicons
+                        name={isExpanded ? 'chevron-up' : 'ellipsis-horizontal'}
+                        size={18}
+                        color={IOS_COLORS.systemGray3}
+                      />
+                    </Pressable>
+                  )}
+                </View>
+
+                {/* Expanded actions */}
+                {isExpanded && !readOnly && (
+                  <View style={styles.subStepActions}>
+                    {/* Deviation section */}
+                    {isDeviating ? (
+                      <View style={styles.deviationForm}>
+                        <Text style={styles.deviationLabel}>What did you do instead?</Text>
+                        <TextInput
+                          style={styles.deviationInput}
+                          value={deviationText}
+                          onChangeText={setDeviationText}
+                          placeholder="Describe what you actually did..."
+                          placeholderTextColor={IOS_COLORS.tertiaryLabel}
+                          multiline
+                          autoFocus
+                        />
+                        <View style={styles.deviationFormActions}>
+                          <Pressable
+                            style={styles.deviationCancelBtn}
+                            onPress={() => setDeviatingSubStep(null)}
+                          >
+                            <Text style={styles.deviationCancelText}>Cancel</Text>
+                          </Pressable>
+                          <Pressable
+                            style={styles.deviationSaveBtn}
+                            onPress={() => handleSaveDeviation(s.id)}
+                          >
+                            <Text style={styles.deviationSaveText}>Save</Text>
+                          </Pressable>
+                        </View>
+                      </View>
+                    ) : (
+                      <Pressable
+                        style={styles.actionRow}
+                        onPress={() => handleStartDeviation(s.id)}
+                      >
+                        <Ionicons name="swap-horizontal" size={16} color={IOS_COLORS.systemOrange} />
+                        <Text style={styles.actionText}>
+                          {hasDeviation ? 'Edit what I did instead' : "Didn't follow plan"}
+                        </Text>
+                      </Pressable>
+                    )}
+
+                    {/* Edit sub-step */}
+                    {isEditing ? (
+                      <View style={styles.deviationForm}>
+                        <Text style={styles.deviationLabel}>Edit this sub-step</Text>
+                        <TextInput
+                          style={styles.deviationInput}
+                          value={editingText}
+                          onChangeText={setEditingText}
+                          placeholder="Update the sub-step..."
+                          placeholderTextColor={IOS_COLORS.tertiaryLabel}
+                          multiline
+                          autoFocus
+                        />
+                        <View style={styles.deviationFormActions}>
+                          <Pressable
+                            style={styles.deviationCancelBtn}
+                            onPress={() => setEditingSubStep(null)}
+                          >
+                            <Text style={styles.deviationCancelText}>Cancel</Text>
+                          </Pressable>
+                          <Pressable
+                            style={[styles.deviationSaveBtn, !editingText.trim() && styles.deviationSaveBtnDisabled]}
+                            onPress={() => handleSaveEdit(s.id)}
+                            disabled={!editingText.trim()}
+                          >
+                            <Text style={[styles.deviationSaveText, !editingText.trim() && styles.deviationSaveTextDisabled]}>Save</Text>
+                          </Pressable>
+                        </View>
+                      </View>
+                    ) : !isDeviating ? (
+                      <Pressable
+                        style={styles.actionRow}
+                        onPress={() => handleStartEdit(s.id, s.text)}
+                      >
+                        <Ionicons name="create-outline" size={16} color={STEP_COLORS.accent} />
+                        <Text style={styles.actionText}>Edit sub-step</Text>
+                      </Pressable>
+                    ) : null}
+
+                    {/* Ask AI */}
+                    {!isDeviating && !isEditing && (
+                      <Pressable
+                        style={styles.actionRow}
+                        onPress={() => handleAskAi(displayText)}
+                      >
+                        <Ionicons name="sparkles" size={16} color={IOS_COLORS.systemPurple} />
+                        <Text style={[styles.actionText, { color: IOS_COLORS.systemPurple }]}>Ask AI about this</Text>
+                      </Pressable>
+                    )}
+
+                    {/* Show saved deviation */}
+                    {hasDeviation && !isDeviating && (
+                      <View style={styles.savedDeviation}>
+                        <Ionicons name="swap-horizontal" size={12} color={IOS_COLORS.systemOrange} />
+                        <Text style={styles.savedDeviationText}>Did instead: {subStepDeviations[s.id]}</Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+              </View>
             );
           })}
         </View>
@@ -743,9 +980,19 @@ export function StepDrawContent({ stepId, readOnly, interestId, interestName, in
         )}
       </View>
 
+      {/* Observation log */}
+      <View style={styles.section}>
+        <ObservationLog
+          observations={observations}
+          onAdd={handleAddObservation}
+          onRemove={handleRemoveObservation}
+          readOnly={readOnly}
+        />
+      </View>
+
       {/* Session notes — AI chat when context available, plain textarea fallback */}
       {interestId && interestName && !readOnly ? (
-        <View style={styles.section}>
+        <View ref={chatSectionRef} style={styles.section}>
           <TrainChatPanel
             interestId={interestId}
             interestName={interestName}
@@ -754,6 +1001,8 @@ export function StepDrawContent({ stepId, readOnly, interestId, interestName, in
             stepTitle={step?.title || planData.what_will_you_do || 'This step'}
             planWhat={planData.what_will_you_do}
             onUpdateNotes={handleNotesChange}
+            pendingQuestion={pendingAiQuestion}
+            onPendingQuestionConsumed={handleClearPendingQuestion}
           />
         </View>
       ) : (
@@ -842,6 +1091,134 @@ const styles = StyleSheet.create({
   checklistTextDone: {
     textDecorationLine: 'line-through',
     color: IOS_COLORS.secondaryLabel,
+  },
+  checklistTextDeviated: {
+    fontStyle: 'italic',
+  },
+  checklistTextWrapper: {
+    flex: 1,
+    gap: 2,
+  },
+  checklistTextRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  subStepContainer: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: IOS_COLORS.systemGray5,
+  },
+  subStepContainerExpanded: {
+    backgroundColor: IOS_COLORS.systemGray6,
+    borderRadius: 10,
+    borderBottomWidth: 0,
+    marginVertical: 2,
+  },
+  expandButton: {
+    padding: 4,
+  },
+  deviationBadge: {
+    backgroundColor: `${IOS_COLORS.systemOrange}18`,
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+  },
+  deviationPreview: {
+    fontSize: 12,
+    color: IOS_COLORS.systemOrange,
+    fontStyle: 'italic',
+    paddingLeft: 2,
+  },
+  subStepActions: {
+    paddingHorizontal: IOS_SPACING.sm,
+    paddingBottom: IOS_SPACING.sm,
+    gap: 2,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+  },
+  actionText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.label,
+  },
+  deviationForm: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    padding: IOS_SPACING.sm,
+    gap: IOS_SPACING.xs,
+    borderWidth: 1,
+    borderColor: IOS_COLORS.systemGray4,
+  },
+  deviationLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+    letterSpacing: 0.3,
+  },
+  deviationInput: {
+    fontSize: 14,
+    color: IOS_COLORS.label,
+    backgroundColor: IOS_COLORS.systemGray6,
+    borderRadius: 8,
+    padding: IOS_SPACING.sm,
+    minHeight: 60,
+    textAlignVertical: 'top',
+    ...Platform.select({
+      web: { outlineStyle: 'none' } as any,
+    }),
+  },
+  deviationFormActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: IOS_SPACING.sm,
+  },
+  deviationCancelBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  deviationCancelText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+  },
+  deviationSaveBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: STEP_COLORS.accent,
+  },
+  deviationSaveBtnDisabled: {
+    backgroundColor: IOS_COLORS.systemGray5,
+  },
+  deviationSaveText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  deviationSaveTextDisabled: {
+    color: IOS_COLORS.systemGray3,
+  },
+  savedDeviation: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    backgroundColor: `${IOS_COLORS.systemOrange}10`,
+    borderRadius: 8,
+    padding: IOS_SPACING.xs,
+    marginTop: 2,
+  },
+  savedDeviationText: {
+    flex: 1,
+    fontSize: 12,
+    color: IOS_COLORS.systemOrange,
+    fontStyle: 'italic',
+    lineHeight: 16,
   },
   resourceRow: {
     flexDirection: 'row',

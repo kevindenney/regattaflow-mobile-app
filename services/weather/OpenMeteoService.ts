@@ -246,7 +246,7 @@ export class OpenMeteoService {
           beaufortScale,
         },
         tide: {
-          height: 0, // Open-Meteo doesn't provide tides - use StormGlass for this
+          height: 0, // Open-Meteo doesn't provide tides
           direction: 'unknown',
           speed: 0,
           nextHigh: new Date(timestamp.getTime() + 6 * 60 * 60 * 1000),

@@ -318,8 +318,6 @@ DECLARE
   v_rhkyc_id uuid;
   v_jhson_cohort_id uuid;
   v_rhkyc_cohort_id uuid;
-  v_jhson_template_id uuid;
-  v_rhkyc_template_id uuid;
 BEGIN
   SELECT COALESCE(
     (SELECT id FROM public.users WHERE lower(email) = lower(v_admin_email) LIMIT 1),
@@ -387,83 +385,6 @@ BEGIN
     WHERE m.cohort_id = v_rhkyc_cohort_id AND m.user_id = v_requester_id
   );
 
-  INSERT INTO public.betterat_org_step_templates (
-    org_id,
-    interest_slug,
-    title,
-    description,
-    step_type,
-    module_ids,
-    suggested_competency_ids,
-    is_published,
-    created_by
-  )
-  SELECT
-    v_jhson_id,
-    'nursing',
-    'JHSON Demo Template',
-    'Deterministic template for JHSON demo flow',
-    'clinical_shift',
-    ARRAY[]::text[],
-    ARRAY[]::text[],
-    true,
-    v_admin_id
-  WHERE NOT EXISTS (
-    SELECT 1 FROM public.betterat_org_step_templates t
-    WHERE t.org_id = v_jhson_id AND t.title = 'JHSON Demo Template'
-  );
-
-  INSERT INTO public.betterat_org_step_templates (
-    org_id,
-    interest_slug,
-    title,
-    description,
-    step_type,
-    module_ids,
-    suggested_competency_ids,
-    is_published,
-    created_by
-  )
-  SELECT
-    v_rhkyc_id,
-    'sail-racing',
-    'RHKYC Demo Template',
-    'Deterministic template for RHKYC demo flow',
-    'race_day',
-    ARRAY[]::text[],
-    ARRAY[]::text[],
-    true,
-    v_admin_id
-  WHERE NOT EXISTS (
-    SELECT 1 FROM public.betterat_org_step_templates t
-    WHERE t.org_id = v_rhkyc_id AND t.title = 'RHKYC Demo Template'
-  );
-
-  SELECT id INTO v_jhson_template_id
-  FROM public.betterat_org_step_templates
-  WHERE org_id = v_jhson_id AND title = 'JHSON Demo Template'
-  ORDER BY created_at DESC
-  LIMIT 1;
-
-  SELECT id INTO v_rhkyc_template_id
-  FROM public.betterat_org_step_templates
-  WHERE org_id = v_rhkyc_id AND title = 'RHKYC Demo Template'
-  ORDER BY created_at DESC
-  LIMIT 1;
-
-  INSERT INTO public.betterat_org_step_template_cohorts (org_template_id, cohort_id)
-  SELECT v_jhson_template_id, v_jhson_cohort_id
-  WHERE NOT EXISTS (
-    SELECT 1 FROM public.betterat_org_step_template_cohorts l
-    WHERE l.org_template_id = v_jhson_template_id AND l.cohort_id = v_jhson_cohort_id
-  );
-
-  INSERT INTO public.betterat_org_step_template_cohorts (org_template_id, cohort_id)
-  SELECT v_rhkyc_template_id, v_rhkyc_cohort_id
-  WHERE NOT EXISTS (
-    SELECT 1 FROM public.betterat_org_step_template_cohorts l
-    WHERE l.org_template_id = v_rhkyc_template_id AND l.cohort_id = v_rhkyc_cohort_id
-  );
 END
 $$;
 `;
@@ -500,7 +421,6 @@ DECLARE
   v_admin_ok integer;
   v_requester_ok integer;
   v_cohort_count integer;
-  v_template_link_count integer;
 BEGIN
   SELECT COALESCE(
     (SELECT id FROM public.users WHERE lower(email) = lower(v_admin_email) LIMIT 1),
@@ -558,17 +478,6 @@ BEGIN
 
   IF v_cohort_count < 2 THEN
     RAISE EXCEPTION 'Cohort verification failed (expected >=2 rows, got %)', v_cohort_count;
-  END IF;
-
-  SELECT COUNT(*) INTO v_template_link_count
-  FROM public.betterat_org_step_template_cohorts l
-  JOIN public.betterat_org_step_templates t ON t.id = l.org_template_id
-  JOIN public.betterat_org_cohorts c ON c.id = l.cohort_id
-  WHERE (t.title = 'JHSON Demo Template' AND c.name = 'JHSON Demo Cohort')
-     OR (t.title = 'RHKYC Demo Template' AND c.name = 'RHKYC Demo Cohort');
-
-  IF v_template_link_count < 2 THEN
-    RAISE EXCEPTION 'Template-link verification failed (expected >=2 rows, got %)', v_template_link_count;
   END IF;
 END
 $$;

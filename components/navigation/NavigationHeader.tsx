@@ -106,7 +106,7 @@ export function NavigationHeader({
                     style={styles.signUpButton}
                     onPress={() => router.push('/(auth)/signup')}
                   >
-                    <Text style={styles.signUpText}>Sign Up</Text>
+                    <Text style={styles.signUpText}>Sign Up / Sign In</Text>
                   </TouchableOpacity>
                 )}
               </View>

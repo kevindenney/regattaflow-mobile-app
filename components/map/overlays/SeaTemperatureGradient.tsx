@@ -2,7 +2,7 @@
  * SeaTemperatureGradient Component
  *
  * Displays sea surface temperature as a gradient overlay
- * Uses Storm Glass water temperature data with interpolation
+ * Uses water temperature data with interpolation
  */
 
 import React from 'react';

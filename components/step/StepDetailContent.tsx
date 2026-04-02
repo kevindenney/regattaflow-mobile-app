@@ -121,16 +121,21 @@ export function StepDetailContent({ stepId, readOnly: readOnlyProp }: StepDetail
     }
   }, [saveTitle]);
 
-  // Keep a ref to the latest mutation so the unmount cleanup uses a stable reference
+  // Keep refs to the latest functions so the unmount cleanup uses stable references
   const updateStepRef = useRef(updateStep);
   updateStepRef.current = updateStep;
+  const saveTitleRef = useRef(saveTitle);
+  saveTitleRef.current = saveTitle;
 
   // Flush any pending title save on unmount
   useEffect(() => {
     return () => {
       if (titleTimerRef.current) clearTimeout(titleTimerRef.current);
       if (pendingTitleRef.current !== null) {
-        updateStepRef.current.mutate({ stepId, input: { title: pendingTitleRef.current } });
+        // Use saveTitle (via ref) so optimistic cache updates happen immediately —
+        // without this, navigating away before the debounce fires would show stale
+        // title in the timeline grid until a refetch.
+        saveTitleRef.current(pendingTitleRef.current);
       }
     };
   }, [stepId]);
@@ -496,6 +501,12 @@ export function StepDetailContent({ stepId, readOnly: readOnlyProp }: StepDetail
   }, [step, stepId, isOwner, updateStep, queryClient]);
   const prevSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Stable refs so debounced timeouts and unmount cleanup always see latest values
+  const serverPlanDataRef = useRef(serverPlanData);
+  serverPlanDataRef.current = serverPlanData;
+  const updateMetadataRef = useRef(updateMetadata);
+  updateMetadataRef.current = updateMetadata;
+
   // Debounced auto-save for plan data — update local state immediately, persist after debounce
   const pendingPlanRef = useRef<Partial<StepPlanData> | null>(null);
   const handlePlanUpdate = useCallback((partial: Partial<StepPlanData>) => {
@@ -506,23 +517,25 @@ export function StepDetailContent({ stepId, readOnly: readOnlyProp }: StepDetail
     });
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
+      const pending = pendingPlanRef.current;
       pendingPlanRef.current = null;
-      updateMetadata.mutate(
-        { plan: { ...serverPlanData, ...localPlanOverrides, ...partial } },
+      // Use refs to avoid stale closures in the timeout
+      updateMetadataRef.current.mutate(
+        { plan: { ...serverPlanDataRef.current, ...pending } },
         { onSuccess: () => setLastSaved(new Date()) },
       );
     }, 800);
-  }, [serverPlanData, localPlanOverrides, updateMetadata]);
+  }, []);
 
-  // Flush any pending plan save on unmount
+  // Flush any pending plan save on unmount only
   useEffect(() => {
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       if (pendingPlanRef.current !== null) {
-        updateMetadata.mutate({ plan: { ...serverPlanData, ...pendingPlanRef.current } });
+        updateMetadataRef.current.mutate({ plan: { ...serverPlanDataRef.current, ...pendingPlanRef.current } });
       }
     };
-  }, [serverPlanData, updateMetadata]);
+  }, [stepId]);
 
   // Navigate to next tab
   const handleNextTab = useCallback((next: TabValue) => {

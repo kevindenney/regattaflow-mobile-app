@@ -27,8 +27,6 @@ import type {
   WeatherModelName,
 } from '@/types/weatherRouting';
 import { OpenMeteoService } from './weather/OpenMeteoService';
-import { StormGlassService } from './weather/StormGlassService';
-import Constants from 'expo-constants';
 import { createLogger } from '@/lib/utils/logger';
 
 // =============================================================================
@@ -48,26 +46,9 @@ const logger = createLogger('WeatherRoutingService');
 
 export class WeatherRoutingService {
   private openMeteoService: OpenMeteoService;
-  private stormGlassService: StormGlassService | null = null;
 
   constructor() {
     this.openMeteoService = new OpenMeteoService();
-    this.initializeStormGlass();
-  }
-
-  private initializeStormGlass(): void {
-    const apiKey =
-      Constants.expoConfig?.extra?.stormglassApiKey ||
-      process.env.EXPO_PUBLIC_STORMGLASS_API_KEY;
-
-    if (apiKey) {
-      this.stormGlassService = new StormGlassService({
-        apiKey,
-        baseUrl: 'https://api.stormglass.io/v2',
-        timeout: 10000,
-        retryAttempts: 3,
-      });
-    }
   }
 
   // ===========================================================================
@@ -171,32 +152,6 @@ export class WeatherRoutingService {
         }
       } catch (err) {
         logger.warn('[WeatherRoutingService] OpenMeteo fetch failed:', err);
-      }
-    }
-
-    // Fetch StormGlass if available (provides access to multiple models)
-    if (this.stormGlassService) {
-      const stormGlassModels = models.filter((m) =>
-        ['GFS', 'ECMWF', 'ICON', 'STORMGLASS'].includes(m)
-      );
-
-      for (const modelName of stormGlassModels) {
-        try {
-          const sgData = await this.fetchStormGlassForecast(
-            geoLocation,
-            startTime,
-            hours,
-            modelName as WeatherModelName
-          );
-          if (sgData) {
-            forecasts.push(sgData);
-          }
-        } catch (err) {
-          logger.warn(
-            `[WeatherRoutingService] StormGlass ${modelName} fetch failed:`,
-            err
-          );
-        }
       }
     }
 
@@ -738,16 +693,6 @@ export class WeatherRoutingService {
     }
   }
 
-  private async fetchStormGlassForecast(
-    _location: GeoLocation,
-    _startTime: Date,
-    _hours: number,
-    _modelName: WeatherModelName
-  ): Promise<ModelForecast | null> {
-    // Storm Glass API disabled - quota exceeded. Using OpenMeteo (free) instead.
-    return null;
-  }
-
   // ===========================================================================
   // Utility Methods
   // ===========================================================================
@@ -866,7 +811,6 @@ export class WeatherRoutingService {
       NAM: 'NOAA NAM',
       ICON: 'DWD ICON',
       UKMO: 'UK Met Office',
-      STORMGLASS: 'StormGlass',
       OPENMETEO: 'Open-Meteo',
     };
     return names[modelName] || modelName;

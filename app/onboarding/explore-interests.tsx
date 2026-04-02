@@ -27,7 +27,7 @@ import { getOnboardingContext } from '@/lib/onboarding/interestContext';
 
 export default function ExploreInterestsScreen() {
   const router = useRouter();
-  const { allInterests, userInterests, setInterestVisibility, switchInterest } = useInterest();
+  const { allInterests, userInterests, addInterest, switchInterest } = useInterest();
 
   const [interestSlug, setInterestSlug] = useState<string | null>(null);
   const [addedSlugs, setAddedSlugs] = useState<Set<string>>(new Set());
@@ -94,11 +94,12 @@ export default function ExploreInterestsScreen() {
       console.warn('[ExploreInterests] interestSlug is NULL — cannot set primary interest!');
     }
 
-    // Compute visible/hidden slug arrays up front — single batch call avoids stale closure issues
+    // Add all selected interests to user_interests table
     const visibleSlugs = browsableInterests.filter(i => addedSlugs.has(i.slug)).map(i => i.slug);
-    const hiddenSlugs = browsableInterests.filter(i => !addedSlugs.has(i.slug)).map(i => i.slug);
-    console.log('[ExploreInterests] visibility:', { visibleSlugs, hiddenSlugs: hiddenSlugs.length });
-    await setInterestVisibility(visibleSlugs, hiddenSlugs);
+    console.log('[ExploreInterests] adding interests:', visibleSlugs);
+    for (const slug of visibleSlugs) {
+      await addInterest(slug);
+    }
 
     // Store ordered interest slugs so manifesto screen can loop through them
     // Primary interest first
@@ -108,7 +109,7 @@ export default function ExploreInterestsScreen() {
 
     // Continue to manifesto screen (skippable — handles its own nav to main app)
     router.replace('/onboarding/manifesto');
-  }, [router, browsableInterests, addedSlugs, setInterestVisibility, switchInterest, interestSlug]);
+  }, [router, browsableInterests, addedSlugs, addInterest, switchInterest, interestSlug]);
 
   return (
     <View style={styles.container}>

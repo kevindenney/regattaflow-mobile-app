@@ -95,7 +95,7 @@ export function ProfessionalMap3DView({
     },
     weather: {
       sources: professionalMode ? [
-        { id: 'stormglass', name: 'Storm Glass', url: 'https://api.stormglass.io/v2', priority: 1, updateInterval: 900, capabilities: {} as any }
+        { id: 'openmeteo', name: 'Open-Meteo', url: 'https://api.open-meteo.com/v1', priority: 1, updateInterval: 900, capabilities: {} as any }
       ] : [],
       updateInterval: professionalMode ? 900 : 3600, // 15 min vs 1 hour
       forecastHours: 72,

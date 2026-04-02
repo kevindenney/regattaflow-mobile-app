@@ -1,17 +1,33 @@
-import { NURSING_CORE_V1_CAPABILITIES } from '@/configs/competencies/nursing-core-v1';
-import { SAILING_CORE_V1_SKILLS } from '@/configs/competencies/sailing-core-v1';
-import { NURSING_EVENT_CONFIG } from '@/configs/nursing';
-import { SAILING_EVENT_CONFIG } from '@/configs/sailing';
-import { orgInterestLabel } from '@/lib/organizations/orgInterest';
+/**
+ * Organization Blueprints Management
+ *
+ * Admin page for managing org-published blueprints.
+ * Supports listing existing blueprints, toggling publish state,
+ * and AI curriculum generation that creates real timeline steps
+ * packaged into a blueprint.
+ *
+ * Note: Route is still /organization/templates for backward compat
+ * with org-welcome routing. OrgAdminNav shows it as "Blueprints".
+ */
+
+import { getInterestEventConfig } from '@/configs';
 import { fetchOrganizationInterestSlug } from '@/components/organizations/OrgContextPill';
 import { OrgAdminHeader } from '@/components/organizations/OrgAdminHeader';
 import { useAuth } from '@/providers/AuthProvider';
 import { useOrganization } from '@/providers/OrganizationProvider';
 import { supabase } from '@/services/supabase';
+import {
+  updateBlueprint,
+  createBlueprintFromCurriculum,
+  generateBlueprintSlug,
+  createBlueprint,
+} from '@/services/BlueprintService';
+import { resolveInterestId } from '@/services/TimelineStepService';
+import type { BlueprintRecord } from '@/types/blueprint';
 import { isUuid } from '@/utils/uuid';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -23,106 +39,41 @@ import {
 } from 'react-native';
 import { showAlert } from '@/lib/utils/crossPlatformAlert';
 
-type OrgStepTemplateRow = {
-  id: string;
-  org_id: string;
-  interest_slug: string;
-  title: string;
-  description: string | null;
-  step_type: string;
-  module_ids: string[];
-  suggested_competency_ids: string[];
-  is_published: boolean;
-  created_at: string;
+type BlueprintWithStepCount = BlueprintRecord & {
+  step_count: number;
 };
 
-type OrgCohortRow = {
-  id: string;
-  name: string;
-};
-
-type Option = {
-  value: string;
-  label: string;
-};
-type ModuleOption = {
-  id: string;
-  label: string;
-};
-
-const NURSING_STEP_TYPE_OPTIONS: Option[] = NURSING_EVENT_CONFIG.eventSubtypes.map((entry) => ({
-  value: entry.id,
-  label: entry.label,
-}));
-
-const SAILING_STEP_TYPE_OPTIONS: Option[] = [
-  { value: 'race_day', label: 'Race Day' },
-  { value: 'practice', label: 'Practice' },
-  { value: 'drill_session', label: 'Drill Session' },
-  { value: 'tuning', label: 'Tuning' },
-  { value: 'video_review', label: 'Video Review' },
-];
-
-const NURSING_MODULE_OPTIONS: ModuleOption[] = Object.values(NURSING_EVENT_CONFIG.moduleInfo)
-  .map((item) => ({ id: item.id, label: item.label }))
-  .sort((a, b) => a.label.localeCompare(b.label));
-
-const SAILING_MODULE_OPTIONS: ModuleOption[] = Object.values(SAILING_EVENT_CONFIG.moduleInfo)
-  .map((item) => ({ id: item.id, label: item.label }))
-  .sort((a, b) => a.label.localeCompare(b.label));
-
-const NURSING_COMPETENCY_OPTIONS: ModuleOption[] = NURSING_CORE_V1_CAPABILITIES.map((item) => ({
-  id: item.id,
-  label: item.title,
-}));
-
-const SAILING_COMPETENCY_OPTIONS: ModuleOption[] = SAILING_CORE_V1_SKILLS.map((item) => ({
-  id: item.id,
-  label: item.title,
-}));
-
-function toggleArrayValue(values: string[], value: string): string[] {
-  return values.includes(value)
-    ? values.filter((entry) => entry !== value)
-    : [...values, value];
-}
-
-export default function OrganizationTemplatesScreen() {
+export default function OrganizationBlueprintsScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { activeOrganization, activeOrganizationId, canManageActiveOrganization, memberships } = useOrganization();
 
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [templates, setTemplates] = useState<OrgStepTemplateRow[]>([]);
-  const [cohorts, setCohorts] = useState<OrgCohortRow[]>([]);
-  const [templateCohortIds, setTemplateCohortIds] = useState<Record<string, string[]>>({});
-  const [assigningKey, setAssigningKey] = useState<string | null>(null);
+  const [blueprints, setBlueprints] = useState<BlueprintWithStepCount[]>([]);
   const [orgInterestSlug, setOrgInterestSlug] = useState<string | null>(null);
-  const [interestLoadFailed, setInterestLoadFailed] = useState(false);
+  const [_interestLoadFailed, setInterestLoadFailed] = useState(false);
 
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [stepType, setStepType] = useState(NURSING_STEP_TYPE_OPTIONS[0]?.value || 'clinical_shift');
-  const [moduleIds, setModuleIds] = useState<string[]>([]);
-  const [suggestedCompetencyIds, setSuggestedCompetencyIds] = useState<string[]>([]);
+  // AI generation state
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [aiTitle, setAiTitle] = useState('');
+  const [aiGenerating, setAiGenerating] = useState(false);
+
+  // Manual creation state
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [newTitle, setNewTitle] = useState('');
+  const [newDescription, setNewDescription] = useState('');
+  const [creating, setCreating] = useState(false);
 
   const resolvedActiveOrgId = String(activeOrganizationId || '').trim()
     || String((memberships || []).find((membership: any) => {
       const status = String(membership?.membership_status || membership?.status || '').trim().toLowerCase();
       return status === 'active';
     })?.organization_id || '').trim();
-  const isSailing = orgInterestSlug === SAILING_EVENT_CONFIG.interestSlug;
-  const stepTypeOptions = isSailing ? SAILING_STEP_TYPE_OPTIONS : NURSING_STEP_TYPE_OPTIONS;
-  const moduleOptions = isSailing ? SAILING_MODULE_OPTIONS : NURSING_MODULE_OPTIONS;
-  const competencyOptions = isSailing ? SAILING_COMPETENCY_OPTIONS : NURSING_COMPETENCY_OPTIONS;
 
-  useEffect(() => {
-    setStepType(stepTypeOptions[0]?.value || '');
-    setModuleIds([]);
-    setSuggestedCompetencyIds([]);
-  }, [orgInterestSlug]);
+  const resolvedConfig = orgInterestSlug ? getInterestEventConfig(orgInterestSlug) : null;
+  const interestLabel = resolvedConfig?.eventNoun || orgInterestSlug?.replace(/-/g, ' ') || 'learning';
 
+  // Load org interest slug
   useEffect(() => {
     if (!resolvedActiveOrgId || !isUuid(resolvedActiveOrgId)) {
       setOrgInterestSlug(null);
@@ -143,235 +94,187 @@ export default function OrganizationTemplatesScreen() {
       }
     })();
 
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [resolvedActiveOrgId]);
 
-  const loadTemplates = useCallback(async () => {
-    if (!activeOrganization?.id || !orgInterestSlug) {
-      setTemplates([]);
+  // Load org blueprints
+  const loadBlueprints = useCallback(async () => {
+    if (!activeOrganization?.id) {
+      setBlueprints([]);
       setLoading(false);
       return;
     }
 
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('betterat_org_step_templates')
-        .select('id,org_id,interest_slug,title,description,step_type,module_ids,suggested_competency_ids,is_published,created_at')
-        .eq('org_id', activeOrganization.id)
-        .eq('interest_slug', orgInterestSlug)
+      // Fetch all org blueprints (published and unpublished)
+      const { data: allBlueprints, error } = await supabase
+        .from('timeline_blueprints')
+        .select('*')
+        .eq('organization_id', activeOrganization.id)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setTemplates((data || []) as OrgStepTemplateRow[]);
+
+      // Fetch step counts for each blueprint
+      const withCounts: BlueprintWithStepCount[] = await Promise.all(
+        (allBlueprints || []).map(async (bp: any) => {
+          const { count } = await supabase
+            .from('blueprint_steps')
+            .select('id', { count: 'exact', head: true })
+            .eq('blueprint_id', bp.id);
+          return { ...bp, step_count: count ?? 0 } as BlueprintWithStepCount;
+        }),
+      );
+
+      setBlueprints(withCounts);
     } catch (error: any) {
-      showAlert('Unable to load templates', error?.message || 'Please try again.');
+      showAlert('Unable to load blueprints', error?.message || 'Please try again.');
     } finally {
       setLoading(false);
     }
-  }, [activeOrganization?.id, orgInterestSlug]);
+  }, [activeOrganization?.id]);
 
   useEffect(() => {
-    void loadTemplates();
-  }, [loadTemplates]);
+    void loadBlueprints();
+  }, [loadBlueprints]);
 
-  useEffect(() => {
-    if (!activeOrganization?.id || !canManageActiveOrganization) {
-      setCohorts([]);
-      return;
-    }
-
-    let cancelled = false;
-    void (async () => {
-      const { data, error } = await supabase
-        .from('betterat_org_cohorts')
-        .select('id,name,interest_slug')
-        .eq('org_id', activeOrganization.id)
-        .order('created_at', { ascending: false });
-
-      if (cancelled) return;
-      if (error) {
-        setCohorts([]);
-        return;
-      }
-
-      const normalizedOrgInterest = String(orgInterestSlug || '').trim().toLowerCase();
-      const rows = (data || []).filter((row: any) => {
-        const cohortInterest = String(row.interest_slug || '').trim().toLowerCase();
-        if (!normalizedOrgInterest) return true;
-        return !cohortInterest || cohortInterest === normalizedOrgInterest;
-      });
-
-      setCohorts(rows.map((row: any) => ({
-        id: String(row.id),
-        name: String(row.name || 'Cohort'),
-      })));
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeOrganization?.id, canManageActiveOrganization, orgInterestSlug]);
-
-  useEffect(() => {
-    if (!templates.length || !canManageActiveOrganization) {
-      setTemplateCohortIds({});
-      return;
-    }
-
-    const templateIds = templates.map((template) => template.id).filter((id) => isUuid(id));
-    if (templateIds.length === 0) {
-      setTemplateCohortIds({});
-      return;
-    }
-
-    let cancelled = false;
-    void (async () => {
-      const { data, error } = await supabase
-        .from('betterat_org_step_template_cohorts')
-        .select('org_template_id,cohort_id')
-        .in('org_template_id', templateIds);
-
-      if (cancelled) return;
-      if (error) {
-        setTemplateCohortIds({});
-        return;
-      }
-
-      const nextMap: Record<string, string[]> = {};
-      for (const row of data || []) {
-        const templateId = String((row as any).org_template_id || '');
-        const cohortId = String((row as any).cohort_id || '');
-        if (!isUuid(templateId) || !isUuid(cohortId)) continue;
-        if (!nextMap[templateId]) {
-          nextMap[templateId] = [];
-        }
-        nextMap[templateId].push(cohortId);
-      }
-
-      setTemplateCohortIds(nextMap);
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [canManageActiveOrganization, templates]);
-
-  const canSubmit = useMemo(() => {
-    return Boolean(
-      canManageActiveOrganization
-      && activeOrganization?.id
-      && user?.id
-      && !!orgInterestSlug
-      && title.trim().length > 0
-      && stepType.trim().length > 0
-    );
-  }, [activeOrganization?.id, canManageActiveOrganization, orgInterestSlug, stepType, title, user?.id]);
-
-  const handleCreateTemplate = useCallback(async () => {
-    if (!canSubmit || !activeOrganization?.id || !user?.id) {
-      showAlert('Missing fields', 'Add a title and step type first.');
-      return;
-    }
-
-    try {
-      setSaving(true);
-      const payload = {
-        org_id: activeOrganization.id,
-        interest_slug: orgInterestSlug,
-        title: title.trim(),
-        description: description.trim() || null,
-        step_type: stepType,
-        module_ids: moduleIds,
-        suggested_competency_ids: suggestedCompetencyIds,
-        created_by: user.id,
-        is_published: true,
-      };
-
-      const { data, error } = await supabase
-        .from('betterat_org_step_templates')
-        .insert(payload)
-        .select('id,org_id,interest_slug,title,description,step_type,module_ids,suggested_competency_ids,is_published,created_at')
-        .single();
-
-      if (error) throw error;
-
-      const inserted = data as OrgStepTemplateRow;
-      setTemplates((prev) => [inserted, ...prev]);
-      setTitle('');
-      setDescription('');
-      setStepType(stepTypeOptions[0]?.value || '');
-      setModuleIds([]);
-      setSuggestedCompetencyIds([]);
-    } catch (error: any) {
-      showAlert('Unable to save template', error?.message || 'Please try again.');
-    } finally {
-      setSaving(false);
-    }
-  }, [activeOrganization?.id, canSubmit, description, moduleIds, orgInterestSlug, stepType, stepTypeOptions, suggestedCompetencyIds, title, user?.id]);
-
-  const handleTogglePublished = useCallback(async (template: OrgStepTemplateRow) => {
+  // Toggle blueprint published state
+  const handleTogglePublished = useCallback(async (blueprint: BlueprintWithStepCount) => {
     if (!canManageActiveOrganization) return;
     try {
-      const nextPublished = !template.is_published;
-      const { error } = await supabase
-        .from('betterat_org_step_templates')
-        .update({ is_published: nextPublished })
-        .eq('id', template.id)
-        .eq('org_id', template.org_id);
-      if (error) throw error;
-
-      setTemplates((prev) => prev.map((row) => row.id === template.id ? { ...row, is_published: nextPublished } : row));
+      const nextPublished = !blueprint.is_published;
+      await updateBlueprint(blueprint.id, { is_published: nextPublished });
+      setBlueprints((prev) =>
+        prev.map((bp) => bp.id === blueprint.id ? { ...bp, is_published: nextPublished } : bp),
+      );
     } catch (error: any) {
-      showAlert('Unable to update template', error?.message || 'Please try again.');
+      showAlert('Unable to update blueprint', error?.message || 'Please try again.');
     }
   }, [canManageActiveOrganization]);
 
-  const handleToggleTemplateCohort = useCallback(async (templateId: string, cohortId: string) => {
-    if (!canManageActiveOrganization || !isUuid(templateId) || !isUuid(cohortId)) return;
-    const key = `${templateId}:${cohortId}`;
-    if (assigningKey === key) return;
+  // Manual blueprint creation
+  const handleCreateBlueprint = useCallback(async () => {
+    if (!newTitle.trim() || !activeOrganization?.id || !user?.id || !orgInterestSlug) return;
 
-    const currentIds = new Set(templateCohortIds[templateId] || []);
-    const isLinked = currentIds.has(cohortId);
-    setAssigningKey(key);
+    setCreating(true);
     try {
-      if (isLinked) {
-        const { error } = await supabase
-          .from('betterat_org_step_template_cohorts')
-          .delete()
-          .eq('org_template_id', templateId)
-          .eq('cohort_id', cohortId);
-        if (error) throw error;
-        currentIds.delete(cohortId);
-      } else {
-        const { error } = await supabase
-          .from('betterat_org_step_template_cohorts')
-          .insert({ org_template_id: templateId, cohort_id: cohortId });
-        if (error) throw error;
-        currentIds.add(cohortId);
+      const interestId = await resolveInterestId(orgInterestSlug);
+      if (!interestId) throw new Error('Could not resolve interest');
+
+      const slug = generateBlueprintSlug(newTitle, orgInterestSlug);
+      const bp = await createBlueprint({
+        user_id: user.id,
+        interest_id: interestId,
+        slug,
+        title: newTitle.trim(),
+        description: newDescription.trim() || null,
+        is_published: true,
+        organization_id: activeOrganization.id,
+        access_level: 'org_members',
+      });
+
+      setBlueprints((prev) => [{ ...bp, step_count: 0 }, ...prev]);
+      setNewTitle('');
+      setNewDescription('');
+      setShowCreateForm(false);
+    } catch (error: any) {
+      showAlert('Unable to create blueprint', error?.message || 'Please try again.');
+    } finally {
+      setCreating(false);
+    }
+  }, [activeOrganization?.id, newTitle, newDescription, orgInterestSlug, user?.id]);
+
+  // AI curriculum generation → blueprint
+  const handleAiGenerate = useCallback(async () => {
+    if (!aiPrompt.trim() || !activeOrganization?.id || !user?.id || !orgInterestSlug) return;
+
+    const trimmed = aiPrompt.trim();
+    if (/^https?:\/\//.test(trimmed) || (/^[a-z0-9-]+\.[a-z]{2,}/i.test(trimmed) && !trimmed.includes(' '))) {
+      showAlert(
+        'Describe your curriculum instead',
+        'Paste a description of your lessons — how many episodes, what topics they cover, and the skill progression. We can\'t scrape websites directly.',
+      );
+      return;
+    }
+
+    setAiGenerating(true);
+
+    try {
+      const resolvedConfig = orgInterestSlug ? getInterestEventConfig(orgInterestSlug) : null;
+      const availableStepTypes = resolvedConfig?.eventSubtypes?.map((o: any) => o.id).join(', ') || 'general';
+
+      const systemPrompt = `You are a curriculum designer for a ${interestLabel} teaching platform.
+Given a curriculum description, generate a JSON object with:
+- "title": string (blueprint/curriculum title)
+- "description": string (1-2 sentence overview)
+- "steps": array of step objects, each with:
+  - "title": string (lesson/episode title)
+  - "description": string (1-2 sentence description)
+  - "step_type": one of [${availableStepTypes}]
+
+Return ONLY a valid JSON object. No markdown fences, no backticks, no explanation text. Just the raw JSON starting with { and ending with }. Generate between 3-15 steps based on the curriculum described.`;
+
+      const { data, error } = await supabase.functions.invoke('step-plan-suggest', {
+        body: {
+          system: systemPrompt,
+          prompt: trimmed,
+          max_tokens: 2048,
+        },
+      });
+
+      if (error) throw error;
+
+      let responseText = typeof data === 'string' ? data : data?.text || data?.message || JSON.stringify(data);
+      responseText = responseText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+
+      // Extract JSON object from response
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error('AI did not return a valid curriculum. Try rephrasing your description.');
+
+      let generated: { title: string; description?: string; steps: { title: string; description?: string; step_type?: string }[] };
+      try {
+        generated = JSON.parse(jsonMatch[0]);
+      } catch {
+        throw new Error('AI returned invalid JSON. Try a simpler description.');
       }
 
-      setTemplateCohortIds((prev) => ({
-        ...prev,
-        [templateId]: Array.from(currentIds),
-      }));
+      if (!Array.isArray(generated.steps) || generated.steps.length === 0) {
+        throw new Error('No steps generated');
+      }
+
+      const blueprintTitle = aiTitle.trim() || generated.title || 'Untitled Blueprint';
+
+      const { blueprint } = await createBlueprintFromCurriculum({
+        userId: user.id,
+        organizationId: activeOrganization.id,
+        interestSlug: orgInterestSlug,
+        blueprintTitle,
+        blueprintDescription: generated.description ?? null,
+        steps: generated.steps.map((s) => ({
+          title: s.title,
+          description: s.description ?? null,
+          step_type: s.step_type,
+        })),
+        accessLevel: 'org_members',
+      });
+
+      setBlueprints((prev) => [{ ...blueprint, step_count: generated.steps.length }, ...prev]);
+      setAiPrompt('');
+      setAiTitle('');
     } catch (error: any) {
-      showAlert('Unable to update cohort assignment', error?.message || 'Please try again.');
+      console.error('[Blueprints] AI generation error:', error);
+      showAlert('Generation failed', error?.message || 'Please try again with a different description.');
     } finally {
-      setAssigningKey(null);
+      setAiGenerating(false);
     }
-  }, [assigningKey, canManageActiveOrganization, templateCohortIds]);
+  }, [activeOrganization?.id, aiPrompt, aiTitle, interestLabel, orgInterestSlug, user?.id]);
 
   return (
     <View style={styles.container}>
       <OrgAdminHeader
-        title="Organization Templates"
-        subtitle={isSailing
-          ? 'Publish optional sail racing step recommendations for learners.'
-          : 'Publish optional nursing step recommendations for learners.'}
+        title="Blueprints"
+        subtitle={`Publish ${interestLabel} learning paths for your members to follow.`}
         interestSlug={orgInterestSlug}
       />
 
@@ -381,102 +284,105 @@ export default function OrganizationTemplatesScreen() {
         </View>
       ) : !canManageActiveOrganization ? (
         <View style={styles.centerState}>
-          <Text style={styles.stateText}>Organization admin access is required to manage templates.</Text>
+          <Text style={styles.stateText}>Organization admin access is required to manage blueprints.</Text>
         </View>
       ) : (
         <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>New template</Text>
-            <Text style={styles.contextText}>Using organization context: {orgInterestLabel(orgInterestSlug)}</Text>
-            {!orgInterestSlug ? (
-              <Text style={styles.warningText}>
-                Organization interest not set. Set an organization interest to create templates.
-              </Text>
-            ) : null}
-            {interestLoadFailed ? (
-              <Text style={styles.warningText}>Could not load organization interest. Using General.</Text>
-            ) : null}
-
+          {/* AI Curriculum Generator */}
+          <View style={[styles.card, { borderColor: '#DBEAFE', borderWidth: 1, backgroundColor: '#F8FAFF' }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+              <Ionicons name="sparkles" size={20} color="#2563EB" />
+              <Text style={[styles.sectionTitle, { marginLeft: 8 }]}>Generate blueprint from curriculum</Text>
+            </View>
+            <Text style={{ fontSize: 13, color: '#64748B', marginBottom: 8 }}>
+              Describe your curriculum — the AI will create a blueprint with real steps your members can adopt.
+            </Text>
             <TextInput
               style={styles.input}
-              value={title}
-              onChangeText={setTitle}
-              placeholder="Template title"
+              value={aiTitle}
+              onChangeText={setAiTitle}
+              placeholder="Blueprint title (optional — AI will suggest one)"
               placeholderTextColor="#94A3B8"
+              editable={!aiGenerating}
             />
-
             <TextInput
-              style={[styles.input, styles.textArea]}
-              value={description}
-              onChangeText={setDescription}
-              placeholder="Description (optional)"
+              style={[styles.input, styles.textArea, { minHeight: 80 }]}
+              value={aiPrompt}
+              onChangeText={setAiPrompt}
+              placeholder={`e.g. "9 beginner episodes teaching ${interestLabel}. Starts with fundamentals, progresses through intermediate skills, ending with a capstone project."`}
               placeholderTextColor="#94A3B8"
               multiline
               numberOfLines={3}
+              editable={!aiGenerating}
             />
-
-            <Text style={styles.label}>Step Type</Text>
-            <View style={styles.chipRow}>
-              {stepTypeOptions.map((option) => {
-                const selected = option.value === stepType;
-                return (
-                  <TouchableOpacity
-                    key={option.value}
-                    style={[styles.chip, selected && styles.chipSelected]}
-                    onPress={() => setStepType(option.value)}
-                  >
-                    <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{option.label}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            <Text style={styles.label}>Modules</Text>
-            <View style={styles.chipRow}>
-              {moduleOptions.map((option) => {
-                const selected = moduleIds.includes(option.id);
-                return (
-                  <TouchableOpacity
-                    key={option.id}
-                    style={[styles.chip, selected && styles.chipSelected]}
-                    onPress={() => setModuleIds((prev) => toggleArrayValue(prev, option.id))}
-                  >
-                    <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{option.label}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            <Text style={styles.label}>Suggested Competencies</Text>
-            <View style={styles.chipRow}>
-              {competencyOptions.map((option) => {
-                const selected = suggestedCompetencyIds.includes(option.id);
-                return (
-                  <TouchableOpacity
-                    key={option.id}
-                    style={[styles.chip, selected && styles.chipSelected]}
-                    onPress={() => setSuggestedCompetencyIds((prev) => toggleArrayValue(prev, option.id))}
-                  >
-                    <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{option.label}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
             <TouchableOpacity
-              style={[styles.primaryButton, (!canSubmit || saving) && styles.disabledButton]}
-              onPress={() => void handleCreateTemplate()}
-              disabled={!canSubmit || saving}
+              style={[styles.primaryButton, (!aiPrompt.trim() || aiGenerating || !orgInterestSlug) && styles.disabledButton, { backgroundColor: '#2563EB' }]}
+              onPress={() => void handleAiGenerate()}
+              disabled={!aiPrompt.trim() || aiGenerating || !orgInterestSlug}
             >
-              {saving ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Ionicons name="add-circle-outline" size={18} color="#FFFFFF" />}
-              <Text style={styles.primaryButtonText}>Save template</Text>
+              {aiGenerating ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Ionicons name="sparkles" size={18} color="#FFFFFF" />
+              )}
+              <Text style={styles.primaryButtonText}>
+                {aiGenerating ? 'Generating blueprint...' : 'Generate blueprint'}
+              </Text>
             </TouchableOpacity>
           </View>
 
+          {/* Manual Create */}
+          {showCreateForm ? (
+            <View style={styles.card}>
+              <Text style={styles.sectionTitle}>New blueprint</Text>
+              <TextInput
+                style={styles.input}
+                value={newTitle}
+                onChangeText={setNewTitle}
+                placeholder="Blueprint title"
+                placeholderTextColor="#94A3B8"
+              />
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={newDescription}
+                onChangeText={setNewDescription}
+                placeholder="Description (optional)"
+                placeholderTextColor="#94A3B8"
+                multiline
+                numberOfLines={3}
+              />
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <TouchableOpacity
+                  style={[styles.primaryButton, { flex: 1 }, (!newTitle.trim() || creating) && styles.disabledButton]}
+                  onPress={() => void handleCreateBlueprint()}
+                  disabled={!newTitle.trim() || creating}
+                >
+                  {creating ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Ionicons name="add-circle-outline" size={18} color="#FFFFFF" />}
+                  <Text style={styles.primaryButtonText}>Create</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.primaryButton, { flex: 1, backgroundColor: '#94A3B8' }]}
+                  onPress={() => { setShowCreateForm(false); setNewTitle(''); setNewDescription(''); }}
+                >
+                  <Text style={styles.primaryButtonText}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={[styles.card, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}
+              onPress={() => setShowCreateForm(true)}
+            >
+              <Ionicons name="add-circle-outline" size={20} color="#2563EB" />
+              <Text style={{ fontSize: 14, fontWeight: '600', color: '#2563EB' }}>Create empty blueprint</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Blueprint list */}
           <View style={styles.card}>
             <View style={styles.listHeader}>
-              <Text style={styles.sectionTitle}>Published {orgInterestLabel(orgInterestSlug).toLowerCase()} templates</Text>
-              <TouchableOpacity onPress={() => void loadTemplates()}>
+              <Text style={styles.sectionTitle}>Your blueprints</Text>
+              <TouchableOpacity onPress={() => void loadBlueprints()}>
                 <Ionicons name="refresh-outline" size={18} color="#2563EB" />
               </TouchableOpacity>
             </View>
@@ -485,55 +391,39 @@ export default function OrganizationTemplatesScreen() {
               <View style={styles.centerStateCompact}>
                 <ActivityIndicator size="small" color="#2563EB" />
               </View>
-            ) : templates.length === 0 ? (
-              <Text style={styles.stateText}>No templates yet.</Text>
+            ) : blueprints.length === 0 ? (
+              <Text style={styles.stateText}>No blueprints yet. Generate one from a curriculum or create an empty one to get started.</Text>
             ) : (
-              templates.map((template) => (
-                <View key={template.id} style={styles.templateRow}>
-                  <View style={styles.templateTextWrap}>
-                    <Text style={styles.templateTitle}>{template.title}</Text>
-                    {template.description ? <Text style={styles.templateDescription}>{template.description}</Text> : null}
-                    <Text style={styles.templateMeta}>
-                      {template.step_type} • {template.module_ids.length} modules • {template.suggested_competency_ids.length} competencies
+              blueprints.map((bp) => (
+                <TouchableOpacity
+                  key={bp.id}
+                  style={styles.blueprintRow}
+                  onPress={() => router.push(`/blueprint/${bp.slug}` as any)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.blueprintTextWrap}>
+                    <Text style={styles.blueprintTitle}>{bp.title}</Text>
+                    {bp.description ? <Text style={styles.blueprintDescription} numberOfLines={2}>{bp.description}</Text> : null}
+                    <Text style={styles.blueprintMeta}>
+                      {bp.step_count} step{bp.step_count !== 1 ? 's' : ''} · {bp.subscriber_count} subscriber{bp.subscriber_count !== 1 ? 's' : ''}
+                      {bp.access_level === 'org_members' ? ' · Members only' : bp.access_level === 'paid' ? ` · $${((bp.price_cents || 0) / 100).toFixed((bp.price_cents || 0) % 100 === 0 ? 0 : 2)}` : ' · Public'}
                     </Text>
                   </View>
-                  <TouchableOpacity
-                    style={[styles.publishPill, template.is_published ? styles.publishOn : styles.publishOff]}
-                    onPress={() => void handleTogglePublished(template)}
-                  >
-                    <Text style={[styles.publishPillText, template.is_published ? styles.publishOnText : styles.publishOffText]}>
-                      {template.is_published ? 'Published' : 'Hidden'}
-                    </Text>
-                  </TouchableOpacity>
-                  {cohorts.length > 0 ? (
-                    <View style={styles.templateAssignSection}>
-                      <Text style={styles.templateAssignLabel}>Assign to cohorts</Text>
-                      <View style={styles.templateAssignChips}>
-                        {cohorts.map((cohort) => {
-                          const selected = (templateCohortIds[template.id] || []).includes(cohort.id);
-                          const key = `${template.id}:${cohort.id}`;
-                          const busy = assigningKey === key;
-                          return (
-                            <TouchableOpacity
-                              key={cohort.id}
-                              style={[
-                                styles.assignChip,
-                                selected && styles.assignChipSelected,
-                                busy && styles.assignChipBusy,
-                              ]}
-                              onPress={() => void handleToggleTemplateCohort(template.id, cohort.id)}
-                              disabled={busy}
-                            >
-                              <Text style={[styles.assignChipText, selected && styles.assignChipTextSelected]}>
-                                {busy ? 'Saving...' : cohort.name}
-                              </Text>
-                            </TouchableOpacity>
-                          );
-                        })}
-                      </View>
-                    </View>
-                  ) : null}
-                </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <TouchableOpacity
+                      style={[styles.publishPill, bp.is_published ? styles.publishOn : styles.publishOff]}
+                      onPress={(e) => {
+                        e.stopPropagation?.();
+                        void handleTogglePublished(bp);
+                      }}
+                    >
+                      <Text style={[styles.publishPillText, bp.is_published ? styles.publishOnText : styles.publishOffText]}>
+                        {bp.is_published ? 'Published' : 'Hidden'}
+                      </Text>
+                    </TouchableOpacity>
+                    <Ionicons name="chevron-forward" size={16} color="#94A3B8" />
+                  </View>
+                </TouchableOpacity>
               ))
             )}
           </View>
@@ -568,19 +458,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#0F172A',
   },
-  label: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#334155',
-  },
-  contextText: {
-    fontSize: 12,
-    color: '#475569',
-  },
-  warningText: {
-    fontSize: 12,
-    color: '#92400E',
-  },
   input: {
     borderWidth: 1,
     borderColor: '#CBD5E1',
@@ -594,31 +471,6 @@ const styles = StyleSheet.create({
   textArea: {
     minHeight: 80,
     textAlignVertical: 'top',
-  },
-  chipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  chip: {
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    backgroundColor: '#FFFFFF',
-  },
-  chipSelected: {
-    borderColor: '#93C5FD',
-    backgroundColor: '#EFF6FF',
-  },
-  chipText: {
-    fontSize: 12,
-    color: '#334155',
-  },
-  chipTextSelected: {
-    color: '#1D4ED8',
-    fontWeight: '600',
   },
   primaryButton: {
     marginTop: 4,
@@ -643,67 +495,34 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  templateRow: {
+  blueprintRow: {
     borderWidth: 1,
     borderColor: '#E2E8F0',
     borderRadius: 10,
-    padding: 10,
-    gap: 8,
-  },
-  templateAssignSection: {
-    gap: 6,
-  },
-  templateAssignLabel: {
-    fontSize: 11,
-    color: '#64748B',
-    fontWeight: '600',
-  },
-  templateAssignChips: {
+    padding: 12,
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
   },
-  assignChip: {
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    backgroundColor: '#FFFFFF',
-  },
-  assignChipSelected: {
-    borderColor: '#93C5FD',
-    backgroundColor: '#EFF6FF',
-  },
-  assignChipBusy: {
-    opacity: 0.7,
-  },
-  assignChipText: {
-    fontSize: 11,
-    color: '#334155',
-  },
-  assignChipTextSelected: {
-    color: '#1D4ED8',
-    fontWeight: '600',
-  },
-  templateTextWrap: {
+  blueprintTextWrap: {
+    flex: 1,
     gap: 4,
   },
-  templateTitle: {
+  blueprintTitle: {
     fontSize: 14,
     fontWeight: '700',
     color: '#0F172A',
   },
-  templateDescription: {
+  blueprintDescription: {
     fontSize: 12,
     color: '#475569',
   },
-  templateMeta: {
+  blueprintMeta: {
     fontSize: 11,
     color: '#64748B',
   },
   publishPill: {
-    alignSelf: 'flex-start',
     borderRadius: 999,
     borderWidth: 1,
     paddingHorizontal: 8,

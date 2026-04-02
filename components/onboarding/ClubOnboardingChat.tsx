@@ -6,10 +6,19 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, TextInput, ScrollView, ActivityIndicator, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
+import { useRouter } from 'expo-router';
 import { supabase } from '@/services/supabase';
 import { useAuth } from '@/lib/contexts/AuthContext';
+import { useOrganization } from '@/providers/OrganizationProvider';
 import { getOnboardingContext } from '@/lib/onboarding/interestContext';
-import { showAlert } from '@/lib/utils/crossPlatformAlert';
+
+interface OrgData {
+  name: string;
+  description: string;
+  program_name?: string;
+  program_description?: string;
+  expected_students?: number;
+}
 
 interface Message {
   role: 'user' | 'assistant';
@@ -19,10 +28,13 @@ interface Message {
 
 interface ClubOnboardingChatProps {
   interestSlug?: string;
+  onSkipToManual?: () => void;
 }
 
-export function ClubOnboardingChat({ interestSlug }: ClubOnboardingChatProps) {
+export function ClubOnboardingChat({ interestSlug, onSkipToManual }: ClubOnboardingChatProps) {
   const { user } = useAuth();
+  const router = useRouter();
+  const { refreshMemberships, setActiveOrganizationId } = useOrganization();
   const ctx = getOnboardingContext(interestSlug);
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -33,20 +45,23 @@ export function ClubOnboardingChat({ interestSlug }: ClubOnboardingChatProps) {
   ]);
   const [inputValue, setInputValue] = useState('');
   const [loading, setLoading] = useState(false);
+  const [completedOrgData, setCompletedOrgData] = useState<OrgData | null>(null);
+  const [creatingOrg, setCreatingOrg] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
-  const onboardingSkillId = process.env.EXPO_PUBLIC_CLAUDE_SKILL_CLUB_ONBOARDING || null;
   const scrapeSkillId = process.env.EXPO_PUBLIC_CLAUDE_SKILL_CLUB_SCRAPE || null;
 
   const isLikelyUrl = (value: string) => {
     if (!value) return false;
     const trimmed = value.trim();
-    if (trimmed.length < 5) return false;
+    // Reject if it has spaces (not a URL), is too short, or has no dot
+    if (trimmed.length < 5 || trimmed.includes(' ') || !trimmed.includes('.')) return false;
     try {
       const normalized = trimmed.startsWith('http://') || trimmed.startsWith('https://')
         ? trimmed
         : `https://${trimmed}`;
       const parsed = new URL(normalized);
-      return Boolean(parsed.hostname);
+      // Must have a real TLD (hostname with a dot)
+      return parsed.hostname.includes('.');
     } catch {
       return false;
     }
@@ -100,6 +115,17 @@ export function ClubOnboardingChat({ interestSlug }: ClubOnboardingChatProps) {
 
     setLoading(true);
 
+    // Debug: check auth state before calling edge function
+    const { data: sessionData } = await supabase.auth.getSession();
+    console.log('[ClubOnboardingChat] Auth debug:', {
+      hasUser: !!user,
+      userId: user?.id,
+      hasSession: !!sessionData?.session,
+      hasAccessToken: !!sessionData?.session?.access_token,
+      tokenPrefix: sessionData?.session?.access_token?.substring(0, 20) + '...',
+      isLikelyUrl: isLikelyUrl(userMessage),
+    });
+
     try {
       if (isLikelyUrl(userMessage)) {
         const { data: scrapeData, error: scrapeError } = await supabase.functions.invoke('club-scrape', {
@@ -136,13 +162,26 @@ export function ClubOnboardingChat({ interestSlug }: ClubOnboardingChatProps) {
 
       const payloadMessages = conversation.map(({ role, content }) => ({ role, content }));
 
+      console.log('[ClubOnboardingChat] Invoking club-onboarding edge function:', {
+        messageCount: payloadMessages.length,
+        interestSlug,
+        organizationLabel: ctx.organizationLabel,
+      });
+
       const { data, error } = await supabase.functions.invoke('club-onboarding', {
         body: {
           messages: payloadMessages,
-          skillId: onboardingSkillId,
           interestSlug: interestSlug || undefined,
           organizationLabel: ctx.organizationLabel,
         },
+      });
+
+      console.log('[ClubOnboardingChat] Edge function response:', {
+        hasData: !!data,
+        hasError: !!error,
+        errorType: error?.constructor?.name,
+        errorMessage: error?.message,
+        dataSuccess: data?.success,
       });
 
       if (error) {
@@ -166,21 +205,107 @@ export function ClubOnboardingChat({ interestSlug }: ClubOnboardingChatProps) {
 
       conversation = [...conversation, assistantEntry];
       setMessages(conversation);
+
+      // Detect completion — AI called complete_setup tool
+      if (data.complete && data.orgData) {
+        setCompletedOrgData(data.orgData as OrgData);
+      }
     } catch (error: any) {
       console.error('Chat error:', error);
       const fallback = error?.message
-        ? `I ran into an issue: ${error.message}. Let's try again — ${ctx.onboarding.organizationPrompt}`
-        : 'Sorry, I had a technical issue. Please try again or contact support if this persists.';
+        ? `I ran into an issue processing that. Let's try again — what's your ${ctx.organizationLabel}'s name?`
+        : `Sorry, I had a technical issue. Please try again, or use the "Skip" option below to set up manually.`;
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: fallback,
         timestamp: new Date(),
       }]);
-      if (Platform.OS === 'web') {
-        showAlert('Onboarding error', error?.message || 'Something went wrong');
-      }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCreateOrg = async () => {
+    if (!completedOrgData || !user) return;
+    setCreatingOrg(true);
+
+    try {
+      // Create the organization
+      const slug = completedOrgData.name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '');
+
+      const orgPayload = {
+        name: completedOrgData.name,
+        slug,
+        organization_type: 'community',  // Valid: club, institution, association, business, community, other
+        created_by: user.id,
+        interest_slug: interestSlug || 'general',
+        metadata: {
+          description: completedOrgData.description,
+          program_name: completedOrgData.program_name || null,
+          program_description: completedOrgData.program_description || null,
+          expected_students: completedOrgData.expected_students || null,
+        },
+      };
+
+      console.log('[ClubOnboardingChat] Creating org with payload:', JSON.stringify(orgPayload, null, 2));
+
+      const { data: org, error: orgError } = await supabase
+        .from('organizations')
+        .insert(orgPayload)
+        .select('id')
+        .single();
+
+      if (orgError) {
+        console.error('[ClubOnboardingChat] Org insert error:', { code: orgError.code, details: orgError.details, hint: orgError.hint, message: orgError.message });
+        throw orgError;
+      }
+
+      const memberPayload = {
+        organization_id: org.id,
+        user_id: user.id,
+        role: 'owner',
+        status: 'active',
+        membership_status: 'active',
+      };
+
+      console.log('[ClubOnboardingChat] Creating membership with payload:', JSON.stringify(memberPayload, null, 2));
+
+      const { error: memberError } = await supabase
+        .from('organization_memberships')
+        .insert(memberPayload);
+
+      if (memberError) {
+        console.error('[ClubOnboardingChat] Membership insert error:', { code: memberError.code, details: memberError.details, hint: memberError.hint, message: memberError.message });
+        throw memberError;
+      }
+
+      console.log('[ClubOnboardingChat] Org created:', org.id);
+
+      // Refresh org provider so it picks up the new membership, then set it active
+      await refreshMemberships();
+      await setActiveOrganizationId(org.id);
+
+      router.replace({
+        pathname: '/(auth)/org-welcome',
+        params: {
+          interest: interestSlug || '',
+          orgName: completedOrgData.name,
+          orgId: org.id,
+        },
+      } as any);
+    } catch (error: any) {
+      console.error('[ClubOnboardingChat] Org creation failed:', error);
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: `There was a problem creating your ${ctx.organizationLabel}. ${error?.message || 'Please try again.'}`,
+        timestamp: new Date(),
+      }]);
+      setCompletedOrgData(null);
+    } finally {
+      setCreatingOrg(false);
     }
   };
 
@@ -289,58 +414,109 @@ export function ClubOnboardingChat({ interestSlug }: ClubOnboardingChatProps) {
           )}
         </ScrollView>
 
-        {/* Input Area */}
-        <View style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          marginTop: 16,
-          backgroundColor: '#FFFFFF',
-          borderRadius: 24,
-          paddingHorizontal: 16,
-          paddingVertical: 8,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.1,
-          shadowRadius: 4,
-          elevation: 3,
-        }}>
-          <TextInput
-            value={inputValue}
-            onChangeText={setInputValue}
-            placeholder="Type your message..."
-            placeholderTextColor="#9CA3AF"
-            style={{
-              flex: 1,
-              fontSize: 15,
+        {/* Completion CTA */}
+        {completedOrgData ? (
+          <View style={{ marginTop: 16, gap: 8 }}>
+            <TouchableOpacity
+              onPress={handleCreateOrg}
+              disabled={creatingOrg}
+              style={{
+                backgroundColor: creatingOrg ? '#93C5FD' : '#2563EB',
+                paddingVertical: 16,
+                borderRadius: 12,
+                alignItems: 'center',
+                flexDirection: 'row',
+                justifyContent: 'center',
+              }}
+            >
+              {creatingOrg && <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 8 }} />}
+              <Text style={{ color: '#FFFFFF', fontSize: 17, fontWeight: '700' }}>
+                {creatingOrg ? 'Creating...' : `Launch ${completedOrgData.name}`}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setCompletedOrgData(null)}
+              style={{ alignItems: 'center', paddingVertical: 8 }}
+            >
+              <Text style={{ fontSize: 14, color: '#64748B' }}>Continue chatting</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <>
+            {/* Input Area */}
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              marginTop: 16,
+              backgroundColor: '#FFFFFF',
+              borderRadius: 24,
+              paddingHorizontal: 16,
               paddingVertical: 8,
-              color: '#1F2937',
-            }}
-            onSubmitEditing={handleSendMessage}
-            editable={!loading}
-            multiline
-            maxLength={500}
-          />
-
-          <TouchableOpacity
-            onPress={handleSendMessage}
-            disabled={loading || !inputValue.trim()}
-            style={{
-              backgroundColor: loading || !inputValue.trim() ? '#E5E7EB' : '#007AFF',
-              paddingHorizontal: 20,
-              paddingVertical: 10,
-              borderRadius: 20,
-              marginLeft: 8,
-            }}
-          >
-            <Text style={{
-              color: loading || !inputValue.trim() ? '#9CA3AF' : '#FFFFFF',
-              fontSize: 15,
-              fontWeight: '600',
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.1,
+              shadowRadius: 4,
+              elevation: 3,
             }}>
-              Send
-            </Text>
-          </TouchableOpacity>
-        </View>
+              <TextInput
+                value={inputValue}
+                onChangeText={setInputValue}
+                placeholder="Type your message..."
+                placeholderTextColor="#9CA3AF"
+                style={{
+                  flex: 1,
+                  fontSize: 15,
+                  paddingVertical: 8,
+                  color: '#1F2937',
+                }}
+                onSubmitEditing={handleSendMessage}
+                editable={!loading}
+                multiline
+                maxLength={500}
+              />
+
+              <TouchableOpacity
+                onPress={handleSendMessage}
+                disabled={loading || !inputValue.trim()}
+                style={{
+                  backgroundColor: loading || !inputValue.trim() ? '#E5E7EB' : '#007AFF',
+                  paddingHorizontal: 20,
+                  paddingVertical: 10,
+                  borderRadius: 20,
+                  marginLeft: 8,
+                }}
+              >
+                <Text style={{
+                  color: loading || !inputValue.trim() ? '#9CA3AF' : '#FFFFFF',
+                  fontSize: 15,
+                  fontWeight: '600',
+                }}>
+                  Send
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Skip to manual setup */}
+            <TouchableOpacity
+              onPress={() => {
+                if (onSkipToManual) {
+                  onSkipToManual();
+                } else {
+                  router.replace('/(tabs)/races');
+                }
+              }}
+              style={{
+                alignItems: 'center',
+                paddingVertical: 14,
+                marginTop: 4,
+              }}
+            >
+              <Text style={{ fontSize: 14, color: '#64748B', fontWeight: '500' }}>
+                Skip — I'll set up manually
+              </Text>
+            </TouchableOpacity>
+          </>
+        )}
 
       </View>
     </KeyboardAvoidingView>

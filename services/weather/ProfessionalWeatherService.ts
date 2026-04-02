@@ -3,7 +3,6 @@ import type {
   AdvancedWeatherConditions,
   WeatherAlert
 } from '@/lib/types/advanced-map';
-import { StormGlassService } from './StormGlassService';
 import { OpenMeteoService } from './OpenMeteoService';
 import { OpenWeatherMapProvider } from './OpenWeatherMapProvider';
 import type { WeatherForecast as EnvironmentalForecast } from '@/types/environmental';
@@ -17,7 +16,6 @@ export class ProfessionalWeatherService {
   private cache: Map<string, any> = new Map();
   private updateIntervals: Map<string, ReturnType<typeof setInterval>> = new Map();
   private openMeteoService: OpenMeteoService;
-  private stormGlassService: StormGlassService | null;
   private openWeatherProvider: OpenWeatherMapProvider | null;
 
   constructor(apiKeys: { [key: string]: string }) {
@@ -25,21 +23,6 @@ export class ProfessionalWeatherService {
 
     // Initialize Open-Meteo as PRIMARY weather source (FREE!)
     this.openMeteoService = new OpenMeteoService();
-
-    // Initialize Storm Glass ONLY for tide data (paid API - minimize usage)
-    const stormGlassKey = apiKeys['stormglass'];
-    if (stormGlassKey && stormGlassKey !== 'demo-key') {
-      this.stormGlassService = new StormGlassService({
-        apiKey: stormGlassKey,
-        baseUrl: 'https://api.stormglass.io/v2',
-        timeout: 10000,
-        retryAttempts: 2
-      });
-      logger.info('[ProfessionalWeatherService] StormGlass configured for tide data only');
-    } else {
-      this.stormGlassService = null;
-      logger.info('[ProfessionalWeatherService] StormGlass not configured - tide data unavailable');
-    }
 
     // Initialize OpenWeatherMap as fallback
     this.openWeatherProvider = new OpenWeatherMapProvider(
@@ -60,7 +43,7 @@ export class ProfessionalWeatherService {
 
   /**
    * Get comprehensive weather conditions
-   * Uses Open-Meteo (FREE) for weather/waves, Storm Glass (paid) only for tides
+   * Uses Open-Meteo (FREE) for weather/waves
    */
   async getAdvancedWeatherConditions(location: GeoLocation): Promise<AdvancedWeatherConditions> {
     const cacheKey = `weather_${location.latitude.toFixed(4)}_${location.longitude.toFixed(4)}`;
@@ -77,36 +60,9 @@ export class ProfessionalWeatherService {
     try {
       // PRIMARY: Open-Meteo for weather + waves (FREE - no quota limits!)
       weatherData = await this.openMeteoService.getWeatherAtTime(location, new Date());
-      
+
       if (weatherData) {
         logger.info('[ProfessionalWeatherService] Weather from Open-Meteo (FREE)');
-        
-        // OPTIONAL: Add tide data from Storm Glass if available
-        // This is the ONLY Storm Glass API call - saves quota!
-        if (this.stormGlassService) {
-          try {
-            const tideExtremes = await this.stormGlassService.getTideExtremes(location, 1);
-            const nextHigh = tideExtremes.find(t => t.type === 'high' && t.time > new Date());
-            const nextLow = tideExtremes.find(t => t.type === 'low' && t.time > new Date());
-
-            if (nextHigh || nextLow) {
-              weatherData.tide.nextHigh = nextHigh?.time;
-              weatherData.tide.nextLow = nextLow?.time;
-            }
-
-            // Get current tide height
-            const tideHeight = await this.stormGlassService.getTideHeightAtTime(location, new Date());
-            weatherData.tide.height = tideHeight;
-
-            // Determine tide direction based on next extreme
-            if (nextHigh && nextLow) {
-              weatherData.tide.direction = nextHigh.time < nextLow.time ? 'flood' : 'ebb';
-            }
-            logger.info('[ProfessionalWeatherService] Tide data from Storm Glass');
-          } catch (tideError) {
-            logger.warn('[ProfessionalWeatherService] Tide data fetch failed, using defaults');
-          }
-        }
       }
     } catch (error) {
       logger.error('[ProfessionalWeatherService] Open-Meteo error:', error);
@@ -135,16 +91,13 @@ export class ProfessionalWeatherService {
 
   /**
    * Get detailed marine forecasts for racing
-   * Uses Open-Meteo (FREE) for weather/waves, Storm Glass (paid) only for tides
+   * Uses Open-Meteo (FREE) for weather/waves
    */
   async getMarineForecast(location: GeoLocation, hours: number = 72): Promise<AdvancedWeatherConditions[]> {
     try {
       // PRIMARY: Open-Meteo for weather + waves (FREE!)
       const forecasts = await this.openMeteoService.getMarineWeather(location, hours);
       logger.info(`[ProfessionalWeatherService] Marine forecast from Open-Meteo: ${forecasts.length} hours (FREE)`);
-
-      // Storm Glass tide enhancement disabled - quota exceeded
-      // Forecasts will lack tide data but weather/wave data is complete from OpenMeteo
 
       return forecasts;
     } catch (error) {
@@ -214,7 +167,7 @@ export class ProfessionalWeatherService {
   }
 
   private buildGRIBUrl(bounds: BoundingBox, modelRun: Date): string {
-    const baseUrl = 'https://api.stormglass.io/v2/weather/point';
+    const baseUrl = 'https://api.open-meteo.com/v1/forecast';
     const params = new URLSearchParams({
       lat: bounds.southwest.latitude.toString(),
       lng: bounds.southwest.longitude.toString(),
@@ -261,10 +214,6 @@ export class ProfessionalWeatherService {
       this.updateIntervals.delete(updateId);
     }
   }
-
-  // Private methods for Storm Glass integration
-  // (Old multi-source methods removed - Storm Glass aggregates sources internally)
-
 
   private async getFallbackWeather(location: GeoLocation): Promise<AdvancedWeatherConditions> {
     if (this.openWeatherProvider) {

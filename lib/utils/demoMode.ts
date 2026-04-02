@@ -22,11 +22,6 @@ const API_KEY_CONFIG = {
     label: 'AI Edge Functions',
     required: false, // AI runs through secured edge functions
   },
-  stormglass: {
-    envKey: 'EXPO_PUBLIC_STORMGLASS_API_KEY',
-    label: 'StormGlass Weather',
-    required: false, // Weather data
-  },
   googleMaps: {
     envKey: 'EXPO_PUBLIC_GOOGLE_MAPS_API_KEY',
     label: 'Google Maps',
@@ -47,9 +42,6 @@ export function isApiKeyConfigured(service: keyof typeof API_KEY_CONFIG): boolea
   switch (service) {
     case 'anthropic':
       key = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
-      break;
-    case 'stormglass':
-      key = process.env.EXPO_PUBLIC_STORMGLASS_API_KEY;
       break;
     case 'googleMaps':
       key = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
@@ -166,8 +158,7 @@ export function clearDemoModeCache(): void {
  * Check specifically if weather services are available
  */
 export function isWeatherServiceAvailable(): boolean {
-  // Weather can work with Open-Meteo (free) even without StormGlass
-  // So we don't consider missing StormGlass as demo mode for weather
+  // Weather works with Open-Meteo (free), always available
   return true;
 }
 

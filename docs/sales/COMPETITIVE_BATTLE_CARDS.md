@@ -58,7 +58,7 @@ Battle cards provide quick competitive intelligence for sales conversations. Use
 | Mobile App | Web-based | ✅ Native iOS/Android |
 | Offline Mode | Limited | ✅ Full offline-first |
 | Sailwave Integration | Basic export | ✅ Full import/export |
-| Weather Intelligence | Basic | ✅ StormGlass + AI |
+| Weather Intelligence | Basic | ✅ Open-Meteo + AI |
 
 ## Key Differentiator Message
 

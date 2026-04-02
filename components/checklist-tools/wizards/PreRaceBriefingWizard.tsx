@@ -625,6 +625,7 @@ export function PreRaceBriefingWizard({
 }: PreRaceBriefingWizardProps) {
   const [activeTab, setActiveTab] = useState<TabId>('schedule');
   const [completedSections, setCompletedSections] = useState<Set<string>>(new Set());
+  const completedSectionsInitialized = useRef(false);
   const [raceData, setRaceData] = useState<ExtractedRaceData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -715,6 +716,15 @@ export function PreRaceBriefingWizard({
     }
   }, [intentions?.briefingComms]);
 
+  // Restore reviewed sections from intentions
+  useEffect(() => {
+    const saved = intentions?.briefingSectionsReviewed;
+    if (saved && saved.length > 0 && !completedSectionsInitialized.current) {
+      completedSectionsInitialized.current = true;
+      setCompletedSections(new Set(saved));
+    }
+  }, [intentions?.briefingSectionsReviewed]);
+
   // Generate course templates when race data + wind direction available
   useEffect(() => {
     if (!raceData) return;
@@ -774,10 +784,14 @@ export function PreRaceBriefingWizard({
     return directions[index];
   }, []);
 
-  // Mark section as reviewed
+  // Mark section as reviewed (persisted via intentions)
   const markSectionReviewed = useCallback((sectionId: string) => {
-    setCompletedSections((prev) => new Set([...prev, sectionId]));
-  }, []);
+    setCompletedSections((prev) => {
+      const next = new Set([...prev, sectionId]);
+      updateIntentions({ briefingSectionsReviewed: [...next] });
+      return next;
+    });
+  }, [updateIntentions]);
 
   // Check if current section is reviewed
   const isCurrentSectionReviewed = completedSections.has(activeTab);

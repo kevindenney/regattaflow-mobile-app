@@ -122,7 +122,7 @@ export function ProfileDropdown({
         }}
       >
         {!isLoggedIn ? (
-          <Text style={[s.signUpText, isDark && s.signUpTextDark]}>Sign Up</Text>
+          <Text style={[s.signUpText, isDark && s.signUpTextDark]}>Sign Up / Sign In</Text>
         ) : showAvatarImage ? (
           <Image
             source={{ uri: safeAvatarUrl! }}

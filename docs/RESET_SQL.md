@@ -111,8 +111,6 @@ DECLARE
   v_rhkyc_id uuid;
   v_jhson_cohort_id uuid;
   v_rhkyc_cohort_id uuid;
-  v_jhson_template_id uuid;
-  v_rhkyc_template_id uuid;
 BEGIN
   SELECT COALESCE((SELECT id FROM public.users WHERE lower(email)=lower(v_admin_email) LIMIT 1),(SELECT id FROM auth.users WHERE lower(email)=lower(v_admin_email) LIMIT 1)) INTO v_admin_id;
   SELECT COALESCE((SELECT id FROM public.users WHERE lower(email)=lower(v_requester_email) LIMIT 1),(SELECT id FROM auth.users WHERE lower(email)=lower(v_requester_email) LIMIT 1)) INTO v_requester_id;
@@ -138,24 +136,6 @@ BEGIN
   SELECT v_rhkyc_cohort_id, v_requester_id, 'member'
   WHERE NOT EXISTS (SELECT 1 FROM public.betterat_org_cohort_members m WHERE m.cohort_id=v_rhkyc_cohort_id AND m.user_id=v_requester_id);
 
-  INSERT INTO public.betterat_org_step_templates (org_id,interest_slug,title,description,step_type,module_ids,suggested_competency_ids,is_published,created_by)
-  SELECT v_jhson_id,'nursing','JHSON Demo Template','Deterministic template for JHSON demo flow','clinical_shift',ARRAY[]::text[],ARRAY[]::text[],true,v_admin_id
-  WHERE NOT EXISTS (SELECT 1 FROM public.betterat_org_step_templates t WHERE t.org_id=v_jhson_id AND t.title='JHSON Demo Template');
-
-  INSERT INTO public.betterat_org_step_templates (org_id,interest_slug,title,description,step_type,module_ids,suggested_competency_ids,is_published,created_by)
-  SELECT v_rhkyc_id,'sail-racing','RHKYC Demo Template','Deterministic template for RHKYC demo flow','race_day',ARRAY[]::text[],ARRAY[]::text[],true,v_admin_id
-  WHERE NOT EXISTS (SELECT 1 FROM public.betterat_org_step_templates t WHERE t.org_id=v_rhkyc_id AND t.title='RHKYC Demo Template');
-
-  SELECT id INTO v_jhson_template_id FROM public.betterat_org_step_templates WHERE org_id=v_jhson_id AND title='JHSON Demo Template' ORDER BY created_at DESC LIMIT 1;
-  SELECT id INTO v_rhkyc_template_id FROM public.betterat_org_step_templates WHERE org_id=v_rhkyc_id AND title='RHKYC Demo Template' ORDER BY created_at DESC LIMIT 1;
-
-  INSERT INTO public.betterat_org_step_template_cohorts (org_template_id,cohort_id)
-  SELECT v_jhson_template_id, v_jhson_cohort_id
-  WHERE NOT EXISTS (SELECT 1 FROM public.betterat_org_step_template_cohorts l WHERE l.org_template_id=v_jhson_template_id AND l.cohort_id=v_jhson_cohort_id);
-
-  INSERT INTO public.betterat_org_step_template_cohorts (org_template_id,cohort_id)
-  SELECT v_rhkyc_template_id, v_rhkyc_cohort_id
-  WHERE NOT EXISTS (SELECT 1 FROM public.betterat_org_step_template_cohorts l WHERE l.org_template_id=v_rhkyc_template_id AND l.cohort_id=v_rhkyc_cohort_id);
 END$$;
 
 -- Optional bounded cleanup for decision notifications.

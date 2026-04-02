@@ -299,13 +299,16 @@ export function CollaboratorPicker({ visible, onClose, onAdd, existingIds }: Col
           )
         ) : (
           <FlatList
-            data={[
-              ...(hasOrgMembers ? orgMembers : []),
-              // Separator + other people (only if there are other people to show)
-              ...(displayList.length > 0
-                ? [{ userId: '__section__', displayName: hasFollows ? 'PEOPLE YOU FOLLOW' : 'PEOPLE ON BETTERAT' } as UserRow, ...displayList]
-                : []),
-            ]}
+            data={(() => {
+              const orgIds = new Set(hasOrgMembers ? orgMembers.map((m) => m.userId) : []);
+              const dedupedDisplayList = displayList.filter((u) => !orgIds.has(u.userId));
+              return [
+                ...(hasOrgMembers ? orgMembers : []),
+                ...(dedupedDisplayList.length > 0
+                  ? [{ userId: '__section__', displayName: hasFollows ? 'PEOPLE YOU FOLLOW' : 'PEOPLE ON BETTERAT' } as UserRow, ...dedupedDisplayList]
+                  : []),
+              ];
+            })()}
             keyExtractor={(item) => item.userId}
             renderItem={({ item }) => {
               if (item.userId === '__section__') {

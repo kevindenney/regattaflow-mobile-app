@@ -2,7 +2,7 @@
  * WaveHeightHeatmap Component
  *
  * Displays wave height as a color-coded heatmap overlay
- * Uses Storm Glass wave height data with interpolation
+ * Uses wave height data with interpolation
  */
 
 import React, { useMemo } from 'react';
@@ -233,7 +233,7 @@ export const WaveHeightHeatmap: React.FC<WaveHeightHeatmapProps> = ({
 };
 
 /**
- * Helper: Generate sample wave data from Storm Glass forecast
+ * Helper: Generate sample wave data from weather forecast
  */
 export function generateWaveDataPoints(
   centerLat: number,

@@ -63,7 +63,7 @@ export const SAILING_EVENT_CONFIG: InterestEventConfig = {
     {
       id: 'blank_activity',
       label: 'Blank Step',
-      icon: 'add-circle-outline',
+      icon: 'plus-circle-outline',
       description: 'Create your own — define what, why, who, and how',
       formFields: [
         { id: 'date', type: 'date', label: 'Date', required: true },

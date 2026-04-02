@@ -2,7 +2,7 @@
  * VisibilityZones Component
  *
  * Displays visibility condition zones (fog, haze, clear) as colored overlay regions
- * Uses Storm Glass visibility data
+ * Uses visibility data
  */
 
 import React, { useMemo } from 'react';

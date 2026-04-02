@@ -62,7 +62,8 @@ export function WhatChatPanel({ chatHistory, onSend, onApply, onClear, isLoading
         ref={scrollRef}
         style={styles.messages}
         contentContainerStyle={styles.messagesContent}
-        showsVerticalScrollIndicator={false}
+        showsVerticalScrollIndicator
+        nestedScrollEnabled
       >
         {chatHistory.map((msg, i) => (
           <View
@@ -166,7 +167,10 @@ const styles = StyleSheet.create({
     color: IOS_COLORS.secondaryLabel,
   },
   messages: {
-    maxHeight: 300,
+    maxHeight: 400,
+    ...Platform.select({
+      web: { overflowY: 'scroll' } as any,
+    }),
   },
   messagesContent: {
     padding: IOS_SPACING.sm,

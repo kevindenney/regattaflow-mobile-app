@@ -202,6 +202,10 @@ export async function updateStepMetadata(
     if (!data) throw new Error(`Step ${stepId} not found or not owned by current user`);
     return data as TimelineStepRecord;
   } catch (err) {
+    if (isAbortError(err)) {
+      logger.warn('Step metadata update aborted (navigation or timeout)');
+      throw err;
+    }
     logger.error('Failed to update step metadata', err);
     throw err;
   }
@@ -263,6 +267,17 @@ export async function createStep(
       input.visibility ??
       (await resolveDefaultVisibility(input.user_id, input.interest_id));
 
+    // Calculate next sort_order so new steps slot in at the end
+    const { data: maxRow } = await supabase
+      .from('timeline_steps')
+      .select('sort_order')
+      .eq('user_id', input.user_id)
+      .eq('interest_id', input.interest_id)
+      .order('sort_order', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const nextSort = (maxRow?.sort_order ?? 0) + 1;
+
     const { data, error } = await supabase
       .from('timeline_steps')
       .insert({
@@ -284,6 +299,7 @@ export async function createStep(
         location_place_id: input.location_place_id ?? null,
         visibility,
         share_approximate_location: input.share_approximate_location ?? false,
+        sort_order: nextSort,
         metadata: input.metadata ?? {},
       })
       .select()

@@ -35,6 +35,30 @@ export function InterestBrowserPage({ slug }: InterestBrowserPageProps) {
   const dbInterest = allInterests.find((i) => i.slug === slug);
   const parentDomain = dbInterest ? getDomainForInterest(dbInterest.id) : null;
 
+  // Fetch real DB orgs for this interest (not just sample data)
+  const [extraOrgs, setExtraOrgs] = useState<{ slug: string; name: string; groupLabel: string; groups: any[] }[]>([]);
+  useEffect(() => {
+    if (!interest) return;
+    supabase
+      .from('organizations')
+      .select('name, slug')
+      .eq('interest_slug', slug)
+      .eq('is_active', true)
+      .then(({ data }) => {
+        if (!data) return;
+        const sampleSlugs = new Set(interest.organizations.map((o) => o.slug));
+        const extras = data
+          .filter((o) => !sampleSlugs.has(o.slug))
+          .map((o) => ({ slug: o.slug, name: o.name, groupLabel: 'Programs' as const, groups: [] }));
+        setExtraOrgs(extras);
+      });
+  }, [slug, interest?.name]);
+
+  // Merged organizations = sample + real DB orgs
+  const mergedOrganizations = interest
+    ? [...interest.organizations, ...extraOrgs]
+    : [];
+
   // Fetch published blueprints for all orgs in this interest (single query, no per-card fetching)
   const [orgBlueprintsMap, setOrgBlueprintsMap] = useState<Record<string, BlueprintRecord[]>>({});
   useEffect(() => {
@@ -43,8 +67,8 @@ export function InterestBrowserPage({ slug }: InterestBrowserPageProps) {
 
     const loadOrgBlueprints = async () => {
       try {
-        // Look up org IDs by matching sample data org names to DB orgs
-        const orgSlugs = interest.organizations.map((o) => o.slug);
+        // Look up org IDs by matching all org slugs (sample + real) to DB orgs
+        const orgSlugs = mergedOrganizations.map((o) => o.slug);
         const { data: dbOrgs } = await supabase
           .from('organizations')
           .select('id, slug')
@@ -117,7 +141,7 @@ export function InterestBrowserPage({ slug }: InterestBrowserPageProps) {
 
     loadOrgBlueprints();
     return () => { cancelled = true; };
-  }, [interest?.name]);
+  }, [interest?.name, extraOrgs.length]);
 
   const handleAddInterest = async () => {
     if (!isLoggedIn) {
@@ -247,7 +271,7 @@ export function InterestBrowserPage({ slug }: InterestBrowserPageProps) {
                 <ProgramCard
                   key={program.slug}
                   program={program}
-                  organizations={interest.organizations}
+                  organizations={mergedOrganizations}
                   interestSlug={slug}
                   accentColor={interest.color}
                 />
@@ -265,7 +289,7 @@ export function InterestBrowserPage({ slug }: InterestBrowserPageProps) {
                 <AffiliationGroup
                   key={aff.name}
                   affiliation={aff}
-                  organizations={interest.organizations}
+                  organizations={mergedOrganizations}
                   interestSlug={slug}
                   accentColor={interest.color}
                 />
@@ -273,7 +297,7 @@ export function InterestBrowserPage({ slug }: InterestBrowserPageProps) {
               {/* Render unaffiliated orgs standalone */}
               {(() => {
                 const affiliatedSlugs = new Set(interest.affiliations.flatMap((a) => a.orgSlugs));
-                const unaffiliated = interest.organizations.filter((o) => !affiliatedSlugs.has(o.slug));
+                const unaffiliated = mergedOrganizations.filter((o) => !affiliatedSlugs.has(o.slug));
                 if (unaffiliated.length === 0) return null;
                 return (
                   <View style={[styles.orgGrid, isDesktop && styles.orgGridDesktop]}>
@@ -292,12 +316,13 @@ export function InterestBrowserPage({ slug }: InterestBrowserPageProps) {
             </>
           ) : (
             <View style={[styles.orgGrid, isDesktop && styles.orgGridDesktop]}>
-              {interest.organizations.map((org) => (
+              {mergedOrganizations.map((org) => (
                 <OrganizationPreviewCard
                   key={org.slug}
                   organization={org}
                   interestSlug={slug}
                   accentColor={interest.color}
+                  blueprints={orgBlueprintsMap[org.slug]}
                 />
               ))}
             </View>

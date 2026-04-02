@@ -217,9 +217,18 @@ ${evidenceParts}`;
       }
     }
 
+    // Backfill competency_id from title — AI returns titles but not UUIDs
+    const backfillId = (result: CompetencyEvidenceItem): CompetencyEvidenceItem => {
+      if (result.competency_id) return result;
+      const match = plannedCompetencies.find(c =>
+        c.title.toLowerCase() === (result.competency_title ?? '').toLowerCase()
+      );
+      return match ? { ...result, competency_id: match.id } : result;
+    };
+
     const assessment: StepCompetencyAssessment = {
       assessed_at: new Date().toISOString(),
-      planned_competency_results: parsed.planned_competency_results ?? [],
+      planned_competency_results: (parsed.planned_competency_results ?? []).map(backfillId),
       additional_competencies_found: (parsed.additional_competencies_found ?? []).slice(0, 3),
       gap_summary: parsed.gap_summary ?? '',
     };

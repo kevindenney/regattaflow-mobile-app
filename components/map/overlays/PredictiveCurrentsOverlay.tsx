@@ -3,7 +3,7 @@
  *
  * Displays predicted current vectors with timing predictions
  * Shows optimal timing for current-assisted tactical maneuvers
- * Uses Storm Glass current forecast data
+ * Uses weather forecast current data
  */
 
 import React, { useMemo } from 'react';

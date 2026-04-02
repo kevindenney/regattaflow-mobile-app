@@ -1,7 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { corsHeaders } from '../_shared/cors.ts';
-
-const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
+import { callGemini } from '../_shared/gemini.ts';
 
 /**
  * Lightweight Race Info Extraction
@@ -25,30 +24,8 @@ Deno.serve(async (req) => {
       );
     }
 
-    if (!ANTHROPIC_API_KEY) {
-      console.error('[extract-race-info] ANTHROPIC_API_KEY not configured');
-      return new Response(
-        JSON.stringify({ success: false, error: 'API not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Use a quick, focused prompt for fast extraction
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 1024,
-        temperature: 0,
-        messages: [
-          {
-            role: 'user',
-            content: `Extract key race information from this sailing document (${type === 'si_nor' ? 'Sailing Instructions/Notice of Race' : 'racing calendar'}).
+    // Use Gemini Flash for fast extraction
+    const prompt = `Extract key race information from this sailing document (${type === 'si_nor' ? 'Sailing Instructions/Notice of Race' : 'racing calendar'}).
 
 Document:
 ${text.substring(0, 4000)}
@@ -65,23 +42,23 @@ Return ONLY a JSON object with these fields (set null if not found):
   "organizer": "string - organizing club/authority"
 }
 
-Return ONLY valid JSON, no other text.`,
-          },
-        ],
-      }),
-    });
+Return ONLY valid JSON, no other text.`;
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('[extract-race-info] Claude API error:', response.status, errorText.substring(0, 200));
+    let content: string;
+    try {
+      content = await callGemini({
+        userContent: [{ text: prompt }],
+        maxOutputTokens: 1024,
+        temperature: 0,
+      });
+      content = content.trim();
+    } catch (aiError: any) {
+      console.error('[extract-race-info] Gemini API error:', aiError.message);
       return new Response(
         JSON.stringify({ success: false, error: 'AI extraction failed' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-
-    const result = await response.json();
-    let content = result.content[0].text.trim();
 
     // Clean markdown code fences
     if (content.startsWith('```json')) {

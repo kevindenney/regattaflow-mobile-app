@@ -7,13 +7,13 @@
  * InterestProvider only when the user taps "Continue".
  */
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
-  FlatList,
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   useWindowDimensions,
@@ -22,11 +22,6 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useInterest, type Interest } from '@/providers/InterestProvider';
-
-// A union type for flat list items: either a domain header or an interest card
-type GridItem =
-  | { type: 'domain-header'; id: string; name: string; accentColor: string }
-  | { type: 'interest'; id: string; interest: Interest };
 
 // ---------------------------------------------------------------------------
 // Props
@@ -44,59 +39,18 @@ export interface InterestSelectionProps {
 // ---------------------------------------------------------------------------
 
 export function InterestSelection({ visible, onComplete }: InterestSelectionProps) {
-  const { userInterests, groupedInterests, switchInterest, loading: interestsLoading } = useInterest();
+  const { allInterests, groupedInterests, switchInterest, addInterest, loading: interestsLoading } = useInterest();
   const { width: screenWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
 
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
   const [committing, setCommitting] = useState(false);
 
-  // Responsive column count: 4 on wide screens (tablet/web), 2 on mobile
-  const isWide = screenWidth >= 768;
-  const numColumns = isWide ? 4 : 2;
-
-  // Build a flat list with domain header items interspersed.
-  // FlatList with numColumns can't use SectionList, so we insert
-  // full-width header items and pad with invisible spacers.
-  const gridItems = useMemo<GridItem[]>(() => {
-    // If only 1 domain group, skip headers
-    if (groupedInterests.length <= 1) {
-      return userInterests.map((i) => ({ type: 'interest' as const, id: i.id, interest: i }));
-    }
-
-    const items: GridItem[] = [];
-    for (const group of groupedInterests) {
-      const matching = group.interests.filter((gi) =>
-        userInterests.some((ui) => ui.slug === gi.slug),
-      );
-      if (matching.length === 0) continue;
-
-      // Domain header + (numColumns - 1) spacer slots to fill the row
-      items.push({
-        type: 'domain-header',
-        id: `header-${group.domain.slug}`,
-        name: group.domain.name,
-        accentColor: group.domain.accent_color,
-      });
-      // Pad remaining columns in header row with invisible spacers
-      for (let i = 1; i < numColumns; i++) {
-        items.push({
-          type: 'domain-header',
-          id: `header-${group.domain.slug}-spacer-${i}`,
-          name: '',
-          accentColor: 'transparent',
-        });
-      }
-
-      for (const interest of matching) {
-        items.push({ type: 'interest', id: interest.id, interest });
-      }
-    }
-
-    return items;
-  }, [userInterests, groupedInterests, numColumns]);
-
-  // ------ Handlers ------
+  // Responsive column count
+  const numColumns = screenWidth >= 768 ? 4 : 2;
+  const gap = 12;
+  const containerPadding = 20;
+  const cardWidth = (screenWidth - containerPadding * 2 - gap * (numColumns - 1)) / numColumns;
 
   const handleSelect = useCallback((slug: string) => {
     setSelectedSlug(slug);
@@ -107,6 +61,7 @@ export function InterestSelection({ visible, onComplete }: InterestSelectionProp
 
     setCommitting(true);
     try {
+      await addInterest(selectedSlug);
       await switchInterest(selectedSlug);
       onComplete();
     } catch (error) {
@@ -114,67 +69,48 @@ export function InterestSelection({ visible, onComplete }: InterestSelectionProp
     } finally {
       setCommitting(false);
     }
-  }, [selectedSlug, committing, switchInterest, onComplete]);
+  }, [selectedSlug, committing, addInterest, switchInterest, onComplete]);
 
-  // ------ Render helpers ------
+  const renderInterestCard = (interest: Interest) => {
+    const isSelected = selectedSlug === interest.slug;
+    const accentColor = interest.accent_color || '#2563EB';
+    const tagline = interest.hero_tagline || interest.description || '';
 
-  const renderItem = useCallback(
-    ({ item }: { item: GridItem }) => {
-      if (item.type === 'domain-header') {
-        // The first item in each header row shows the label; spacers are invisible
-        if (!item.name) return <View style={styles.card} />;
-        return (
-          <View style={styles.domainHeaderRow}>
-            <View style={[styles.domainAccent, { backgroundColor: item.accentColor }]} />
-            <Text style={styles.domainHeaderText}>{item.name}</Text>
+    return (
+      <Pressable
+        key={interest.id}
+        style={({ pressed }) => [
+          styles.card,
+          { width: cardWidth, borderLeftColor: accentColor },
+          isSelected && styles.cardSelected,
+          isSelected && { borderColor: accentColor },
+          pressed && styles.cardPressed,
+        ]}
+        onPress={() => handleSelect(interest.slug)}
+        accessibilityRole="button"
+        accessibilityState={{ selected: isSelected }}
+        accessibilityLabel={`${interest.name}. ${tagline}`}
+      >
+        {isSelected && (
+          <View style={[styles.checkBadge, { backgroundColor: accentColor }]}>
+            <Ionicons name="checkmark" size={14} color="#FFFFFF" />
           </View>
-        );
-      }
+        )}
 
-      const interest = item.interest;
-      const isSelected = selectedSlug === interest.slug;
-      const accentColor = interest.accent_color || '#2563EB';
-      const tagline = interest.hero_tagline || interest.description || '';
+        <Text style={styles.cardName} numberOfLines={1}>
+          {interest.name}
+        </Text>
 
-      return (
-        <Pressable
-          style={({ pressed }) => [
-            styles.card,
-            { borderLeftColor: accentColor },
-            isSelected && styles.cardSelected,
-            isSelected && { borderColor: accentColor },
-            pressed && styles.cardPressed,
-          ]}
-          onPress={() => handleSelect(interest.slug)}
-          accessibilityRole="button"
-          accessibilityState={{ selected: isSelected }}
-          accessibilityLabel={`${interest.name}. ${tagline}`}
-        >
-          {/* Checkmark overlay */}
-          {isSelected && (
-            <View style={[styles.checkBadge, { backgroundColor: accentColor }]}>
-              <Ionicons name="checkmark" size={14} color="#FFFFFF" />
-            </View>
-          )}
-
-          <Text style={styles.cardName} numberOfLines={1}>
-            {interest.name}
+        {tagline ? (
+          <Text style={styles.cardTagline} numberOfLines={2}>
+            {tagline}
           </Text>
+        ) : null}
+      </Pressable>
+    );
+  };
 
-          {tagline ? (
-            <Text style={styles.cardTagline} numberOfLines={2}>
-              {tagline}
-            </Text>
-          ) : null}
-        </Pressable>
-      );
-    },
-    [selectedSlug, handleSelect],
-  );
-
-  const keyExtractor = useCallback((item: GridItem) => item.id, []);
-
-  // ------ Main render ------
+  const showDomainHeaders = groupedInterests.length > 1;
 
   return (
     <Modal
@@ -198,17 +134,35 @@ export function InterestSelection({ visible, onComplete }: InterestSelectionProp
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#64748B" />
           </View>
-        ) : (
-          <FlatList
-            key={`grid-${numColumns}`}
-            data={gridItems}
-            renderItem={renderItem}
-            keyExtractor={keyExtractor}
-            numColumns={numColumns}
+        ) : showDomainHeaders ? (
+          <ScrollView
             contentContainerStyle={styles.gridContent}
-            columnWrapperStyle={styles.gridRow}
             showsVerticalScrollIndicator={false}
-          />
+          >
+            {groupedInterests.map((group) => {
+              if (group.interests.length === 0) return null;
+              return (
+                <View key={group.domain.slug} style={styles.domainSection}>
+                  <View style={styles.domainHeaderRow}>
+                    <View style={[styles.domainAccent, { backgroundColor: group.domain.accent_color }]} />
+                    <Text style={styles.domainHeaderText}>{group.domain.name}</Text>
+                  </View>
+                  <View style={[styles.cardGrid, { gap }]}>
+                    {group.interests.map(renderInterestCard)}
+                  </View>
+                </View>
+              );
+            })}
+          </ScrollView>
+        ) : (
+          <ScrollView
+            contentContainerStyle={styles.gridContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={[styles.cardGrid, { gap }]}>
+              {allInterests.map(renderInterestCard)}
+            </View>
+          </ScrollView>
         )}
 
         {/* Continue button */}
@@ -284,14 +238,17 @@ const styles = StyleSheet.create({
     }),
   },
 
-  // Domain header
+  // Domain sections
+  domainSection: {
+    marginBottom: 20,
+  },
   domainHeaderRow: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     paddingVertical: 4,
     paddingHorizontal: 2,
+    marginBottom: 8,
   },
   domainAccent: {
     width: 3,
@@ -320,14 +277,13 @@ const styles = StyleSheet.create({
   gridContent: {
     paddingBottom: 16,
   },
-  gridRow: {
-    gap: 12,
-    marginBottom: 12,
+  cardGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
   },
 
   // Card
   card: {
-    flex: 1,
     backgroundColor: '#FFFFFF',
     borderRadius: 14,
     borderLeftWidth: 4,

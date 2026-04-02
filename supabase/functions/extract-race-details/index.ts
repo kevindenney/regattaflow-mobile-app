@@ -1,7 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { corsHeaders } from '../_shared/cors.ts';
-
-const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
+import { callGemini } from '../_shared/gemini.ts';
 
 /**
  * Enhanced Race Extraction Edge Function
@@ -168,29 +167,8 @@ Deno.serve(async (req) => {
       );
     }
 
-    if (!ANTHROPIC_API_KEY) {
-      return new Response(
-        JSON.stringify({ error: 'ANTHROPIC_API_KEY not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Call Claude API with enhanced multi-race detection prompt
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 8192,
-        temperature: 0,
-        messages: [
-          {
-            role: 'user',
-            content: `You are an expert at extracting structured race information from sailing documents (NOR, SI, calendars).
+    // Call Gemini Flash with enhanced multi-race detection prompt
+    const extractionPrompt = `You are an expert at extracting structured race information from sailing documents (NOR, SI, calendars).
 
 CRITICAL: First determine if this document contains:
 1. **SINGLE RACE**: One race event with one date
@@ -770,62 +748,24 @@ IMPORTANT INSTRUCTIONS:
       - otherSignals: Any other shore signals and their meanings
     - This is ESSENTIAL for Race Morning - tells sailors where to look for postponement/cancellation signals!
 
-Return ONLY the JSON object, no additional text.`,
-          },
-        ],
-      }),
-    });
+Return ONLY the JSON object, no additional text.`;
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('[extract-race-details] Claude API error:', {
-        status: response.status,
-        statusText: response.statusText,
-        errorBody: errorText,
+    let content: string;
+    try {
+      content = await callGemini({
+        userContent: [{ text: extractionPrompt }],
+        maxOutputTokens: 8192,
+        temperature: 0,
       });
+    } catch (aiError: any) {
+      console.error('[extract-race-details] Gemini API error:', aiError.message);
       return new Response(
         JSON.stringify({
-          error: `Claude API error: ${response.status}`,
-          details: errorText.substring(0, 500)
+          error: `Gemini API error: ${aiError.message}`,
         }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-
-    const result = await response.json();
-
-    // Validate Claude response structure
-    if (!result.content || !Array.isArray(result.content) || result.content.length === 0) {
-      console.error('[extract-race-details] Invalid Claude response structure:', JSON.stringify(result).substring(0, 500));
-      return new Response(
-        JSON.stringify({
-          error: 'Invalid Claude response structure',
-          details: JSON.stringify(result).substring(0, 500),
-          stop_reason: result.stop_reason
-        }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    if (!result.content[0].text) {
-      console.error('[extract-race-details] Claude response has no text:', JSON.stringify(result.content[0]).substring(0, 500));
-      return new Response(
-        JSON.stringify({
-          error: 'Claude response has no text content',
-          details: JSON.stringify(result.content[0]).substring(0, 500),
-          stop_reason: result.stop_reason
-        }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Check if response was truncated due to max_tokens
-    if (result.stop_reason === 'max_tokens') {
-      console.warn('[extract-race-details] Claude response was truncated due to max_tokens');
-    }
-
-    // Extract the JSON from Claude's response
-    let content = result.content[0].text;
 
     // Claude sometimes wraps JSON in markdown code blocks, so clean it up
     // Remove markdown code fences if present

@@ -36,7 +36,11 @@ export function OrganizationPreviewCard({ organization, interestSlug, accentColo
         <Text style={styles.orgName}>{organization.name}</Text>
         <View style={styles.badge}>
           <Text style={[styles.badgeText, { color: accentColor }]}>
-            {organization.groups.length} {organization.groupLabel}
+            {organization.groups.length > 0
+              ? `${organization.groups.length} ${organization.groupLabel}`
+              : blueprints.length > 0
+                ? `${blueprints.length} Pathway${blueprints.length !== 1 ? 's' : ''}`
+                : ''}
           </Text>
         </View>
       </View>

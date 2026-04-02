@@ -710,10 +710,16 @@ export default function OrganizationMembersScreen() {
                 return (
                   <View key={row.id} style={styles.memberRow}>
                     <View style={styles.memberHeader}>
-                      <View style={styles.memberTextWrap}>
-                        <Text style={styles.memberName}>{row.user_name}</Text>
+                      <TouchableOpacity
+                        style={styles.memberTextWrap}
+                        onPress={() => router.push({ pathname: '/organization/student/[studentId]', params: { studentId: row.user_id, orgId: resolvedActiveOrgId! } })}
+                      >
+                        <View style={styles.memberNameRow}>
+                          <Text style={styles.memberName}>{row.user_name}</Text>
+                          <Ionicons name="chevron-forward" size={14} color="#94A3B8" />
+                        </View>
                         {row.user_email ? <Text style={styles.memberEmail}>{row.user_email}</Text> : null}
-                      </View>
+                      </TouchableOpacity>
                       <View style={styles.memberHeaderBadges}>
                         <View style={[
                           styles.statusBadge,
@@ -933,10 +939,15 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2,
   },
+  memberNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
   memberName: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#0F172A',
+    color: '#1D4ED8',
   },
   memberEmail: {
     fontSize: 12,

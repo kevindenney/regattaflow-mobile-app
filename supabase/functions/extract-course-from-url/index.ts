@@ -4,7 +4,7 @@
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import Anthropic from 'npm:@anthropic-ai/sdk@0.26.1';
+import { callGemini } from '../_shared/gemini.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -67,14 +67,6 @@ serve(async (req: Request) => {
       return new Response(
         JSON.stringify({ error: 'No URL provided' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
-    if (!apiKey) {
-      return new Response(
-        JSON.stringify({ error: 'AI service not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -143,28 +135,23 @@ serve(async (req: Request) => {
       cleanContent = cleanContent.substring(0, 50000);
     }
 
-    const anthropic = new Anthropic({ apiKey });
-    
-    const raceContext = raceType === 'distance' 
+    const raceContext = raceType === 'distance'
       ? 'This is a DISTANCE/OFFSHORE race. Look for route waypoints, turning marks, and course coordinates that define a long-distance sailing route.'
       : 'This is a FLEET race. Look for windward/leeward marks, gate marks, start/finish lines, and buoy racing course elements.';
 
-    // Use haiku for faster response
-    const response = await anthropic.messages.create({
-      model: 'claude-3-haiku-20240307',
-      max_tokens: 2048,
-      messages: [
-        {
-          role: 'user',
-          content: `${EXTRACTION_PROMPT}\n\n${raceContext}\n\nURL: ${url}\n\nPage content:\n${cleanContent}`,
-        },
-      ],
-    });
-
-    const responseText = response.content
-      .filter((block: any) => block.type === 'text')
-      .map((block: any) => block.text)
-      .join('\n');
+    let responseText: string;
+    try {
+      responseText = await callGemini({
+        userContent: [{ text: `${EXTRACTION_PROMPT}\n\n${raceContext}\n\nURL: ${url}\n\nPage content:\n${cleanContent}` }],
+        maxOutputTokens: 2048,
+      });
+    } catch (aiError: any) {
+      console.error('[extract-course-url] Gemini error:', aiError.message);
+      return new Response(
+        JSON.stringify({ error: 'AI service unavailable' }),
+        { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     // Parse JSON from response
     let result: any;

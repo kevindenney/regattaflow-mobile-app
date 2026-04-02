@@ -1,9 +1,6 @@
 import type { GeoLocation } from '@/lib/types/advanced-map';
-import { StormGlassService } from '../weather/StormGlassService';
 import { createLogger } from '@/lib/utils/logger';
 
-const DEFAULT_TIMEOUT = 10000;
-const DEFAULT_RETRIES = 2;
 const logger = createLogger('TidalIntelService');
 
 export interface SlackWindow {
@@ -39,22 +36,6 @@ export interface TideIntel {
   range: number;
 }
 
-function createStormGlassClient(): StormGlassService | null {
-  const apiKey =
-    process.env.EXPO_PUBLIC_STORMGLASS_API_KEY ||
-    process.env.STORMGLASS_API_KEY;
-
-  if (!apiKey || apiKey === 'demo-key') {
-    return null;
-  }
-
-  return new StormGlassService({
-    apiKey,
-    timeout: DEFAULT_TIMEOUT,
-    retryAttempts: DEFAULT_RETRIES
-  });
-}
-
 function minutesBetween(target: Date, reference: Date): number {
   return Math.round((target.getTime() - reference.getTime()) / (1000 * 60));
 }
@@ -70,38 +51,18 @@ function buildExtremeInfo(target: Date | undefined, reference: Date, height?: nu
 }
 
 export class TidalIntelService {
-  private stormGlass?: StormGlassService | null;
-
-  constructor(stormGlassClient?: StormGlassService | null) {
-    this.stormGlass = stormGlassClient ?? createStormGlassClient();
-  }
+  constructor() {}
 
   isConfigured(): boolean {
-    return Boolean(this.stormGlass);
+    return false;
   }
 
-  async getTideIntel(location: GeoLocation, referenceTime: Date = new Date()): Promise<TideIntel | null> {
-    if (!this.stormGlass) {
-      return null;
-    }
-
-    try {
-      // Get tide extremes from Storm Glass
-      // Pass referenceTime so extremes are fetched around the race date, not just from today
-      const tideExtremes = await this.stormGlass.getTideExtremes(location, 2, referenceTime);
-
-      // Interpolate current height from extremes (saves 1 API call per request!)
-      // Uses cosine approximation which is ~95% accurate for standard tidal patterns
-      const currentHeight = this.stormGlass.interpolateTideHeight(tideExtremes, referenceTime);
-
-      return this.transformStormGlassTideData(tideExtremes, currentHeight, location, referenceTime);
-    } catch (error) {
-      logger.error('[TidalIntelService] Failed to fetch tide intel from Storm Glass:', error);
-      return null;
-    }
+  async getTideIntel(_location: GeoLocation, _referenceTime: Date = new Date()): Promise<TideIntel | null> {
+    // Tide data provider removed - returns null
+    return null;
   }
 
-  private transformStormGlassTideData(
+  private transformTideData(
     tideExtremes: { type: 'high' | 'low'; time: Date; height: number }[],
     currentHeight: number,
     location: GeoLocation,

@@ -112,7 +112,7 @@ function isMapValid(map: MapLibreMap | null | undefined): map is MapLibreMap {
   }
 }
 
-// Stormglass bathymetry layer IDs
+// Bathymetry layer IDs
 const DEPTH_SOURCE_ID = `${LAYER_PREFIX}-depth-source`;
 const DEPTH_LABELS_LAYER_ID = `${LAYER_PREFIX}-depth-labels`;
 
@@ -121,7 +121,7 @@ const SEAMARK_SOURCE_ID = `${LAYER_PREFIX}-seamark-source`;
 const SEAMARK_LAYER_ID = `${LAYER_PREFIX}-seamark-layer`;
 const OPENSEAMAP_TILES_URL = 'https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png';
 
-// GEBCO bathymetry fallback (when Stormglass quota exceeded)
+// GEBCO bathymetry data source
 const GEBCO_SOURCE_ID = `${LAYER_PREFIX}-gebco-source`;
 const GEBCO_LAYER_ID = `${LAYER_PREFIX}-gebco-layer`;
 const GEBCO_WMS_URL = 'https://www.gebco.net/data_and_products/gebco_web_services/web_map_service/mapserv?' +

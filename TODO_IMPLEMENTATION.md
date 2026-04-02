@@ -502,12 +502,12 @@ This document provides a comprehensive, prioritized task list for implementing R
 
 ### Weather Data Integration (Week 4)
 
-- [ ] **TASK-120**: Integrate StormGlass API
+- [ ] **TASK-120**: Integrate weather API
   - Priority: P0
   - Effort: M
   - Depends on: TASK-003
   - Files:
-    - `services/weather/StormGlassService.ts`
+    - `services/weather/OpenMeteoService.ts`
     - `services/weather/WeatherCacheService.ts`
   - Testing: API connection test
 

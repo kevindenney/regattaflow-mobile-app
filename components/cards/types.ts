@@ -253,7 +253,8 @@ export interface CardRaceData {
   id: string;
   name: string;
   venue?: string;
-  date: string;
+  /** Explicit date (starts_at). Undefined means undated — ordered by sort_order only. */
+  date?: string;
   startTime?: string;
   boatClass?: string;
   vhf_channel?: string;

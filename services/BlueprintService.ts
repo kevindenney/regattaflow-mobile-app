@@ -26,6 +26,8 @@ import type {
   PeerTimelineStep,
 } from '@/types/blueprint';
 import type { TimelineStepRecord } from '@/types/timeline-steps';
+import { createStep } from '@/services/TimelineStepService';
+import { resolveInterestId } from '@/services/TimelineStepService';
 
 const logger = createLogger('BlueprintService');
 
@@ -51,6 +53,8 @@ export async function createBlueprint(
         organization_id: input.organization_id ?? null,
         program_id: input.program_id ?? null,
         access_level: input.access_level ?? 'public',
+        price_cents: input.price_cents ?? null,
+        currency: input.currency ?? 'usd',
       })
       .select()
       .single();
@@ -568,11 +572,15 @@ export async function getNewStepsForSubscriber(
       // Get steps: prefer curated blueprint_steps, fallback to all non-private
       const { data: curatedRows } = await supabase
         .from('blueprint_steps')
-        .select('step_id')
-        .eq('blueprint_id', blueprint.id);
+        .select('step_id, sort_order')
+        .eq('blueprint_id', blueprint.id)
+        .order('sort_order', { ascending: true });
 
       let stepQuery;
+      // Track curated sort order for post-query sorting
+      let curatedSortMap: Map<string, number> | null = null;
       if (curatedRows && curatedRows.length > 0) {
+        curatedSortMap = new Map(curatedRows.map((r: any) => [r.step_id, r.sort_order]));
         const curatedIds = curatedRows.map((r: any) => r.step_id);
         // Filter out already-acted steps
         const remainingIds = curatedIds.filter((id: string) => !excludeIds.includes(id));
@@ -581,8 +589,7 @@ export async function getNewStepsForSubscriber(
         stepQuery = supabase
           .from('timeline_steps')
           .select('id, title, description, status, created_at, user_id')
-          .in('id', remainingIds)
-          .order('sort_order', { ascending: true });
+          .in('id', remainingIds);
       } else {
         stepQuery = supabase
           .from('timeline_steps')
@@ -610,7 +617,12 @@ export async function getNewStepsForSubscriber(
         .eq('id', blueprint.user_id)
         .maybeSingle();
 
-      for (const step of (steps ?? [])) {
+      // Sort by curated blueprint_steps sort_order when available
+      const sortedSteps = curatedSortMap
+        ? [...(steps ?? [])].sort((a, b) => (curatedSortMap!.get((a as any).id) ?? 999) - (curatedSortMap!.get((b as any).id) ?? 999))
+        : (steps ?? []);
+
+      for (const step of sortedSteps) {
         results.push({
           step_id: (step as any).id,
           step_title: (step as any).title,
@@ -730,24 +742,82 @@ export async function getProgramBlueprints(
 export async function checkBlueprintAccess(
   userId: string,
   blueprint: BlueprintRecord,
-): Promise<{ allowed: boolean; reason?: string }> {
+): Promise<{ allowed: boolean; reason?: string; requiresPurchase?: boolean }> {
   if (blueprint.access_level === 'public') return { allowed: true };
-  if (!blueprint.organization_id) return { allowed: true };
 
+  // Check org membership (applies to both org_members and paid)
+  let isOrgMember = false;
+  if (blueprint.organization_id) {
+    try {
+      const { data } = await supabase
+        .from('organization_memberships')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('organization_id', blueprint.organization_id)
+        .in('membership_status', ['active'])
+        .maybeSingle();
+      isOrgMember = !!data;
+    } catch (err) {
+      logger.error('Failed to check org membership', err);
+    }
+  }
+
+  if (blueprint.access_level === 'org_members') {
+    if (!blueprint.organization_id) return { allowed: true };
+    if (isOrgMember) return { allowed: true };
+    return { allowed: false, reason: 'You must be a member of this organization to subscribe.' };
+  }
+
+  if (blueprint.access_level === 'paid') {
+    // Org members get free access to paid blueprints
+    if (isOrgMember) return { allowed: true };
+
+    // Check for completed purchase
+    try {
+      const { data: purchase } = await supabase
+        .from('blueprint_purchases')
+        .select('id')
+        .eq('blueprint_id', blueprint.id)
+        .eq('buyer_id', userId)
+        .eq('status', 'completed')
+        .maybeSingle();
+
+      if (purchase) return { allowed: true };
+    } catch (err) {
+      logger.error('Failed to check blueprint purchase', err);
+    }
+
+    return {
+      allowed: false,
+      requiresPurchase: true,
+      reason: 'This blueprint requires purchase.',
+    };
+  }
+
+  return { allowed: false, reason: 'Access denied.' };
+}
+
+/**
+ * Check if a user has purchased a specific blueprint
+ */
+export async function checkBlueprintPurchase(
+  userId: string,
+  blueprintId: string,
+): Promise<{ purchased: boolean; status?: string }> {
   try {
-    const { data } = await supabase
-      .from('organization_memberships')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('organization_id', blueprint.organization_id)
-      .in('membership_status', ['active'])
+    const { data, error } = await supabase
+      .from('blueprint_purchases')
+      .select('id, status')
+      .eq('blueprint_id', blueprintId)
+      .eq('buyer_id', userId)
       .maybeSingle();
 
-    if (data) return { allowed: true };
-    return { allowed: false, reason: 'You must be a member of this organization to subscribe.' };
+    if (error) throw error;
+    if (!data) return { purchased: false };
+    return { purchased: data.status === 'completed', status: data.status };
   } catch (err) {
-    logger.error('Failed to check blueprint access', err);
-    return { allowed: false, reason: 'Unable to verify membership.' };
+    logger.error('Failed to check blueprint purchase', err);
+    return { purchased: false };
   }
 }
 
@@ -1043,4 +1113,97 @@ export function generateBlueprintSlug(
   // Add short random suffix for uniqueness
   const suffix = Math.random().toString(36).slice(2, 6);
   return `${base}-${suffix}`;
+}
+
+// ---------------------------------------------------------------------------
+// 14. Create blueprint from AI-generated curriculum
+// ---------------------------------------------------------------------------
+
+export interface CurriculumStep {
+  title: string;
+  description?: string | null;
+  step_type?: string;
+  module_ids?: string[];
+  suggested_competency_ids?: string[];
+}
+
+export interface CreateBlueprintFromCurriculumInput {
+  userId: string;
+  organizationId: string;
+  interestSlug: string;
+  blueprintTitle: string;
+  blueprintDescription?: string | null;
+  steps: CurriculumStep[];
+  accessLevel?: 'public' | 'org_members' | 'paid';
+}
+
+/**
+ * Creates a full blueprint from AI-generated curriculum steps.
+ * 1. Resolves interest slug → ID
+ * 2. Creates timeline_steps owned by the admin
+ * 3. Creates a timeline_blueprints record for the org
+ * 4. Links steps via blueprint_steps
+ */
+export async function createBlueprintFromCurriculum(
+  input: CreateBlueprintFromCurriculumInput,
+): Promise<{ blueprint: BlueprintRecord; steps: TimelineStepRecord[] }> {
+  const {
+    userId,
+    organizationId,
+    interestSlug,
+    blueprintTitle,
+    blueprintDescription,
+    steps: curriculumSteps,
+    accessLevel = 'org_members',
+  } = input;
+
+  // 1. Resolve interest ID from slug
+  const interestId = await resolveInterestId(interestSlug);
+  if (!interestId) {
+    throw new Error(`Could not resolve interest ID for slug "${interestSlug}"`);
+  }
+
+  // 2. Create timeline steps
+  const createdSteps: TimelineStepRecord[] = [];
+  for (const step of curriculumSteps) {
+    const created = await createStep({
+      user_id: userId,
+      interest_id: interestId,
+      organization_id: organizationId,
+      title: step.title,
+      description: step.description ?? null,
+      source_type: 'template',
+      category: step.step_type ?? 'general',
+      visibility: 'organization',
+      metadata: {
+        ...(step.module_ids?.length ? { module_ids: step.module_ids } : {}),
+        ...(step.suggested_competency_ids?.length
+          ? { suggested_competency_ids: step.suggested_competency_ids }
+          : {}),
+        generated_from: 'ai_curriculum',
+      },
+    });
+    createdSteps.push(created);
+  }
+
+  // 3. Create the blueprint
+  const slug = generateBlueprintSlug(blueprintTitle, interestSlug);
+  const blueprint = await createBlueprint({
+    user_id: userId,
+    interest_id: interestId,
+    slug,
+    title: blueprintTitle,
+    description: blueprintDescription ?? null,
+    is_published: true,
+    organization_id: organizationId,
+    access_level: accessLevel,
+  });
+
+  // 4. Link steps to blueprint
+  await setBlueprintSteps(
+    blueprint.id,
+    createdSteps.map((s) => s.id),
+  );
+
+  return { blueprint, steps: createdSteps };
 }

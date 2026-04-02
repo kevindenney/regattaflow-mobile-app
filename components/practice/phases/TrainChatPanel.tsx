@@ -33,6 +33,10 @@ interface TrainChatPanelProps {
   planWhat?: string;
   /** Called when notes should be persisted (for backward compat with onUpdateNotes) */
   onUpdateNotes?: (notes: string) => void;
+  /** Pre-fill the input with a question (e.g. from "Ask AI" on a sub-step) */
+  pendingQuestion?: string;
+  /** Called after the pending question is consumed so parent can clear state */
+  onPendingQuestionConsumed?: () => void;
 }
 
 export function TrainChatPanel({
@@ -43,12 +47,24 @@ export function TrainChatPanel({
   stepTitle,
   planWhat,
   onUpdateNotes,
+  pendingQuestion,
+  onPendingQuestionConsumed,
 }: TrainChatPanelProps) {
   const { user } = useAuth();
   const [input, setInput] = useState('');
   const scrollRef = useRef<ScrollView>(null);
+  const inputRef = useRef<TextInput>(null);
   const [systemPrompt, setSystemPrompt] = useState('');
   const [openingMessage, setOpeningMessage] = useState<string | undefined>();
+
+  // Consume pending question from parent (e.g. "Ask AI" on a sub-step)
+  useEffect(() => {
+    if (pendingQuestion) {
+      setInput(pendingQuestion);
+      onPendingQuestionConsumed?.();
+      setTimeout(() => inputRef.current?.focus(), 100);
+    }
+  }, [pendingQuestion]);
 
   // Build system prompt with manifesto + insights + step context
   useEffect(() => {
@@ -215,6 +231,7 @@ Guidelines:
 
       <View style={styles.inputRow}>
         <TextInput
+          ref={inputRef}
           style={styles.input}
           value={input}
           onChangeText={setInput}

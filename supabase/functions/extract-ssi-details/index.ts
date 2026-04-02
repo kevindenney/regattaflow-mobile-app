@@ -1,8 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { corsHeaders } from '../_shared/cors.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
-
-const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
+import { callGemini } from '../_shared/gemini.ts';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
@@ -43,12 +42,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    if (!ANTHROPIC_API_KEY) {
-      return new Response(
-        JSON.stringify({ error: 'ANTHROPIC_API_KEY not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    // GOOGLE_AI_API_KEY is checked inside callGemini()
 
     let documentText = text;
     let docRecord: any = null;
@@ -145,22 +139,8 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Call Claude API with SSI-specific extraction prompt
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 4096,
-        temperature: 0,
-        messages: [
-          {
-            role: 'user',
-            content: `You are an expert at extracting structured data from Sailing Instructions (SSI) documents.
+    // Call Gemini Flash with SSI-specific extraction prompt
+    const ssiPrompt = `You are an expert at extracting structured data from Sailing Instructions (SSI) documents.
 
 Extract the following information from this SSI document:
 
@@ -266,37 +246,18 @@ EXTRACTION GUIDELINES:
 8. List which sections you successfully extracted in extractedSections
 
 If a section has no relevant information, set it to null or empty array.
-Return ONLY the JSON object, no additional text.`,
-          },
-        ],
-      }),
-    });
+Return ONLY the JSON object, no additional text.`;
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('[extract-ssi-details] Claude API error:', response.status, errorText);
-
-      if (documentId) {
-        const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-        await supabase
-          .from('user_club_documents')
-          .update({
-            extraction_status: 'failed',
-            extraction_error: `AI extraction failed: ${response.status}`
-          })
-          .eq('id', documentId);
-      }
-
-      return new Response(
-        JSON.stringify({ error: `Claude API error: ${response.status}` }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const result = await response.json();
-
-    if (!result.content?.[0]?.text) {
-      const errorMsg = 'Invalid AI response structure';
+    let content: string;
+    try {
+      content = await callGemini({
+        userContent: [{ text: ssiPrompt }],
+        maxOutputTokens: 4096,
+        temperature: 0,
+      });
+      content = content.trim();
+    } catch (aiError: any) {
+      console.error('[extract-ssi-details] Gemini API error:', aiError.message);
 
       if (documentId) {
         const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -304,19 +265,16 @@ Return ONLY the JSON object, no additional text.`,
           .from('user_club_documents')
           .update({
             extraction_status: 'failed',
-            extraction_error: errorMsg
+            extraction_error: `AI extraction failed: ${aiError.message}`
           })
           .eq('id', documentId);
       }
 
       return new Response(
-        JSON.stringify({ error: errorMsg }),
+        JSON.stringify({ error: `Gemini API error: ${aiError.message}` }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-
-    // Parse the JSON response
-    let content = result.content[0].text.trim();
 
     // Clean markdown code blocks if present
     if (content.startsWith('```json')) {
@@ -344,7 +302,7 @@ Return ONLY the JSON object, no additional text.`,
 
     // Add metadata
     extractedData.extractedAt = new Date().toISOString();
-    extractedData.modelVersion = 'claude-3-haiku-20240307';
+    extractedData.modelVersion = 'gemini-2.0-flash';
 
     // If documentId provided, update the record with extracted data
     if (documentId) {

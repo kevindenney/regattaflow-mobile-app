@@ -46,7 +46,19 @@ const RING_STROKE = 8;
 const RING_RADIUS = (RING_SIZE - RING_STROKE) / 2;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
+// Preferred category display order — categories not listed here appear after these.
+// Includes both legacy categories and AACN domain names.
 const CATEGORY_ORDER: CompetencyCategory[] = [
+  'Knowledge for Nursing Practice',
+  'Person-Centered Care',
+  'Population Health',
+  'Scholarship for the Nursing Discipline',
+  'Quality and Safety',
+  'Interprofessional Partnerships',
+  'Systems-Based Practice',
+  'Informatics and Healthcare Technologies',
+  'Professionalism',
+  'Personal, Professional, and Leadership Development',
   'Assessment Skills',
   'Medication Administration',
   'Clinical Procedures',

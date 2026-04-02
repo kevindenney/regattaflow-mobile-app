@@ -1157,7 +1157,7 @@ export function OnWaterContent({
   isExpanded = true,
 }: OnWaterContentProps) {
   // Live countdown
-  const [timeUntilRace, setTimeUntilRace] = useState(() => getTimeUntilRace(race.date, race.startTime));
+  const [timeUntilRace, setTimeUntilRace] = useState(() => getTimeUntilRace(race.date ?? '', race.startTime));
 
   // Start sequence timer state
   const [showStartSequence, setShowStartSequence] = useState(false);
@@ -1314,10 +1314,10 @@ export function OnWaterContent({
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setTimeUntilRace(getTimeUntilRace(race.date, race.startTime));
+      setTimeUntilRace(getTimeUntilRace(race.date ?? '', race.startTime));
     }, 1000);
     return () => clearInterval(interval);
-  }, [race.date, race.startTime]);
+  }, [race.date ?? '', race.startTime]);
 
   const countdown = useMemo(() => formatCountdown(timeUntilRace), [timeUntilRace]);
 
@@ -1357,7 +1357,7 @@ export function OnWaterContent({
         <RaceCountdownTimer
           raceId={race.id}
           raceName={race.name || 'Race'}
-          raceDate={race.date}
+          raceDate={race.date ?? ''}
           raceTime={race.startTime || '10:00'}
           raceType={(raceType || 'fleet') as TimerRaceType}
           timeLimitHours={(race as any).time_limit_hours}

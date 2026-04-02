@@ -35,7 +35,6 @@ import {
 import { useInterestEventConfig } from '@/hooks/useInterestEventConfig';
 import { useVocabulary } from '@/hooks/useVocabulary';
 import type { BlueprintSuggestedNextStep } from '@/types/blueprint';
-import type { RecommendedStepTemplate } from '@/components/races/RacesFloatingHeader';
 
 interface AddStepSheetProps {
   visible: boolean;
@@ -43,8 +42,6 @@ interface AddStepSheetProps {
   suggestedNextSteps: BlueprintSuggestedNextStep[];
   onAdoptSuggestion: (s: BlueprintSuggestedNextStep) => void;
   onDismissSuggestion: (s: BlueprintSuggestedNextStep) => void;
-  recommendedTemplates: RecommendedStepTemplate[];
-  onSelectRecommendedTemplate: (t: RecommendedStepTemplate) => void;
   onAddStep: () => void;
   /** Create a step with a specific event subtype (e.g. 'nutrition', 'strength') */
   onAddStepWithSubtype?: (subtypeId: string, title: string) => void;
@@ -62,8 +59,6 @@ export function AddStepSheet({
   suggestedNextSteps,
   onAdoptSuggestion,
   onDismissSuggestion,
-  recommendedTemplates,
-  onSelectRecommendedTemplate,
   onAddStep,
   onAddStepWithSubtype,
   onAddRace,
@@ -103,7 +98,6 @@ export function AddStepSheet({
   };
 
   const hasSuggestions = suggestedNextSteps.length > 0;
-  const hasTemplates = recommendedTemplates.length > 0;
 
   return (
     <Modal
@@ -206,47 +200,9 @@ export function AddStepSheet({
               </View>
             )}
 
-            {/* From Your Program Section */}
-            {hasTemplates && (
-              <View style={styles.section}>
-                {hasSuggestions && <View style={styles.sectionSeparator} />}
-                <Text style={styles.sectionTitle}>From Your Program</Text>
-                {recommendedTemplates.map((template) => (
-                  <TouchableOpacity
-                    key={template.id}
-                    style={styles.menuOption}
-                    onPress={() => handleOption(() => onSelectRecommendedTemplate(template))}
-                    activeOpacity={0.7}
-                  >
-                    <View
-                      style={[
-                        styles.menuOptionIcon,
-                        { backgroundColor: `${IOS_COLORS.systemIndigo}15` },
-                      ]}
-                    >
-                      <MaterialCommunityIcons
-                        name="star-outline"
-                        size={24}
-                        color={IOS_COLORS.systemIndigo}
-                      />
-                    </View>
-                    <View style={styles.menuOptionContent}>
-                      <Text style={styles.menuOptionTitle}>{template.title}</Text>
-                      {template.description && (
-                        <Text style={styles.menuOptionSubtitle} numberOfLines={2}>
-                          {template.description}
-                        </Text>
-                      )}
-                    </View>
-                    <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-
             {/* Create Your Own Section */}
             <View style={styles.section}>
-              {(hasSuggestions || hasTemplates) && <View style={styles.sectionSeparator} />}
+              {hasSuggestions && <View style={styles.sectionSeparator} />}
               <Text style={styles.sectionTitle}>Create Your Own</Text>
 
               {/* Add Step */}
@@ -288,8 +244,8 @@ export function AddStepSheet({
                         onPress={() => handleOption(() => onAddStepWithSubtype(subtype.id, subtype.label))}
                         activeOpacity={0.7}
                       >
-                        <Ionicons
-                          name={(subtype.icon || 'add-circle-outline') as any}
+                        <MaterialCommunityIcons
+                          name={(subtype.icon || 'plus-circle-outline') as any}
                           size={14}
                           color={IOS_COLORS.systemTeal}
                         />

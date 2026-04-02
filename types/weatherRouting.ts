@@ -124,7 +124,6 @@ export type WeatherModelName =
   | 'JMA'      // Japan Meteorological Agency
   | 'HKO'      // Hong Kong Observatory
   | 'BOM'      // Australia Bureau of Meteorology
-  | 'STORMGLASS' // StormGlass aggregated
   | 'OPENMETEO'  // Open-Meteo
   | string;      // Allow custom models
 
@@ -134,7 +133,6 @@ export type WeatherModelName =
 export type WeatherSource =
   | 'noaa'
   | 'ecmwf'
-  | 'stormglass'
   | 'openmeteo'
   | 'hko'
   | 'ukmo'
