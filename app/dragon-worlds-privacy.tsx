@@ -40,7 +40,7 @@ export default function DragonWorldsPrivacyPolicy() {
                 borderBottom: '1px solid #e5e5e5',
               }}
             >
-              Last updated: February 12, 2026
+              Last updated: April 4, 2026
             </p>
 
             <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginTop: 40, marginBottom: 12, color: '#111' }}>
@@ -49,7 +49,7 @@ export default function DragonWorldsPrivacyPolicy() {
             <p style={{ marginBottom: 16, color: '#333' }}>
               DragonWorldsHK2027 ("we", "our", or "us") is committed to protecting your privacy. This
               Privacy Policy explains how we collect, use, and safeguard your information when you use
-              our mobile application.
+              our mobile application available on the Apple App Store and Google Play Store.
             </p>
 
             <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginTop: 40, marginBottom: 12, color: '#111' }}>
@@ -68,6 +68,14 @@ export default function DragonWorldsPrivacyPolicy() {
                 basic profile information (such as your name and email) as provided by those services.
                 We do not receive or store your Google or Apple password.
               </li>
+              <li style={{ marginBottom: 6 }}>
+                <strong>Device information</strong> — device type, operating system, and app version,
+                collected automatically for analytics and troubleshooting.
+              </li>
+              <li style={{ marginBottom: 6 }}>
+                <strong>Usage data</strong> — features used, session duration, and interaction patterns
+                to help us improve the app experience.
+              </li>
             </ul>
 
             <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginTop: 40, marginBottom: 12, color: '#111' }}>
@@ -82,6 +90,9 @@ export default function DragonWorldsPrivacyPolicy() {
               </li>
               <li style={{ marginBottom: 6 }}>
                 Communicate important updates about the app or your account
+              </li>
+              <li style={{ marginBottom: 6 }}>
+                Improve app performance and user experience
               </li>
             </ul>
 
@@ -147,6 +158,24 @@ export default function DragonWorldsPrivacyPolicy() {
             </ul>
 
             <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginTop: 40, marginBottom: 12, color: '#111' }}>
+              Data Sharing
+            </h2>
+            <p style={{ marginBottom: 16, color: '#333' }}>
+              We may share your information with:
+            </p>
+            <ul style={{ margin: '0 0 16px 24px', color: '#333' }}>
+              <li style={{ marginBottom: 6 }}>
+                Service providers (cloud hosting, analytics) that assist us in operating the app
+              </li>
+              <li style={{ marginBottom: 6 }}>
+                Legal authorities when required by law
+              </li>
+            </ul>
+            <p style={{ marginBottom: 16, color: '#333' }}>
+              We do not sell your personal information to third parties.
+            </p>
+
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginTop: 40, marginBottom: 12, color: '#111' }}>
               Data Storage and Security
             </h2>
             <p style={{ marginBottom: 16, color: '#333' }}>
@@ -160,9 +189,21 @@ export default function DragonWorldsPrivacyPolicy() {
               Data Retention
             </h2>
             <p style={{ marginBottom: 16, color: '#333' }}>
-              We retain your personal information for as long as your account is active. If you wish to
-              delete your account and associated data, please contact us at the email address provided
-              below.
+              We retain your personal information for as long as your account is active or as needed to
+              provide you with our services. If you delete your account, we will delete your personal
+              data within 30 days, except where we are required to retain it by law.
+            </p>
+
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginTop: 40, marginBottom: 12, color: '#111' }}>
+              Account Deletion
+            </h2>
+            <p style={{ marginBottom: 16, color: '#333' }}>
+              You can request deletion of your account and all associated personal data at any time by
+              contacting us at{' '}
+              <a href="mailto:denneyke@gmail.com" style={{ color: '#c0392b', textDecoration: 'none' }}>
+                denneyke@gmail.com
+              </a>
+              . Upon receiving your request, we will delete your account and personal data within 30 days.
             </p>
 
             <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginTop: 40, marginBottom: 12, color: '#111' }}>
@@ -174,7 +215,35 @@ export default function DragonWorldsPrivacyPolicy() {
               <li style={{ marginBottom: 6 }}>Request correction of inaccurate data</li>
               <li style={{ marginBottom: 6 }}>Request deletion of your account and personal data</li>
               <li style={{ marginBottom: 6 }}>Withdraw consent for data processing at any time</li>
+              <li style={{ marginBottom: 6 }}>Export your personal data</li>
             </ul>
+
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginTop: 40, marginBottom: 12, color: '#111' }}>
+              California Residents (CCPA)
+            </h2>
+            <p style={{ marginBottom: 16, color: '#333' }}>
+              If you are a California resident, you have the right to: know what personal data we collect,
+              request deletion of your data, and opt out of any sale of personal data. We do not sell
+              personal data. To exercise these rights, contact us at{' '}
+              <a href="mailto:denneyke@gmail.com" style={{ color: '#c0392b', textDecoration: 'none' }}>
+                denneyke@gmail.com
+              </a>
+              .
+            </p>
+
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginTop: 40, marginBottom: 12, color: '#111' }}>
+              European Users (GDPR)
+            </h2>
+            <p style={{ marginBottom: 16, color: '#333' }}>
+              If you are located in the European Economic Area, we process your personal data based on
+              your consent, contractual necessity, and our legitimate interests. You have the right to
+              access, rectify, erase, restrict processing, data portability, and object to processing
+              of your personal data. To exercise these rights, contact us at{' '}
+              <a href="mailto:denneyke@gmail.com" style={{ color: '#c0392b', textDecoration: 'none' }}>
+                denneyke@gmail.com
+              </a>
+              .
+            </p>
 
             <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginTop: 40, marginBottom: 12, color: '#111' }}>
               Children's Privacy
@@ -198,8 +267,8 @@ export default function DragonWorldsPrivacyPolicy() {
               Contact Us
             </h2>
             <p style={{ marginBottom: 16, color: '#333' }}>
-              If you have any questions about this Privacy Policy or our data practices, please contact
-              us at:
+              If you have any questions about this Privacy Policy or wish to exercise your data rights,
+              please contact us at:
             </p>
             <p style={{ marginBottom: 16, color: '#333' }}>
               <a href="mailto:denneyke@gmail.com" style={{ color: '#c0392b', textDecoration: 'none' }}>
