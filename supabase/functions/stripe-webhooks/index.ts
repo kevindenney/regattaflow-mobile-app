@@ -7,14 +7,22 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0';
 import Stripe from 'https://esm.sh/stripe@14.10.0?target=deno';
 
-const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') || '', {
+const stripeSecretKey = Deno.env.get('STRIPE_SECRET_KEY');
+if (!stripeSecretKey) throw new Error('STRIPE_SECRET_KEY environment variable is not set');
+
+const stripe = new Stripe(stripeSecretKey, {
   apiVersion: '2023-10-16',
   httpClient: Stripe.createFetchHttpClient(),
 });
 
-const webhookSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET') || '';
-const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const webhookSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET');
+if (!webhookSecret) throw new Error('STRIPE_WEBHOOK_SECRET environment variable is not set');
+
+const supabaseUrl = Deno.env.get('SUPABASE_URL');
+if (!supabaseUrl) throw new Error('SUPABASE_URL environment variable is not set');
+
+const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+if (!supabaseServiceKey) throw new Error('SUPABASE_SERVICE_ROLE_KEY environment variable is not set');
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 

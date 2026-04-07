@@ -8,6 +8,10 @@
 const GEMINI_MODEL = 'gemini-2.5-flash';
 const BASE_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}`;
 
+// Validate API key at module load time so misconfiguration fails fast.
+const _googleAiApiKey = Deno.env.get('GOOGLE_AI_API_KEY');
+if (!_googleAiApiKey) throw new Error('GOOGLE_AI_API_KEY environment variable is not set');
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -44,10 +48,11 @@ export interface GeminiOptions {
  * Retries once on 429 (rate limit) with a 2s backoff.
  */
 export async function callGemini(options: GeminiOptions): Promise<string> {
-  const apiKey = Deno.env.get('GOOGLE_AI_API_KEY');
-  if (!apiKey) throw new Error('GOOGLE_AI_API_KEY not configured');
+  // _googleAiApiKey is validated at module load; use it here.
+  const apiKey = _googleAiApiKey as string;
 
-  const url = `${BASE_URL}:generateContent?key=${apiKey}`;
+  // Build URL separately to avoid logging it (contains API key).
+  const endpoint = `${BASE_URL}:generateContent?key=${apiKey}`;
 
   // Build contents array
   let contents: GeminiMessage[];
@@ -78,15 +83,15 @@ export async function callGemini(options: GeminiOptions): Promise<string> {
   body.generationConfig = generationConfig;
 
   // Call with retry on 429
-  let response = await doFetch(url, body);
+  let response = await doFetch(endpoint, body);
   if (response.status === 429) {
     await sleep(2000);
-    response = await doFetch(url, body);
+    response = await doFetch(endpoint, body);
   }
 
   if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Gemini API error ${response.status}: ${errText}`);
+    // Do not include response body or endpoint URL — they may contain API keys or sensitive details.
+    throw new Error(`Gemini API request failed with status ${response.status}`);
   }
 
   const result = await response.json();

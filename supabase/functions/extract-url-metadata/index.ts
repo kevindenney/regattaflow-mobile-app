@@ -5,7 +5,7 @@
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { corsHeaders } from '../_shared/cors.ts';
+import { getCorsHeaders } from '../_shared/cors.ts';
 
 interface UrlMetadata {
   title: string | null;
@@ -80,7 +80,38 @@ function extractBodyText(html: string): string | null {
   return text.length > 100 ? text.slice(0, 8000) : null;
 }
 
+/**
+ * Reject URLs that resolve to private/internal network ranges (SSRF prevention).
+ */
+function isPrivateUrl(urlString: string): boolean {
+  let hostname: string;
+  try {
+    hostname = new URL(urlString).hostname;
+  } catch {
+    return true; // unparseable — treat as private
+  }
+
+  // Reject loopback and link-local names
+  if (hostname === 'localhost' || hostname === '::1') return true;
+
+  // IPv4 address check
+  const ipv4 = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (ipv4) {
+    const [, a, b, c] = ipv4.map(Number);
+    if (a === 127) return true;                          // 127.x.x.x loopback
+    if (a === 10) return true;                           // 10.x.x.x private
+    if (a === 172 && b >= 16 && b <= 31) return true;   // 172.16-31.x private
+    if (a === 192 && b === 168) return true;             // 192.168.x private
+    if (a === 169 && b === 254) return true;             // 169.254.x link-local
+    if (a === 0) return true;                            // 0.x.x.x reserved
+  }
+
+  return false;
+}
+
 serve(async (req: Request) => {
+  const corsHeaders = getCorsHeaders(req);
+
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -91,6 +122,31 @@ serve(async (req: Request) => {
     if (!url || typeof url !== 'string') {
       return new Response(
         JSON.stringify({ error: 'No URL provided' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // SSRF prevention: only https:// URLs pointing to public hosts
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(url);
+    } catch {
+      return new Response(
+        JSON.stringify({ error: 'Invalid URL' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    if (parsedUrl.protocol !== 'https:') {
+      return new Response(
+        JSON.stringify({ error: 'Only https:// URLs are allowed' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    if (isPrivateUrl(url)) {
+      return new Response(
+        JSON.stringify({ error: 'URL resolves to a disallowed network range' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }

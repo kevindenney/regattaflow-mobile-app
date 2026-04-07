@@ -22,16 +22,18 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { callGemini } from '../_shared/gemini.ts';
+import { getCorsHeaders } from '../_shared/cors.ts';
 import {
   assertPlaybookOwnership,
   authenticate,
-  corsHeaders,
   extractJson,
   insertSuggestions,
   jsonResponse,
 } from '../_shared/playbook.ts';
 
 serve(async (req: Request) => {
+  const corsHeaders = getCorsHeaders(req);
+
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: corsHeaders });
   }
@@ -43,6 +45,14 @@ serve(async (req: Request) => {
 
     const { playbook_id } = await req.json();
     if (!playbook_id) return jsonResponse({ error: 'playbook_id required' }, 400);
+
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!UUID_RE.test(playbook_id)) {
+      return new Response(
+        JSON.stringify({ error: 'playbook_id must be a valid UUID' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
 
     const { interest_id } = await assertPlaybookOwnership(
       supabase,
