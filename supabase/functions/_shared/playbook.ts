@@ -31,8 +31,10 @@ export async function authenticate(req: Request): Promise<AuthContext | Response
   const authHeader = req.headers.get('Authorization');
   if (!authHeader) return jsonResponse({ error: 'Missing authorization' }, 401);
 
-  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  if (!supabaseUrl) throw new Error('Missing required environment variable: SUPABASE_URL');
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!serviceKey) throw new Error('Missing required environment variable: SUPABASE_SERVICE_ROLE_KEY');
   const supabase = createClient(supabaseUrl, serviceKey);
 
   const { data: { user }, error } = await supabase.auth.getUser(

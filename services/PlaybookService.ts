@@ -822,9 +822,16 @@ export async function getPlaybooksSharedWithMe(
     if (error) throw error;
     if (!data?.length) return [];
 
+    interface ShareWithPlaybook {
+      owner_user_id: string;
+      playbooks?: { name: string; interest_id: string } | null;
+    }
+    interface InterestRow { id: string; name: string }
+    interface OwnerRow { id: string; email: string; full_name: string | null }
+
     // Resolve interest names and owner emails in parallel
-    const interestIds = [...new Set(data.map((r: any) => r.playbooks?.interest_id).filter(Boolean))];
-    const ownerIds = [...new Set(data.map((r: any) => r.owner_user_id).filter(Boolean))];
+    const interestIds = [...new Set((data as ShareWithPlaybook[]).map((r) => r.playbooks?.interest_id).filter((id): id is string => typeof id === 'string'))];
+    const ownerIds = [...new Set((data as ShareWithPlaybook[]).map((r) => r.owner_user_id).filter((id): id is string => typeof id === 'string'))];
 
     const [interestRes, ownerRes] = await Promise.all([
       interestIds.length
@@ -835,10 +842,10 @@ export async function getPlaybooksSharedWithMe(
         : { data: [] },
     ]);
 
-    const interestMap = new Map((interestRes.data ?? []).map((i: any) => [i.id, i.name]));
-    const ownerMap = new Map((ownerRes.data ?? []).map((o: any) => [o.id, { email: o.email, name: o.full_name }]));
+    const interestMap = new Map((interestRes.data ?? []).map((i: InterestRow) => [i.id, i.name]));
+    const ownerMap = new Map((ownerRes.data ?? []).map((o: OwnerRow) => [o.id, { email: o.email, name: o.full_name }]));
 
-    return data.map((row: any) => ({
+    return (data as (typeof data[number] & ShareWithPlaybook)[]).map((row) => ({
       ...row,
       playbook_name: row.playbooks?.name ?? 'Playbook',
       interest_name: interestMap.get(row.playbooks?.interest_id) ?? 'Unknown',
@@ -928,7 +935,7 @@ export async function getStudentCompetencySummary(
       .from('betterat_competency_progress')
       .select('status')
       .eq('user_id', studentUserId)
-      .in('competency_id', competencies!.map((c: any) => c.id));
+      .in('competency_id', (competencies ?? []).map((c: { id: string }) => c.id));
 
     if (progErr) throw progErr;
 
@@ -937,7 +944,7 @@ export async function getStudentCompetencySummary(
     let learning = 0;
 
     for (const row of progress ?? []) {
-      const s = (row as any).status;
+      const s = (row as { status: string }).status;
       if (s === 'validated' || s === 'competent') validated++;
       else if (s === 'practicing' || s === 'checkoff_ready') practicing++;
       else if (s === 'learning') learning++;
@@ -1047,14 +1054,16 @@ export interface PlaybookSectionCounts {
   qa: number;
 }
 
+type SupabaseFilterQuery = ReturnType<ReturnType<typeof supabase.from>['select']>;
+
 async function tableCount(
   table: string,
   playbookId: string,
-  extraFilter?: (q: ReturnType<typeof supabase.from>) => ReturnType<typeof supabase.from>,
+  extraFilter?: (q: SupabaseFilterQuery) => SupabaseFilterQuery,
 ): Promise<number> {
   try {
-    let q = supabase.from(table).select('id', { count: 'exact', head: true }).eq('playbook_id', playbookId);
-    if (extraFilter) q = extraFilter(q as any) as any;
+    let q: SupabaseFilterQuery = supabase.from(table).select('id', { count: 'exact', head: true }).eq('playbook_id', playbookId);
+    if (extraFilter) q = extraFilter(q);
     const { count, error } = await q;
     if (error) throw error;
     return count ?? 0;

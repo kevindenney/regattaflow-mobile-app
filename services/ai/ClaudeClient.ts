@@ -17,11 +17,18 @@ export interface ClaudeMessage {
   content: string;
 }
 
+export interface ClaudeRawResponse {
+  provider: string;
+  modelRequested: string;
+  durationMs: number;
+  response: unknown;
+}
+
 export interface ClaudeResponse {
   text: string;
   tokensIn: number;
   tokensOut: number;
-  raw: any;
+  raw: ClaudeRawResponse;
 }
 
 export class ClaudeClient {
@@ -36,7 +43,7 @@ export class ClaudeClient {
   private async invokeRaceCoachingEdgeFunction(
     functionName: string,
     body: Record<string, unknown>
-  ): Promise<{ data: any; error: any }> {
+  ): Promise<{ data: unknown; error: { message: string; detail?: unknown } | null }> {
     if (!this.isNodeRuntime()) {
       return invokeAIEdgeFunction(functionName, { body });
     }
@@ -68,7 +75,14 @@ export class ClaudeClient {
       });
 
       const rawText = await response.text();
-      const parsed = rawText ? JSON.parse(rawText) : null;
+      let parsed: unknown = null;
+      if (rawText) {
+        try {
+          parsed = JSON.parse(rawText);
+        } catch {
+          parsed = null;
+        }
+      }
 
       if (!response.ok) {
         return {
@@ -81,12 +95,11 @@ export class ClaudeClient {
       }
 
       return { data: parsed, error: null };
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : `Edge function ${functionName} invocation failed`;
       return {
         data: null,
-        error: {
-          message: error?.message ?? `Edge function ${functionName} invocation failed`,
-        },
+        error: { message },
       };
     }
   }
@@ -119,7 +132,8 @@ export class ClaudeClient {
         throw apiError;
       }
 
-      const text = typeof data?.text === 'string' ? data.text.trim() : '';
+      const dataObj = data !== null && typeof data === 'object' ? data as Record<string, unknown> : {};
+      const text = typeof dataObj.text === 'string' ? dataObj.text.trim() : '';
 
       const durationMs = Date.now() - start;
       return {

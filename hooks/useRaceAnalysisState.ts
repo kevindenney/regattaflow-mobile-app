@@ -133,7 +133,17 @@ export function useRaceAnalysisState(
         const hasOfficialResult = !!resultData?.position;
 
         // Check for timer session with self-reported data, key moment, and multi-race results
-        let sessionData: any = null;
+        interface TimerSessionStateRow {
+          id: string;
+          notes: string | null;
+          auto_analyzed: boolean | null;
+          self_reported_position: number | null;
+          self_reported_fleet_size: number | null;
+          key_moment: string | null;
+          race_count: number | null;
+          race_results: unknown;
+        }
+        let sessionData: TimerSessionStateRow | null = null;
         const sessionPrimary = await supabase
           .from('race_timer_sessions')
           .select('id, notes, auto_analyzed, self_reported_position, self_reported_fleet_size, key_moment, race_count, race_results')
@@ -142,7 +152,7 @@ export function useRaceAnalysisState(
           .order('end_time', { ascending: false })
           .limit(1)
           .maybeSingle();
-        sessionData = sessionPrimary.data;
+        sessionData = sessionPrimary.data as TimerSessionStateRow | null;
 
         if (isMissingIdColumn(sessionPrimary.error, 'race_timer_sessions', 'regatta_id')) {
           const sessionFallback = await supabase
@@ -153,7 +163,7 @@ export function useRaceAnalysisState(
             .order('end_time', { ascending: false })
             .limit(1)
             .maybeSingle();
-          sessionData = sessionFallback.data;
+          sessionData = sessionFallback.data as TimerSessionStateRow | null;
         }
 
         const hasNotes = sessionData && typeof sessionData.notes === 'string' && sessionData.notes.trim().length > 0;
@@ -169,14 +179,21 @@ export function useRaceAnalysisState(
           (sessionData.race_results as { key_moment?: string | null }[]).some(r => r.key_moment?.trim());
 
         // Check for full race_analysis (structured form-based analysis)
-        let analysisData: any = null;
+        interface RaceAnalysisStateRow {
+          id: string;
+          key_learnings: unknown;
+          overall_satisfaction: string | null;
+          start_notes: string | null;
+          upwind_notes: string | null;
+        }
+        let analysisData: RaceAnalysisStateRow | null = null;
         const primaryAnalysis = await supabase
           .from('race_analysis')
           .select('id, key_learnings, overall_satisfaction, start_notes, upwind_notes')
           .eq('race_id', targetRaceId)
           .eq('sailor_id', targetUserId)
           .maybeSingle();
-        analysisData = primaryAnalysis.data;
+        analysisData = primaryAnalysis.data as RaceAnalysisStateRow | null;
         if (isMissingIdColumn(primaryAnalysis.error, 'race_analysis', 'race_id')) {
           const fallbackAnalysis = await supabase
             .from('race_analysis')
@@ -184,7 +201,7 @@ export function useRaceAnalysisState(
             .eq('regatta_id', targetRaceId)
             .eq('sailor_id', targetUserId)
             .maybeSingle();
-          analysisData = fallbackAnalysis.data;
+          analysisData = fallbackAnalysis.data as RaceAnalysisStateRow | null;
         }
 
         const hasFullAnalysis = !!analysisData?.overall_satisfaction;
@@ -207,7 +224,18 @@ export function useRaceAnalysisState(
         const hasKeyMoment = hasExplicitKeyMoment || hasNotes || hasMultiRaceKeyMoments || (analysisData?.key_learnings && analysisData.key_learnings.length > 0);
 
         // Fetch coach annotations from coach_race_annotations table
-        let annotationsData: any[] | null = null;
+        interface AnnotationRow {
+          id: string;
+          race_id: string | null;
+          regatta_id?: string | null;
+          coach_id: string;
+          field: string;
+          comment: string;
+          is_read: boolean;
+          created_at: string;
+          coach: { full_name: string | null } | null;
+        }
+        let annotationsData: AnnotationRow[] | null = null;
         const primaryAnnotations = await supabase
           .from('coach_race_annotations')
           .select(`
@@ -223,7 +251,7 @@ export function useRaceAnalysisState(
           .eq('race_id', targetRaceId)
           .eq('sailor_id', targetUserId)
           .order('created_at', { ascending: false });
-        annotationsData = primaryAnnotations.data;
+        annotationsData = primaryAnnotations.data as AnnotationRow[] | null;
         if (isMissingIdColumn(primaryAnnotations.error, 'coach_race_annotations', 'race_id')) {
           const fallbackAnnotations = await supabase
             .from('coach_race_annotations')
@@ -240,7 +268,7 @@ export function useRaceAnalysisState(
             .eq('regatta_id', targetRaceId)
             .eq('sailor_id', targetUserId)
             .order('created_at', { ascending: false });
-          annotationsData = fallbackAnnotations.data;
+          annotationsData = fallbackAnnotations.data as AnnotationRow[] | null;
         }
 
         // Transform to CoachAnnotation interface
@@ -248,7 +276,7 @@ export function useRaceAnalysisState(
           id: ann.id,
           raceId: ann.race_id || ann.regatta_id,
           coachId: ann.coach_id,
-          coachName: (ann.coach as { full_name: string | null })?.full_name || 'Coach',
+          coachName: ann.coach?.full_name || 'Coach',
           field: ann.field,
           comment: ann.comment,
           createdAt: new Date(ann.created_at),

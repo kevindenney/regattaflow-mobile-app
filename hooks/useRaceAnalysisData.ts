@@ -204,9 +204,20 @@ export function useRaceAnalysisData(
 
         const sailorProfileId = sailorProfile?.id;
 
+        interface TimerSessionRow {
+          id: string;
+          notes: string | null;
+          end_time: string | null;
+          self_reported_position: number | null;
+          self_reported_fleet_size: number | null;
+          key_moment: string | null;
+          race_count: number | null;
+          race_results: unknown;
+          debrief_responses: Record<string, unknown> | null;
+        }
         // Check for timer session with notes, self-reported data, key moment, debrief responses, and multi-race results
-        let sessionData: any = null;
-        let sessionError: any = null;
+        let sessionData: TimerSessionRow | null = null;
+        let sessionError: { message: string } | null = null;
         const primarySession = await supabase
           .from('race_timer_sessions')
           .select('id, notes, end_time, self_reported_position, self_reported_fleet_size, key_moment, race_count, race_results, debrief_responses')
@@ -299,8 +310,13 @@ export function useRaceAnalysisData(
 
         // Check for race_analysis (structured form-based analysis)
         // Note: race_analysis uses sailor_profiles.id, not auth user.id
-        let raceAnalysis: any = null;
-        let raceAnalysisError: any = null;
+        interface RaceAnalysisRow {
+          id: string;
+          key_learnings: unknown;
+          overall_satisfaction: string | null;
+        }
+        let raceAnalysis: RaceAnalysisRow | null = null;
+        let raceAnalysisError: { message: string } | null = null;
         if (sailorProfileId) {
           const primary = await supabase
             .from('race_analysis')
@@ -438,14 +454,24 @@ export async function fetchAnalysisDataForRaces(
 
     const sailorProfileId = sailorProfile?.id;
 
+    interface BatchTimerSessionRow {
+      id: string;
+      regatta_id?: string | null;
+      race_id?: string | null;
+      notes: string | null;
+      self_reported_position: number | null;
+      self_reported_fleet_size: number | null;
+      key_moment: string | null;
+      debrief_responses: Record<string, unknown> | null;
+    }
     // Batch fetch sessions with self-reported data, key moment, and debrief responses
-    let sessions: any[] | null = null;
+    let sessions: BatchTimerSessionRow[] | null = null;
     const primarySessions = await supabase
       .from('race_timer_sessions')
       .select('id, regatta_id, race_id, notes, self_reported_position, self_reported_fleet_size, key_moment, debrief_responses')
       .in('regatta_id', validRaceIds)
       .eq('sailor_id', userId);
-    sessions = primarySessions.data;
+    sessions = primarySessions.data as BatchTimerSessionRow[] | null;
 
     if (isMissingIdColumn(primarySessions.error, 'race_timer_sessions', 'regatta_id')) {
       const fallbackSessions = await supabase
@@ -453,7 +479,7 @@ export async function fetchAnalysisDataForRaces(
         .select('id, race_id, notes, self_reported_position, self_reported_fleet_size, key_moment, debrief_responses')
         .in('race_id', validRaceIds)
         .eq('sailor_id', userId);
-      sessions = (fallbackSessions.data || []).map((row: any) => ({
+      sessions = (fallbackSessions.data || []).map((row: BatchTimerSessionRow) => ({
         ...row,
         regatta_id: row.race_id,
       }));
@@ -504,26 +530,30 @@ export async function fetchAnalysisDataForRaces(
       }
     }
 
+    interface BatchRaceAnalysisRow {
+      race_id?: string | null;
+      key_learnings: unknown;
+    }
     // Batch fetch race analyses
     // Note: race_analysis uses sailor_profiles.id, not auth user.id
-    const raceAnalysesByRace = new Map<string, { key_learnings: any }>();
+    const raceAnalysesByRace = new Map<string, BatchRaceAnalysisRow>();
 
     if (sailorProfileId) {
-      let raceAnalyses: any[] | null = null;
+      let raceAnalyses: BatchRaceAnalysisRow[] | null = null;
       const primary = await supabase
         .from('race_analysis')
         .select('race_id, key_learnings')
         .in('race_id', validRaceIds)
         .eq('sailor_id', sailorProfileId);
 
-      raceAnalyses = primary.data;
+      raceAnalyses = primary.data as BatchRaceAnalysisRow[] | null;
       if (isMissingIdColumn(primary.error, 'race_analysis', 'race_id')) {
         const fallback = await supabase
           .from('race_analysis')
           .select('regatta_id, key_learnings')
           .in('regatta_id', validRaceIds)
           .eq('sailor_id', sailorProfileId);
-        raceAnalyses = (fallback.data || []).map((row: any) => ({
+        raceAnalyses = (fallback.data || []).map((row: { regatta_id: string | null; key_learnings: unknown }) => ({
           race_id: row.regatta_id,
           key_learnings: row.key_learnings,
         }));
@@ -569,9 +599,12 @@ export async function fetchAnalysisDataForRaces(
           ? aiAnalysis.recommendations[1]
           : undefined;
       } else if (raceAnalysis?.key_learnings) {
-        const learnings = Array.isArray(raceAnalysis.key_learnings)
-          ? raceAnalysis.key_learnings
-          : [raceAnalysis.key_learnings];
+        const rawLearnings = raceAnalysis.key_learnings;
+        const learnings: string[] = Array.isArray(rawLearnings)
+          ? rawLearnings.filter((l): l is string => typeof l === 'string')
+          : typeof rawLearnings === 'string'
+            ? [rawLearnings]
+            : [];
         keyLearning = learnings[0];
         focusNextRace = learnings[1];
       } else if (debriefKeyLearning) {
