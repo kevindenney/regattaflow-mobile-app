@@ -26,6 +26,23 @@ import { createLogger } from '@/lib/utils/logger';
 const HKO_API_BASE = 'https://data.weather.gov.hk/weatherAPI/opendata';
 const logger = createLogger('HKOWeatherProvider');
 
+// Circuit breaker state
+let consecutiveFailures = 0;
+let circuitOpenUntil = 0;
+const MAX_FAILURES = 3;
+const RESET_MS = 60_000;
+
+function checkCircuit(): void {
+  if (consecutiveFailures >= MAX_FAILURES && Date.now() < circuitOpenUntil) {
+    throw new Error('Weather service temporarily unavailable');
+  }
+}
+function recordSuccess(): void { consecutiveFailures = 0; }
+function recordFailure(): void {
+  consecutiveFailures++;
+  if (consecutiveFailures >= MAX_FAILURES) circuitOpenUntil = Date.now() + RESET_MS;
+}
+
 // HKO Tide stations relevant to sailing venues
 export const HKO_TIDE_STATIONS = {
   // Clearwater Bay / Sai Kung area
@@ -165,6 +182,8 @@ export class HKOWeatherProvider {
     lng: number,
     targetTime: Date
   ): Promise<WeatherForecast | null> {
+    checkCircuit();
+
     try {
       // Fetch all HKO data sources
       const [forecastData, currentData, marineData] = await Promise.all([
@@ -175,6 +194,7 @@ export class HKOWeatherProvider {
 
       if (!forecastData) {
         logger.warn('HKO: No forecast data available');
+        recordFailure();
         return null;
       }
 
@@ -188,13 +208,19 @@ export class HKOWeatherProvider {
         logger.warn(`HKO: No forecast for ${targetDate}`);
         // Use first available forecast
         const firstForecast = forecastData.weatherForecast[0];
-        if (!firstForecast) return null;
+        if (!firstForecast) {
+          recordFailure();
+          return null;
+        }
 
+        recordSuccess();
         return this.buildForecast(firstForecast, currentData, marineData, targetTime);
       }
 
+      recordSuccess();
       return this.buildForecast(dayForecast, currentData, marineData, targetTime);
     } catch (error) {
+      recordFailure();
       logger.error('HKO Weather Provider error:', error);
       return null;
     }

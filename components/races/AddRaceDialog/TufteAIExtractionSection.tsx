@@ -29,6 +29,7 @@ import type { MultiRaceExtractedData } from '../AIValidationScreen';
 import { PDFExtractionService } from '@/services/PDFExtractionService';
 import { createLogger } from '@/lib/utils/logger';
 import { extractRaceDetailsFromText } from '@/lib/utils/raceExtraction';
+import { FeatureErrorBoundary } from '@/components/ui/FeatureErrorBoundary';
 
 const logger = createLogger('TufteAIExtractionSection');
 
@@ -376,6 +377,7 @@ export function TufteAIExtractionSection({
   }, [canExtract, isExtracting, setIsExtracting, onExtracted, onMultiRaceDetected, onToggle, activeMethod, pasteContent, urlContent, selectedFile, raceType]);
 
   return (
+    <FeatureErrorBoundary fallbackMessage="AI extraction encountered an error.">
     <View style={styles.container}>
       {/* Header */}
       <Pressable
@@ -500,6 +502,7 @@ export function TufteAIExtractionSection({
         </View>
       )}
     </View>
+    </FeatureErrorBoundary>
   );
 }
 
