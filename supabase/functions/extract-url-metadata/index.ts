@@ -13,6 +13,7 @@ interface UrlMetadata {
   image: string | null;
   siteName: string | null;
   author: string | null;
+  body_text: string | null;
 }
 
 /**
@@ -59,6 +60,24 @@ function decodeEntities(text: string): string {
     .replace(/&#x27;/g, "'")
     .replace(/&#x2F;/g, '/')
     .replace(/&nbsp;/g, ' ');
+}
+
+/**
+ * Strip HTML tags and extract readable body text.
+ * Removes scripts, styles, nav, header, footer, then strips tags.
+ */
+function extractBodyText(html: string): string | null {
+  let text = html;
+  // Remove script/style/nav/header/footer blocks
+  text = text.replace(/<(script|style|nav|header|footer|aside|noscript)[^>]*>[\s\S]*?<\/\1>/gi, ' ');
+  // Remove all HTML tags
+  text = text.replace(/<[^>]+>/g, ' ');
+  // Decode common entities
+  text = decodeEntities(text);
+  // Collapse whitespace
+  text = text.replace(/\s+/g, ' ').trim();
+  // Return null if too short to be useful
+  return text.length > 100 ? text.slice(0, 8000) : null;
 }
 
 serve(async (req: Request) => {
@@ -127,6 +146,7 @@ serve(async (req: Request) => {
             image: null,
             siteName,
             author: null,
+            body_text: null,
           } satisfies UrlMetadata),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
         );
@@ -196,6 +216,7 @@ serve(async (req: Request) => {
       image,
       siteName: rawSiteName ? decodeEntities(rawSiteName) : null,
       author: rawAuthor ? decodeEntities(rawAuthor) : null,
+      body_text: extractBodyText(html),
     };
 
     return new Response(JSON.stringify(metadata), {

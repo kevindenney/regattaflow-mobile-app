@@ -44,6 +44,7 @@ export interface PlaybookResourceRecord {
   source_platform: string | null;
   author_or_creator: string | null;
   description: string | null;
+  body_text: string | null;
   thumbnail_url: string | null;
   capability_goals: string[];
   tags: string[];
@@ -61,6 +62,7 @@ export interface CreatePlaybookResourceInput {
   source_platform?: string | null;
   author_or_creator?: string | null;
   description?: string | null;
+  body_text?: string | null;
   thumbnail_url?: string | null;
   capability_goals?: string[];
   tags?: string[];

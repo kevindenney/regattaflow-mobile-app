@@ -20,12 +20,14 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { IOS_COLORS, IOS_SPACING } from '@/lib/design-tokens-ios';
 import { usePlaybookInbox, useAddInboxItem } from '@/hooks/usePlaybook';
-import { showAlert } from '@/lib/utils/crossPlatformAlert';
+import { router } from 'expo-router';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { PlaybookAIService } from '@/services/ai/PlaybookAIService';
 import type { PlaybookInboxItemRecord, InboxItemKind } from '@/types/playbook';
 
 interface RawInboxCardProps {
   playbookId: string | undefined;
+  onOpenSuggestions?: () => void;
 }
 
 const KIND_ICON: Record<InboxItemKind, keyof typeof import('@expo/vector-icons').Ionicons.glyphMap> = {
@@ -55,7 +57,7 @@ function itemTitle(item: PlaybookInboxItemRecord): string {
   );
 }
 
-export function RawInboxCard({ playbookId }: RawInboxCardProps) {
+export function RawInboxCard({ playbookId, onOpenSuggestions }: RawInboxCardProps) {
   const { data: items = [] } = usePlaybookInbox(playbookId);
   const queryClient = useQueryClient();
   const addInbox = useAddInboxItem();
@@ -75,15 +77,29 @@ export function RawInboxCard({ playbookId }: RawInboxCardProps) {
       await queryClient.invalidateQueries({
         predicate: (query) => {
           const first = query.queryKey[0];
-          return typeof first === 'string' && first.startsWith('playbook');
+          return typeof first === 'string' && (
+            first.startsWith('playbook') ||
+            first.startsWith('library')
+          );
         },
       });
-      const bits = [
-        `${res.ingested} ingested`,
-        res.failed ? `${res.failed} failed` : null,
-        res.suggestions_created ? `${res.suggestions_created} suggestions` : null,
-      ].filter(Boolean);
-      showAlert('Ingest complete', bits.join(' · '));
+      if (res.suggestions_created && res.suggestions_created > 0 && onOpenSuggestions) {
+        showConfirm(
+          'Ingest complete',
+          `${res.ingested} resource${res.ingested !== 1 ? 's' : ''} created, ${res.suggestions_created} concept update${res.suggestions_created !== 1 ? 's' : ''} suggested.`,
+          () => onOpenSuggestions(),
+          { confirmText: 'Review suggestions' },
+        );
+      } else if (res.ingested > 0) {
+        showConfirm(
+          'Ingest complete',
+          `${res.ingested} resource${res.ingested !== 1 ? 's' : ''} added to your Playbook.`,
+          () => router.push('/playbook/resources'),
+          { confirmText: 'View resources' },
+        );
+      } else {
+        showAlert('Ingest complete', 'Nothing to process.');
+      }
     } catch (err) {
       showAlert('Ingest failed', err instanceof Error ? err.message : 'Unknown error');
     } finally {

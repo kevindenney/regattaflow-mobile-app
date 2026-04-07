@@ -163,7 +163,7 @@ export function PlaybookHome() {
         playbookId={playbookId}
         onOpen={() => setDrawerOpen(true)}
       />
-      <RawInboxCard playbookId={playbookId} />
+      <RawInboxCard playbookId={playbookId} onOpenSuggestions={() => setDrawerOpen(true)} />
       <SharedWithCard playbookId={playbookId} />
       <InheritedFromCard
         playbookId={playbookId}

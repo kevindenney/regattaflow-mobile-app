@@ -28,6 +28,68 @@ function extractKeywords(question: string): string[] {
     .slice(0, 6);
 }
 
+/**
+ * Extract the most relevant sections from a long body_text based on keywords.
+ * Splits into paragraphs, scores each by keyword density, returns top chunks.
+ */
+function extractRelevantSections(
+  bodyText: string,
+  keywords: string[],
+  maxChars: number,
+): string {
+  if (!bodyText || bodyText.length <= maxChars) return bodyText || '';
+
+  // Split into paragraph-like chunks (~200 chars each)
+  const chunks: string[] = [];
+  const sentences = bodyText.split(/(?<=[.!?\n])\s+/);
+  let current = '';
+  for (const s of sentences) {
+    if (current.length + s.length > 250 && current.length > 50) {
+      chunks.push(current.trim());
+      current = s;
+    } else {
+      current += ' ' + s;
+    }
+  }
+  if (current.trim()) chunks.push(current.trim());
+
+  // Score each chunk by keyword matches
+  const lower = keywords.map((k) => k.toLowerCase());
+  const scored = chunks.map((chunk) => {
+    const cl = chunk.toLowerCase();
+    let score = 0;
+    for (const kw of lower) {
+      // Count occurrences (not just boolean match)
+      const matches = cl.split(kw).length - 1;
+      score += matches;
+    }
+    return { chunk, score };
+  });
+
+  // Take top-scoring chunks, maintaining original order
+  scored.forEach((s, i) => (s as any).idx = i);
+  const topChunks = scored
+    .filter((s) => s.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 10);
+
+  // Re-sort by original order for coherence
+  topChunks.sort((a, b) => (a as any).idx - (b as any).idx);
+
+  // Also include the first chunk for context (intro)
+  const firstChunk = chunks[0] || '';
+  let result = firstChunk;
+
+  for (const tc of topChunks) {
+    if (result.length + tc.chunk.length > maxChars) break;
+    if (!result.includes(tc.chunk)) {
+      result += '\n...\n' + tc.chunk;
+    }
+  }
+
+  return result.slice(0, maxChars);
+}
+
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: corsHeaders });
@@ -64,12 +126,12 @@ serve(async (req: Request) => {
       .or(orQuery('title') + ',' + orQuery('body_md'))
       .limit(8);
 
-    // Resources
+    // Resources — search title, description, and body_text
     const { data: resources = [] } = await supabase
       .from('playbook_resources')
-      .select('id, title, description, url')
+      .select('id, title, description, body_text, url, resource_type')
       .eq('playbook_id', playbook_id)
-      .or(orQuery('title') + ',' + orQuery('description'))
+      .or(orQuery('title') + ',' + orQuery('description') + ',' + orQuery('body_text'))
       .limit(8);
 
     // Recent debriefs (last 20 steps with debriefs)
@@ -90,11 +152,13 @@ serve(async (req: Request) => {
         review: s.metadata.review,
       }));
 
-    const system = `You are the user's personal Playbook — a compiled knowledge base of their practice in one interest area. Answer the user's question using ONLY the snippets provided. Cite sources inline like [C1], [R2], [D3] where C=concept, R=resource, D=debrief.
+    const system = `You are the user's personal Playbook — a compiled knowledge base of their practice in one interest area. Answer the user's question thoroughly using the snippets provided. Synthesize information across ALL sources (concepts, resources, debriefs) to give a comprehensive answer. Cite sources inline like [C1], [R2], [D3] where C=concept, R=resource, D=debrief.
+
+IMPORTANT: If resources contain detailed technical information relevant to the question, include that detail in your answer. Don't just say "the resource mentions X" — extract and present the specific actionable information.
 
 Return ONLY a JSON object:
 {
-  "answer_md": "<markdown answer with inline citations>",
+  "answer_md": "<markdown answer with inline citations — be specific and actionable>",
   "sources": [{"type": "concept"|"resource"|"debrief", "id": "<uuid>", "label": "<display title>"}]
 }
 
@@ -102,10 +166,15 @@ If the snippets don't contain enough information, say so honestly in answer_md a
 
     const sourceBlocks: string[] = [];
     (concepts ?? []).forEach((c: any, i: number) => {
-      sourceBlocks.push(`[C${i + 1}] CONCEPT ${c.id} — ${c.title}\n${c.body_md?.slice(0, 800) ?? ''}`);
+      sourceBlocks.push(`[C${i + 1}] CONCEPT ${c.id} — ${c.title}\n${c.body_md?.slice(0, 1200) ?? ''}`);
     });
     (resources ?? []).forEach((r: any, i: number) => {
-      sourceBlocks.push(`[R${i + 1}] RESOURCE ${r.id} — ${r.title}\n${r.description?.slice(0, 400) ?? ''}`);
+      // Extract keyword-relevant sections from body_text (not just first N chars)
+      const content = r.body_text
+        ? extractRelevantSections(r.body_text, keywords, 4000)
+        : r.description?.slice(0, 400) || '';
+      const urlLine = r.url ? `\nURL: ${r.url}` : '';
+      sourceBlocks.push(`[R${i + 1}] RESOURCE ${r.id} — ${r.title} (${r.resource_type ?? 'unknown'})${urlLine}\n${content}`);
     });
     stepSnippets.forEach((s: any, i: number) => {
       sourceBlocks.push(`[D${i + 1}] DEBRIEF ${s.id} — ${s.title}\n${JSON.stringify(s.review).slice(0, 600)}`);
@@ -119,7 +188,7 @@ ${sourceBlocks.join('\n\n')}`;
     const aiText = await callGemini({
       system,
       userContent: [{ text: userPrompt }],
-      maxOutputTokens: 1500,
+      maxOutputTokens: 2000,
       temperature: 0.3,
     });
 

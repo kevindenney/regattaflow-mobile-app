@@ -84,8 +84,14 @@ Given a completed step's debrief and the user's playbook concepts, propose 0–3
 1. concept_update — update an existing concept with new insight. MUST include target_concept_id.
 2. concept_create — create a brand new concept when the debrief reveals knowledge that doesn't fit any existing concept. Do NOT include target_concept_id.
 
+CRITICAL: For concept_update, the body_md must MERGE new insights INTO the existing concept body:
+- Preserve ALL existing content from the concept
+- ADD new bullet points, paragraphs, or sections with the fresh insight from the debrief
+- Use markdown formatting (headings, bullets, bold for key terms)
+- The result should be richer than before, not a replacement
+
 Return ONLY a JSON array. Each item:
-  { "type": "concept_update"|"concept_create", "target_concept_id": "<uuid or omit for create>", "title": "<concept title>", "body_md": "<markdown content>", "rationale": "<one-sentence why>" }
+  { "type": "concept_update"|"concept_create", "target_concept_id": "<uuid or omit for create>", "title": "<concept title>", "body_md": "<merged markdown that builds on existing content>", "rationale": "<one-sentence why>" }
 
 If nothing meaningful was learned, return [].`;
 

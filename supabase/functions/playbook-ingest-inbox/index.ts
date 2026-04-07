@@ -60,7 +60,72 @@ serve(async (req: Request) => {
     if (itemsErr) throw itemsErr;
 
     if (!items || items.length === 0) {
-      return jsonResponse({ ingested: 0, failed: 0, suggestions_created: 0 });
+      // Backfill: re-extract body_text for resources with URLs but no body_text
+      const { data: staleResources = [] } = await supabase
+        .from('playbook_resources')
+        .select('id, url, resource_type')
+        .eq('playbook_id', playbook_id)
+        .is('body_text', null)
+        .not('url', 'is', null)
+        .limit(5);
+
+      let backfilled = 0;
+      for (const res of staleResources ?? []) {
+        try {
+          const urlLower = (res.url as string).toLowerCase();
+          const isPdf = urlLower.endsWith('.pdf') || urlLower.includes('.pdf?') || res.resource_type === 'document';
+
+          if (isPdf) {
+            const pdfResp = await fetch(
+              `${Deno.env.get('SUPABASE_URL')}/functions/v1/extract-pdf-text`,
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: req.headers.get('Authorization') ?? '',
+                },
+                body: JSON.stringify({ url: res.url }),
+              },
+            );
+            if (pdfResp.ok) {
+              const pdf = await pdfResp.json();
+              if (pdf.success && pdf.text) {
+                await supabase
+                  .from('playbook_resources')
+                  .update({ body_text: (pdf.text as string).slice(0, 32000) })
+                  .eq('id', res.id);
+                backfilled++;
+              }
+            }
+          } else {
+            const metaResp = await fetch(
+              `${Deno.env.get('SUPABASE_URL')}/functions/v1/extract-url-metadata`,
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: req.headers.get('Authorization') ?? '',
+                },
+                body: JSON.stringify({ url: res.url }),
+              },
+            );
+            if (metaResp.ok) {
+              const meta = await metaResp.json();
+              if (meta.body_text) {
+                await supabase
+                  .from('playbook_resources')
+                  .update({ body_text: meta.body_text })
+                  .eq('id', res.id);
+                backfilled++;
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('Backfill failed for resource', res.id, err);
+        }
+      }
+
+      return jsonResponse({ ingested: 0, failed: 0, suggestions_created: 0, backfilled });
     }
 
     let ingested = 0;
@@ -84,6 +149,7 @@ serve(async (req: Request) => {
         // Enrich content for URL items by fetching page metadata or PDF text
         let enrichedTitle = item.title;
         let enrichedDescription = item.raw_text;
+        let enrichedBodyText: string | null = item.raw_text || null;
         let enrichedMetadata = item.metadata ?? {};
         let isPdf = false;
 
@@ -142,6 +208,7 @@ serve(async (req: Request) => {
                   enrichedTitle = enrichedTitle === item.source_url
                     ? (firstLine || prettyName) || enrichedTitle
                     : enrichedTitle;
+                  enrichedBodyText = pdf.text.slice(0, 32000);
                   enrichedDescription = pdf.text.slice(0, 8000);
                   enrichedMetadata = {
                     ...enrichedMetadata,
@@ -172,6 +239,7 @@ serve(async (req: Request) => {
               if (metaResp.ok) {
                 const meta = await metaResp.json();
                 enrichedTitle = meta.title || enrichedTitle || item.source_url;
+                enrichedBodyText = meta.body_text || enrichedBodyText;
                 enrichedDescription = meta.body_text?.slice(0, 4000) || meta.description || enrichedDescription;
                 enrichedMetadata = {
                   ...enrichedMetadata,
@@ -204,6 +272,7 @@ serve(async (req: Request) => {
             url: item.source_url,
             resource_type: resourceType,
             description: (enrichedDescription ?? '').slice(0, 500) || null,
+            body_text: enrichedBodyText,
             metadata: enrichedMetadata,
           })
           .select('id, title')
@@ -234,20 +303,26 @@ serve(async (req: Request) => {
 
             const system = `You are BetterAt's Playbook coach. A new resource was added to the user's knowledge base. Decide whether it provides fresh, actionable insight for any existing concept.
 
+IMPORTANT: Your job is to MERGE new insights INTO the existing concept body, not replace it. The body_md you return must:
+1. Preserve ALL existing content from the concept
+2. ADD new bullet points, paragraphs, or sections with fresh info from the resource
+3. Use markdown formatting (headings, bullets, bold for key terms)
+4. Be comprehensive — combine what the user already knew with what the resource adds
+
 Return ONLY a JSON array (possibly empty) of concept_update proposals:
-  [{ "target_concept_id": "<uuid>", "body_md": "<merged markdown>", "rationale": "<one line>" }]
+  [{ "target_concept_id": "<uuid>", "body_md": "<merged markdown that builds on existing content>", "rationale": "<one line>" }]
 Return [] if nothing relevant.`;
 
             const userPrompt = `NEW RESOURCE: ${resource.title}
-${contentForAI.slice(0, 4000)}
+${contentForAI.slice(0, 6000)}
 
-EXISTING CONCEPTS:
-${(concepts ?? []).map((c: any) => `- [${c.id}] ${c.title}`).join('\n')}`;
+EXISTING CONCEPTS (with current body content):
+${(concepts ?? []).map((c: any) => `- [${c.id}] ${c.title}\n  Current body:\n${(c.body_md || '(empty)').slice(0, 800)}\n`).join('\n')}`;
 
             const aiText = await callGemini({
               system,
               userContent: [{ text: userPrompt }],
-              maxOutputTokens: 800,
+              maxOutputTokens: 2000,
               temperature: 0.3,
             });
 
