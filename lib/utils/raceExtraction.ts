@@ -9,11 +9,20 @@ export interface NormalizedRaceExtractionResult {
   missingFields?: string;
 }
 
+const MAX_TEXT_LENGTH = 1_000_000;
+
 export async function extractRaceDetailsFromText(text: string): Promise<NormalizedRaceExtractionResult> {
   if (!text || text.trim().length === 0) {
     return {
       success: false,
       error: 'No text provided for extraction',
+    };
+  }
+
+  if (text.length > MAX_TEXT_LENGTH) {
+    return {
+      success: false,
+      error: `Text exceeds maximum length of ${MAX_TEXT_LENGTH.toLocaleString()} characters`,
     };
   }
 
@@ -24,7 +33,7 @@ export async function extractRaceDetailsFromText(text: string): Promise<Normaliz
   if (error) {
     return {
       success: false,
-      error: error.message || 'Race detail extraction failed',
+      error: error?.message ?? 'Race detail extraction failed',
     };
   }
 

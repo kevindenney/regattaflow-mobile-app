@@ -31,6 +31,19 @@ interface URLInputProps {
 }
 
 /**
+ * Validate that a URL string uses only http: or https: protocol
+ * using the URL constructor for robust parsing.
+ */
+function isValidUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Parse URLs from text input (one URL per line)
  */
 function parseUrls(text: string): string[] {
@@ -39,7 +52,8 @@ function parseUrls(text: string): string[] {
   return text
     .split(/[\n\r]+/) // Split by newlines
     .map(line => line.trim())
-    .filter(line => line.startsWith('http://') || line.startsWith('https://'));
+    .filter(line => line.startsWith('http://') || line.startsWith('https://'))
+    .filter(isValidUrl);
 }
 
 /**
