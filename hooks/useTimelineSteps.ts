@@ -21,6 +21,7 @@ import type {
   CreateTimelineStepInput,
   UpdateTimelineStepInput,
 } from '@/types/timeline-steps';
+import { PlaybookAIService } from '@/services/ai/PlaybookAIService';
 
 // ---------------------------------------------------------------------------
 // Query keys
@@ -123,9 +124,11 @@ export function useCreateStep() {
 
   return useMutation<TimelineStepRecord, Error, CreateTimelineStepInput>({
     mutationFn: createStep,
-    onSuccess: (_data, variables) => {
+    onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['timeline-steps', variables.user_id] });
       queryClient.invalidateQueries({ queryKey: KEYS.myTimeline() });
+      // Fire cross-interest suggestions for the new step (fire-and-forget)
+      PlaybookAIService.crossInterest(data.id).catch(() => {});
     },
   });
 }

@@ -1,24 +1,13 @@
 /**
- * Library Screen - Route wrapper
+ * Library → Playbook redirect
  *
- * Dedicated library screen for the current interest.
+ * The Library tab has been replaced by the Playbook. This route exists solely
+ * so that existing deep links (`/library`, `/library?...`) continue to resolve.
  */
 
 import React from 'react';
-import { Stack } from 'expo-router';
-import { LibraryManager } from '@/components/library/LibraryManager';
+import { Redirect } from 'expo-router';
 
-export default function LibraryScreen() {
-  return (
-    <>
-      <Stack.Screen
-        options={{
-          title: 'Library',
-          headerShown: true,
-          headerBackTitle: 'Back',
-        }}
-      />
-      <LibraryManager />
-    </>
-  );
+export default function LibraryRedirect() {
+  return <Redirect href="/playbook/resources" />;
 }

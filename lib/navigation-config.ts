@@ -164,7 +164,7 @@ export const SAILOR_NAV_ITEMS: NavItem[] = [
 ];
 
 export const SAILOR_SECONDARY_ITEMS: NavItem[] = [
-  { key: 'library', label: 'Library', route: '/library', icon: 'library-outline' },
+  { key: 'playbook', label: 'Playbook', route: '/playbook', icon: 'book-outline' },
 ];
 
 export const COACH_NAV_ITEMS: NavItem[] = [

@@ -1,0 +1,1143 @@
+/**
+ * PlaybookService — CRUD for the BetterAt Playbook system.
+ *
+ * Replaces LibraryService in the post-rename schema (user_libraries → playbooks,
+ * library_resources → playbook_resources) and exposes read/list helpers for the
+ * new Playbook tables: concepts, patterns, reviews, qa, suggestions, inbox,
+ * shares, and typed step↔playbook links.
+ *
+ * See `supabase/migrations/20260405000000_playbook_system.sql` for schema.
+ */
+
+import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
+import type {
+  PlaybookRecord,
+  PlaybookResourceRecord,
+  PlaybookConceptRecord,
+  PlaybookPatternRecord,
+  PlaybookReviewRecord,
+  PlaybookQARecord,
+  PlaybookSuggestionRecord,
+  PlaybookInboxItemRecord,
+  PlaybookShareRecord,
+  StepPlaybookLinkRecord,
+  CreatePlaybookResourceInput,
+  UpdatePlaybookResourceInput,
+  CreatePlaybookConceptInput,
+  UpdatePlaybookConceptInput,
+  CreatePlaybookInboxItemInput,
+  CreatePlaybookShareInput,
+  ResourceType,
+  SuggestionStatus,
+} from '@/types/playbook';
+
+const logger = createLogger('PlaybookService');
+
+// ---------------------------------------------------------------------------
+// 1. Get or auto-create a playbook for (user, interest)
+// ---------------------------------------------------------------------------
+
+export async function getOrCreatePlaybook(
+  userId: string,
+  interestId: string,
+): Promise<PlaybookRecord> {
+  if (!userId?.trim() || !interestId?.trim()) {
+    throw new Error('getOrCreatePlaybook requires valid userId and interestId');
+  }
+
+  try {
+    const { data: existing, error: fetchErr } = await supabase
+      .from('playbooks')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('interest_id', interestId)
+      .maybeSingle();
+
+    if (fetchErr) {
+      if (fetchErr.code === '42P01' || fetchErr.message?.includes('relation')) {
+        logger.warn('playbooks table not found — migration may not be applied');
+        throw new Error('Playbook system not yet available');
+      }
+      throw fetchErr;
+    }
+    if (existing) return existing as PlaybookRecord;
+
+    const { data: created, error: createErr } = await supabase
+      .from('playbooks')
+      .insert({ user_id: userId, interest_id: interestId, name: 'My Playbook' })
+      .select()
+      .single();
+
+    if (createErr) throw createErr;
+    return created as PlaybookRecord;
+  } catch (err) {
+    logger.error('Failed to get/create playbook', err);
+    throw err;
+  }
+}
+
+/**
+ * Fetch a playbook by id. Used by the shared read-only coach view; RLS
+ * grants SELECT to accepted invitees via the shared-read policy.
+ */
+export async function getPlaybookById(
+  playbookId: string,
+): Promise<PlaybookRecord | null> {
+  try {
+    const { data, error } = await supabase
+      .from('playbooks')
+      .select('*')
+      .eq('id', playbookId)
+      .maybeSingle();
+    if (error) throw error;
+    return (data ?? null) as PlaybookRecord | null;
+  } catch (err) {
+    logger.error('Failed to fetch playbook by id', err);
+    throw err;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 2. Resources — CRUD (ported from LibraryService)
+// ---------------------------------------------------------------------------
+
+export async function getResources(
+  playbookId: string,
+  filters?: { resourceType?: ResourceType },
+): Promise<PlaybookResourceRecord[]> {
+  try {
+    let query = supabase
+      .from('playbook_resources')
+      .select('*')
+      .eq('playbook_id', playbookId)
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: false });
+
+    if (filters?.resourceType) {
+      query = query.eq('resource_type', filters.resourceType);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return (data ?? []) as PlaybookResourceRecord[];
+  } catch (err) {
+    logger.error('Failed to fetch playbook resources', err);
+    throw err;
+  }
+}
+
+export async function addResource(
+  userId: string,
+  input: CreatePlaybookResourceInput,
+): Promise<PlaybookResourceRecord> {
+  try {
+    const { data, error } = await supabase
+      .from('playbook_resources')
+      .insert({
+        playbook_id: input.playbook_id,
+        user_id: userId,
+        title: input.title,
+        url: input.url ?? null,
+        resource_type: input.resource_type ?? 'other',
+        source_platform: input.source_platform ?? null,
+        author_or_creator: input.author_or_creator ?? null,
+        description: input.description ?? null,
+        thumbnail_url: input.thumbnail_url ?? null,
+        capability_goals: input.capability_goals ?? [],
+        tags: input.tags ?? [],
+        sort_order: input.sort_order ?? 0,
+        metadata: input.metadata ?? {},
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data as PlaybookResourceRecord;
+  } catch (err) {
+    logger.error('Failed to add playbook resource', err);
+    throw err;
+  }
+}
+
+export async function updateResource(
+  resourceId: string,
+  input: UpdatePlaybookResourceInput,
+): Promise<PlaybookResourceRecord> {
+  try {
+    const { data, error } = await supabase
+      .from('playbook_resources')
+      .update(input)
+      .eq('id', resourceId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data as PlaybookResourceRecord;
+  } catch (err) {
+    logger.error('Failed to update playbook resource', err);
+    throw err;
+  }
+}
+
+export async function deleteResource(resourceId: string): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from('playbook_resources')
+      .delete()
+      .eq('id', resourceId);
+
+    if (error) throw error;
+  } catch (err) {
+    logger.error('Failed to delete playbook resource', err);
+    throw err;
+  }
+}
+
+export async function getResourcesByIds(
+  ids: string[],
+): Promise<PlaybookResourceRecord[]> {
+  if (ids.length === 0) return [];
+  try {
+    const { data, error } = await supabase
+      .from('playbook_resources')
+      .select('*')
+      .in('id', ids);
+
+    if (error) throw error;
+    return (data ?? []) as PlaybookResourceRecord[];
+  } catch (err) {
+    logger.error('Failed to fetch resources by ids', err);
+    throw err;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 3. Concepts — list + inherited baselines
+// ---------------------------------------------------------------------------
+
+/**
+ * List concepts visible to this playbook: personal/forked rows owned by this
+ * playbook PLUS baseline rows (playbook_id IS NULL) for the same interest.
+ */
+export async function getConcepts(
+  playbookId: string,
+  interestId: string,
+): Promise<PlaybookConceptRecord[]> {
+  try {
+    const { data, error } = await supabase
+      .from('playbook_concepts')
+      .select('*')
+      .or(`playbook_id.eq.${playbookId},and(playbook_id.is.null,interest_id.eq.${interestId})`)
+      .order('title', { ascending: true });
+
+    if (error) throw error;
+    return (data ?? []) as PlaybookConceptRecord[];
+  } catch (err) {
+    logger.error('Failed to fetch concepts', err);
+    throw err;
+  }
+}
+
+export async function getConceptBySlug(
+  playbookId: string,
+  interestId: string,
+  slug: string,
+): Promise<PlaybookConceptRecord | null> {
+  try {
+    const { data, error } = await supabase
+      .from('playbook_concepts')
+      .select('*')
+      .or(`playbook_id.eq.${playbookId},and(playbook_id.is.null,interest_id.eq.${interestId})`)
+      .eq('slug', slug)
+      .order('playbook_id', { ascending: false, nullsFirst: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    return (data ?? null) as PlaybookConceptRecord | null;
+  } catch (err) {
+    logger.error('Failed to fetch concept by slug', err);
+    throw err;
+  }
+}
+
+export async function getConceptById(
+  conceptId: string,
+): Promise<PlaybookConceptRecord | null> {
+  try {
+    const { data, error } = await supabase
+      .from('playbook_concepts')
+      .select('*')
+      .eq('id', conceptId)
+      .maybeSingle();
+    if (error) throw error;
+    return (data ?? null) as PlaybookConceptRecord | null;
+  } catch (err) {
+    logger.error('Failed to fetch concept by id', err);
+    throw err;
+  }
+}
+
+export async function createConcept(
+  userId: string,
+  input: CreatePlaybookConceptInput,
+): Promise<PlaybookConceptRecord> {
+  try {
+    const { data, error } = await supabase
+      .from('playbook_concepts')
+      .insert({
+        playbook_id: input.playbook_id,
+        user_id: userId,
+        origin: input.origin,
+        source_concept_id: input.source_concept_id ?? null,
+        interest_id: input.interest_id,
+        pathway_id: input.pathway_id ?? null,
+        slug: input.slug,
+        title: input.title,
+        body_md: input.body_md ?? '',
+        updated_by: userId,
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    return data as PlaybookConceptRecord;
+  } catch (err) {
+    logger.error('Failed to create concept', err);
+    throw err;
+  }
+}
+
+export async function updateConcept(
+  userId: string,
+  conceptId: string,
+  input: UpdatePlaybookConceptInput,
+): Promise<PlaybookConceptRecord> {
+  try {
+    const { data, error } = await supabase
+      .from('playbook_concepts')
+      .update({ ...input, updated_by: userId })
+      .eq('id', conceptId)
+      .select()
+      .single();
+    if (error) throw error;
+    return data as PlaybookConceptRecord;
+  } catch (err) {
+    logger.error('Failed to update concept', err);
+    throw err;
+  }
+}
+
+export async function deleteConcept(conceptId: string): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from('playbook_concepts')
+      .delete()
+      .eq('id', conceptId);
+    if (error) throw error;
+  } catch (err) {
+    logger.error('Failed to delete concept', err);
+    throw err;
+  }
+}
+
+/**
+ * Fork a baseline concept into this playbook. Clones title/body_md/slug with
+ * `origin='forked'` and `source_concept_id` pointing at the original. Safe to
+ * call when the baseline body has diverged — we still take a snapshot at fork
+ * time, so personal edits on the clone will not be clobbered by upstream
+ * changes. Pulling latest is a separate explicit action.
+ */
+export async function forkConcept(
+  userId: string,
+  playbookId: string,
+  sourceConceptId: string,
+): Promise<PlaybookConceptRecord> {
+  try {
+    const source = await getConceptById(sourceConceptId);
+    if (!source) throw new Error('Source concept not found');
+    if (source.origin !== 'platform_baseline' && source.origin !== 'pathway_baseline') {
+      throw new Error('Only baseline concepts can be forked');
+    }
+    return await createConcept(userId, {
+      playbook_id: playbookId,
+      origin: 'forked',
+      source_concept_id: source.id,
+      interest_id: source.interest_id,
+      pathway_id: source.pathway_id,
+      slug: source.slug,
+      title: source.title,
+      body_md: source.body_md,
+    });
+  } catch (err) {
+    logger.error('Failed to fork concept', err);
+    throw err;
+  }
+}
+
+/**
+ * Pull the latest body from the upstream source concept. Overwrites the
+ * current body_md with the upstream version. Callers should only invoke this
+ * after showing the user a three-way diff and confirming.
+ */
+export async function pullLatestConcept(
+  userId: string,
+  conceptId: string,
+): Promise<PlaybookConceptRecord> {
+  try {
+    const current = await getConceptById(conceptId);
+    if (!current) throw new Error('Concept not found');
+    if (!current.source_concept_id) {
+      throw new Error('Concept has no upstream source');
+    }
+    const source = await getConceptById(current.source_concept_id);
+    if (!source) throw new Error('Upstream source concept missing');
+    return await updateConcept(userId, conceptId, {
+      title: source.title,
+      body_md: source.body_md,
+    });
+  } catch (err) {
+    logger.error('Failed to pull latest concept', err);
+    throw err;
+  }
+}
+
+/**
+ * True when the upstream source has a newer `updated_at` than this fork.
+ * Used to surface the "Pull latest available" badge on forked rows.
+ */
+export async function hasUpstreamUpdate(
+  concept: PlaybookConceptRecord,
+): Promise<boolean> {
+  if (!concept.source_concept_id) return false;
+  try {
+    const source = await getConceptById(concept.source_concept_id);
+    if (!source) return false;
+    return new Date(source.updated_at) > new Date(concept.updated_at);
+  } catch {
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 4. Patterns / Reviews / Q&A — list helpers
+// ---------------------------------------------------------------------------
+
+export async function getPatterns(
+  playbookId: string,
+): Promise<PlaybookPatternRecord[]> {
+  try {
+    const { data, error } = await supabase
+      .from('playbook_patterns')
+      .select('*')
+      .eq('playbook_id', playbookId)
+      .neq('status', 'dismissed')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return (data ?? []) as PlaybookPatternRecord[];
+  } catch (err) {
+    logger.error('Failed to fetch patterns', err);
+    throw err;
+  }
+}
+
+export async function getReviews(
+  playbookId: string,
+  limit = 20,
+): Promise<PlaybookReviewRecord[]> {
+  try {
+    const { data, error } = await supabase
+      .from('playbook_reviews')
+      .select('*')
+      .eq('playbook_id', playbookId)
+      .order('period_end', { ascending: false })
+      .limit(limit);
+
+    if (error) throw error;
+    return (data ?? []) as PlaybookReviewRecord[];
+  } catch (err) {
+    logger.error('Failed to fetch reviews', err);
+    throw err;
+  }
+}
+
+export async function updatePatternStatus(
+  patternId: string,
+  status: 'active' | 'pinned' | 'dismissed',
+): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from('playbook_patterns')
+      .update({ status })
+      .eq('id', patternId);
+    if (error) throw error;
+  } catch (err) {
+    logger.error('Failed to update pattern status', err);
+    throw err;
+  }
+}
+
+export interface CreatePlaybookQAInput {
+  playbook_id: string;
+  user_id: string;
+  question: string;
+  answer_md: string;
+  sources?: Array<Record<string, unknown>>;
+  pinned?: boolean;
+}
+
+export async function createQA(
+  input: CreatePlaybookQAInput,
+): Promise<PlaybookQARecord> {
+  try {
+    const { data, error } = await supabase
+      .from('playbook_qa')
+      .insert({
+        playbook_id: input.playbook_id,
+        user_id: input.user_id,
+        question: input.question,
+        answer_md: input.answer_md,
+        sources: input.sources ?? [],
+        pinned: input.pinned ?? false,
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    return data as PlaybookQARecord;
+  } catch (err) {
+    logger.error('Failed to create qa', err);
+    throw err;
+  }
+}
+
+export async function setQAPinned(
+  qaId: string,
+  pinned: boolean,
+): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from('playbook_qa')
+      .update({ pinned })
+      .eq('id', qaId);
+    if (error) throw error;
+  } catch (err) {
+    logger.error('Failed to pin/unpin qa', err);
+    throw err;
+  }
+}
+
+export async function deleteQA(qaId: string): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from('playbook_qa')
+      .delete()
+      .eq('id', qaId);
+    if (error) throw error;
+  } catch (err) {
+    logger.error('Failed to delete qa', err);
+    throw err;
+  }
+}
+
+export async function getQA(
+  playbookId: string,
+  limit = 50,
+): Promise<PlaybookQARecord[]> {
+  try {
+    const { data, error } = await supabase
+      .from('playbook_qa')
+      .select('*')
+      .eq('playbook_id', playbookId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) throw error;
+    return (data ?? []) as PlaybookQARecord[];
+  } catch (err) {
+    logger.error('Failed to fetch qa', err);
+    throw err;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 5. Suggestions queue
+// ---------------------------------------------------------------------------
+
+export async function getSuggestions(
+  playbookId: string,
+  status: SuggestionStatus = 'pending',
+  limit = 100,
+): Promise<PlaybookSuggestionRecord[]> {
+  try {
+    const { data, error } = await supabase
+      .from('playbook_suggestions')
+      .select('*')
+      .eq('playbook_id', playbookId)
+      .eq('status', status)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) throw error;
+    return (data ?? []) as PlaybookSuggestionRecord[];
+  } catch (err) {
+    logger.error('Failed to fetch suggestions', err);
+    throw err;
+  }
+}
+
+/**
+ * Fetch pending cross_interest_idea suggestions that target a specific step.
+ * Cross-interest suggestions are written to the *source* playbook with
+ * `payload.target_step_id` set, so we query across all playbook_suggestions
+ * and filter by the JSON path. RLS ensures only the owner sees them.
+ */
+export async function getCrossInterestSuggestionsForStep(
+  stepId: string,
+): Promise<PlaybookSuggestionRecord[]> {
+  try {
+    const { data, error } = await supabase
+      .from('playbook_suggestions')
+      .select('*')
+      .eq('kind', 'cross_interest_idea')
+      .eq('status', 'pending')
+      .filter('payload->>target_step_id', 'eq', stepId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return (data ?? []) as PlaybookSuggestionRecord[];
+  } catch (err) {
+    logger.error('Failed to fetch cross-interest suggestions for step', err);
+    return [];
+  }
+}
+
+export async function countPendingSuggestions(
+  playbookId: string,
+): Promise<number> {
+  try {
+    const { count, error } = await supabase
+      .from('playbook_suggestions')
+      .select('id', { count: 'exact', head: true })
+      .eq('playbook_id', playbookId)
+      .eq('status', 'pending');
+
+    if (error) throw error;
+    return count ?? 0;
+  } catch (err) {
+    logger.error('Failed to count pending suggestions', err);
+    return 0;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 6. Raw Inbox
+// ---------------------------------------------------------------------------
+
+export async function getInboxItems(
+  playbookId: string,
+  status: 'pending' | 'ingesting' | 'ingested' | 'dismissed' | 'failed' = 'pending',
+): Promise<PlaybookInboxItemRecord[]> {
+  try {
+    const { data, error } = await supabase
+      .from('playbook_inbox_items')
+      .select('*')
+      .eq('playbook_id', playbookId)
+      .eq('status', status)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return (data ?? []) as PlaybookInboxItemRecord[];
+  } catch (err) {
+    logger.error('Failed to fetch inbox items', err);
+    throw err;
+  }
+}
+
+export async function addInboxItem(
+  userId: string,
+  input: CreatePlaybookInboxItemInput,
+): Promise<PlaybookInboxItemRecord> {
+  try {
+    const { data, error } = await supabase
+      .from('playbook_inbox_items')
+      .insert({
+        playbook_id: input.playbook_id,
+        user_id: userId,
+        kind: input.kind,
+        title: input.title ?? null,
+        source_url: input.source_url ?? null,
+        storage_path: input.storage_path ?? null,
+        raw_text: input.raw_text ?? null,
+        metadata: input.metadata ?? {},
+        status: 'pending',
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data as PlaybookInboxItemRecord;
+  } catch (err) {
+    logger.error('Failed to add inbox item', err);
+    throw err;
+  }
+}
+
+export async function dismissInboxItem(itemId: string): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from('playbook_inbox_items')
+      .update({ status: 'dismissed' })
+      .eq('id', itemId);
+
+    if (error) throw error;
+  } catch (err) {
+    logger.error('Failed to dismiss inbox item', err);
+    throw err;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 7. Shares — coach / teammate read-only access
+// ---------------------------------------------------------------------------
+
+export async function getShares(
+  playbookId: string,
+): Promise<PlaybookShareRecord[]> {
+  try {
+    const { data, error } = await supabase
+      .from('playbook_shares')
+      .select('*')
+      .eq('playbook_id', playbookId)
+      .in('invite_status', ['pending', 'accepted'])
+      .order('invited_at', { ascending: false });
+
+    if (error) throw error;
+    return (data ?? []) as PlaybookShareRecord[];
+  } catch (err) {
+    logger.error('Failed to fetch shares', err);
+    throw err;
+  }
+}
+
+export async function createShare(
+  ownerUserId: string,
+  input: CreatePlaybookShareInput,
+): Promise<PlaybookShareRecord> {
+  try {
+    const { data, error } = await supabase
+      .from('playbook_shares')
+      .insert({
+        playbook_id: input.playbook_id,
+        owner_user_id: ownerUserId,
+        shared_with_email: input.shared_with_email,
+        shared_with_user_id: input.shared_with_user_id ?? null,
+        role: 'view',
+        invite_status: 'pending',
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data as PlaybookShareRecord;
+  } catch (err) {
+    logger.error('Failed to create share', err);
+    throw err;
+  }
+}
+
+export async function revokeShare(shareId: string): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from('playbook_shares')
+      .update({ invite_status: 'revoked' })
+      .eq('id', shareId);
+
+    if (error) throw error;
+  } catch (err) {
+    logger.error('Failed to revoke share', err);
+    throw err;
+  }
+}
+
+/**
+ * Accept a pending share by flipping invite_status to 'accepted'.
+ * Called when an invitee first visits the shared playbook view.
+ */
+export async function acceptShare(
+  userId: string,
+  playbookId: string,
+): Promise<void> {
+  try {
+    // Find the user's email from profiles to match against shared_with_email
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('email')
+      .eq('id', userId)
+      .single();
+
+    if (!profile?.email) return;
+
+    const { error } = await supabase
+      .from('playbook_shares')
+      .update({
+        invite_status: 'accepted',
+        shared_with_user_id: userId,
+        accepted_at: new Date().toISOString(),
+      })
+      .eq('playbook_id', playbookId)
+      .eq('shared_with_email', profile.email)
+      .eq('invite_status', 'pending');
+
+    if (error) throw error;
+  } catch (err) {
+    logger.error('Failed to accept share', err);
+    // Don't throw — accepting is best-effort on page load
+  }
+}
+
+/**
+ * Fetch playbooks that have been shared with the current user.
+ */
+export async function getPlaybooksSharedWithMe(
+  userId: string,
+): Promise<Array<PlaybookShareRecord & { playbook_name: string; interest_name: string; owner_email: string; owner_name: string }>> {
+  try {
+    // First get the user's email
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('email')
+      .eq('id', userId)
+      .single();
+
+    if (!profile?.email) return [];
+
+    // Find shares where user is accepted OR pending by email
+    const { data, error } = await supabase
+      .from('playbook_shares')
+      .select('*, playbooks!inner(name, interest_id)')
+      .or(`shared_with_user_id.eq.${userId},shared_with_email.eq.${profile.email}`)
+      .in('invite_status', ['pending', 'accepted'])
+      .order('invited_at', { ascending: false });
+
+    if (error) throw error;
+    if (!data?.length) return [];
+
+    // Resolve interest names and owner emails in parallel
+    const interestIds = [...new Set(data.map((r: any) => r.playbooks?.interest_id).filter(Boolean))];
+    const ownerIds = [...new Set(data.map((r: any) => r.owner_user_id).filter(Boolean))];
+
+    const [interestRes, ownerRes] = await Promise.all([
+      interestIds.length
+        ? supabase.from('interests').select('id, name').in('id', interestIds)
+        : { data: [] },
+      ownerIds.length
+        ? supabase.from('profiles').select('id, email, full_name').in('id', ownerIds)
+        : { data: [] },
+    ]);
+
+    const interestMap = new Map((interestRes.data ?? []).map((i: any) => [i.id, i.name]));
+    const ownerMap = new Map((ownerRes.data ?? []).map((o: any) => [o.id, { email: o.email, name: o.full_name }]));
+
+    return data.map((row: any) => ({
+      ...row,
+      playbook_name: row.playbooks?.name ?? 'Playbook',
+      interest_name: interestMap.get(row.playbooks?.interest_id) ?? 'Unknown',
+      owner_email: ownerMap.get(row.owner_user_id)?.email ?? 'Unknown',
+      owner_name: ownerMap.get(row.owner_user_id)?.name ?? '',
+    }));
+  } catch (err) {
+    logger.error('Failed to get shared playbooks', err);
+    return [];
+  }
+}
+
+/**
+ * Fetch section counts for multiple playbooks in parallel.
+ * Used by the instructor dashboard to show aggregate stats per student.
+ */
+export async function getBatchSectionCounts(
+  playbooks: Array<{ playbook_id: string; interest_id: string }>,
+): Promise<Map<string, PlaybookSectionCounts>> {
+  const results = await Promise.all(
+    playbooks.map(async (p) => {
+      const counts = await getSectionCounts(p.playbook_id, p.interest_id);
+      return [p.playbook_id, counts] as const;
+    }),
+  );
+  return new Map(results);
+}
+
+/**
+ * Fetch the latest review for multiple playbooks in parallel.
+ * Returns a map of playbook_id → latest review summary.
+ */
+export async function getBatchLatestReviews(
+  playbookIds: string[],
+): Promise<Map<string, { summary_md: string; period_end: string }>> {
+  const results = await Promise.all(
+    playbookIds.map(async (id) => {
+      try {
+        const { data } = await supabase
+          .from('playbook_reviews')
+          .select('summary_md, period_end')
+          .eq('playbook_id', id)
+          .order('period_end', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        return [id, data] as const;
+      } catch {
+        return [id, null] as const;
+      }
+    }),
+  );
+  return new Map(
+    results
+      .filter((r): r is [string, { summary_md: string; period_end: string }] => r[1] != null),
+  );
+}
+
+/**
+ * Fetch competency progress summary for a student (via their playbook share).
+ * Returns total competencies, count by status, and overall percent validated/competent.
+ */
+export interface CompetencyProgressSummary {
+  total: number;
+  validated: number;
+  practicing: number;
+  learning: number;
+  overallPercent: number;
+}
+
+export async function getStudentCompetencySummary(
+  studentUserId: string,
+  interestId: string,
+): Promise<CompetencyProgressSummary> {
+  try {
+    // Get all competencies for this interest
+    const { data: competencies, error: compErr } = await supabase
+      .from('betterat_competencies')
+      .select('id')
+      .eq('interest_id', interestId);
+
+    if (compErr) throw compErr;
+    const total = competencies?.length ?? 0;
+    if (total === 0) return { total: 0, validated: 0, practicing: 0, learning: 0, overallPercent: 0 };
+
+    // Get student's progress rows
+    const { data: progress, error: progErr } = await supabase
+      .from('betterat_competency_progress')
+      .select('status')
+      .eq('user_id', studentUserId)
+      .in('competency_id', competencies!.map((c: any) => c.id));
+
+    if (progErr) throw progErr;
+
+    let validated = 0;
+    let practicing = 0;
+    let learning = 0;
+
+    for (const row of progress ?? []) {
+      const s = (row as any).status;
+      if (s === 'validated' || s === 'competent') validated++;
+      else if (s === 'practicing' || s === 'checkoff_ready') practicing++;
+      else if (s === 'learning') learning++;
+    }
+
+    return {
+      total,
+      validated,
+      practicing,
+      learning,
+      overallPercent: total > 0 ? Math.round((validated / total) * 100) : 0,
+    };
+  } catch (err) {
+    logger.warn('Failed to get student competency summary', err);
+    return { total: 0, validated: 0, practicing: 0, learning: 0, overallPercent: 0 };
+  }
+}
+
+/**
+ * Batch fetch competency summaries for multiple students.
+ */
+export async function getBatchCompetencySummaries(
+  students: Array<{ user_id: string; interest_id: string }>,
+): Promise<Map<string, CompetencyProgressSummary>> {
+  const results = await Promise.all(
+    students.map(async (s) => {
+      const summary = await getStudentCompetencySummary(s.user_id, s.interest_id);
+      return [s.user_id, summary] as const;
+    }),
+  );
+  return new Map(results);
+}
+
+// ---------------------------------------------------------------------------
+// 8. Recent debriefs — last N steps with populated `metadata.review`
+// ---------------------------------------------------------------------------
+
+export interface RecentDebriefStep {
+  id: string;
+  title: string | null;
+  step_date: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export async function getRecentDebriefs(
+  userId: string,
+  interestId: string,
+  limit = 5,
+): Promise<RecentDebriefStep[]> {
+  try {
+    // Pull recent steps for this user+interest; filter client-side for
+    // metadata.review presence (pg jsonb "is not empty" is awkward at the
+    // supabase-js layer and this list is small).
+    // timeline_steps has `starts_at` / `completed_at` / `due_at` — there is no
+    // `step_date` column. We project `completed_at` into `step_date` for the
+    // UI and sort by completed_at then starts_at then created_at.
+    const { data, error } = await supabase
+      .from('timeline_steps')
+      .select('id, title, completed_at, starts_at, metadata, created_at')
+      .eq('user_id', userId)
+      .eq('interest_id', interestId)
+      .order('completed_at', { ascending: false, nullsFirst: false })
+      .order('starts_at', { ascending: false, nullsFirst: false })
+      .order('created_at', { ascending: false })
+      .limit(limit * 4);
+
+    if (error) throw error;
+
+    type TimelineStepRow = {
+      id: string;
+      title: string | null;
+      completed_at: string | null;
+      starts_at: string | null;
+      metadata: Record<string, unknown> | null;
+      created_at: string;
+    };
+    const rows = (data ?? []) as TimelineStepRow[];
+    return rows
+      .filter((r) => {
+        const review = (r.metadata as { review?: Record<string, unknown> } | null)?.review;
+        return review && Object.keys(review).length > 0;
+      })
+      .slice(0, limit)
+      .map<RecentDebriefStep>((r) => ({
+        id: r.id,
+        title: r.title,
+        step_date: r.completed_at ?? r.starts_at ?? null,
+        metadata: r.metadata,
+        created_at: r.created_at,
+      }));
+  } catch (err) {
+    logger.error('Failed to fetch recent debriefs', err);
+    return [];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 9. Section counts (for Playbook home tabs)
+// ---------------------------------------------------------------------------
+
+export interface PlaybookSectionCounts {
+  concepts: number;
+  resources: number;
+  patterns: number;
+  reviews: number;
+  qa: number;
+}
+
+async function tableCount(
+  table: string,
+  playbookId: string,
+  extraFilter?: (q: ReturnType<typeof supabase.from>) => ReturnType<typeof supabase.from>,
+): Promise<number> {
+  try {
+    let q = supabase.from(table).select('id', { count: 'exact', head: true }).eq('playbook_id', playbookId);
+    if (extraFilter) q = extraFilter(q as any) as any;
+    const { count, error } = await q;
+    if (error) throw error;
+    return count ?? 0;
+  } catch (err) {
+    logger.warn(`Failed to count ${table}`, err);
+    return 0;
+  }
+}
+
+export async function getSectionCounts(
+  playbookId: string,
+  interestId: string,
+): Promise<PlaybookSectionCounts> {
+  const [concepts, resources, patterns, reviews, qa] = await Promise.all([
+    // Concepts include baselines
+    (async () => {
+      try {
+        const { count, error } = await supabase
+          .from('playbook_concepts')
+          .select('id', { count: 'exact', head: true })
+          .or(`playbook_id.eq.${playbookId},and(playbook_id.is.null,interest_id.eq.${interestId})`);
+        if (error) throw error;
+        return count ?? 0;
+      } catch (err) {
+        logger.warn('Failed to count concepts', err);
+        return 0;
+      }
+    })(),
+    tableCount('playbook_resources', playbookId),
+    tableCount('playbook_patterns', playbookId),
+    tableCount('playbook_reviews', playbookId),
+    tableCount('playbook_qa', playbookId),
+  ]);
+
+  return { concepts, resources, patterns, reviews, qa };
+}
+
+// ---------------------------------------------------------------------------
+// 10. Step ↔ Playbook typed links
+// ---------------------------------------------------------------------------
+
+export async function getStepLinks(
+  stepId: string,
+): Promise<StepPlaybookLinkRecord[]> {
+  try {
+    const { data, error } = await supabase
+      .from('step_playbook_links')
+      .select('*')
+      .eq('step_id', stepId);
+
+    if (error) throw error;
+    return (data ?? []) as StepPlaybookLinkRecord[];
+  } catch (err) {
+    logger.error('Failed to fetch step links', err);
+    return [];
+  }
+}
+
+/**
+ * Add a single link between a step and a playbook item. Idempotent — ignores
+ * unique-constraint collisions.
+ */
+export async function addStepLink(
+  stepId: string,
+  itemType: StepPlaybookLinkRecord['item_type'],
+  itemId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from('step_playbook_links')
+    .insert({ step_id: stepId, item_type: itemType, item_id: itemId });
+  if (error && error.code !== '23505') throw error;
+}
+
+export async function removeStepLink(
+  stepId: string,
+  itemType: StepPlaybookLinkRecord['item_type'],
+  itemId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from('step_playbook_links')
+    .delete()
+    .eq('step_id', stepId)
+    .eq('item_type', itemType)
+    .eq('item_id', itemId);
+  if (error) throw error;
+}

@@ -940,7 +940,7 @@ ${otherInterestBlock}`;
     // Try dedicated edge function
     try {
       const { data, error } = await supabase.functions.invoke('step-plan-suggest', {
-        body: { system: systemPrompt, prompt: userMessage, max_tokens: 512 },
+        body: { system: systemPrompt, prompt: userMessage, max_tokens: 2048 },
       });
       if (!error && data?.text) responseText = data.text;
     } catch {

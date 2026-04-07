@@ -44,6 +44,7 @@ import { NutritionReview } from '@/components/step/NutritionReview';
 import { extractMeasurements, getMeasurementHistory, type MeasurementHistorySummary } from '@/services/MeasurementExtractionService';
 import { extractNutritionToStep } from '@/services/ai/NutritionExtractionService';
 import { extractCompetencyAssessment } from '@/services/ai/CompetencyExtractionService';
+import { PlaybookAIService } from '@/services/ai/PlaybookAIService';
 import { getActiveConversation, completeConversation } from '@/services/AIConversationService';
 import { extractInsights } from '@/services/AIMemoryService';
 import { getDailyTargets } from '@/services/NutritionService';
@@ -229,6 +230,7 @@ export function StepCritiqueContent({ stepId, onNextStepCreated, readOnly }: Ste
   const queryClient = useQueryClient();
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initializedRef = useRef(false);
+  const [playbookIngesting, setPlaybookIngesting] = useState(false);
 
   const metadata = (step?.metadata ?? {}) as StepMetadata;
   const planData: StepPlanData = metadata.plan ?? {};
@@ -403,7 +405,26 @@ export function StepCritiqueContent({ stepId, onNextStepCreated, readOnly }: Ste
   ];
 
   // Complete / save review
+  const isSaving = playbookIngesting || updateStep.isPending;
   const handleSaveReview = useCallback(() => {
+    if (playbookIngesting || updateStep.isPending) return;
+    // Fire Playbook debrief ingest immediately — independent of the status update
+    // so re-saving a completed step still triggers a fresh AI pass.
+    setPlaybookIngesting(true);
+    PlaybookAIService.ingestDebrief(stepId)
+      .then(() => {
+        // Auto-refresh suggestion counts so user sees new suggestions immediately
+        queryClient.invalidateQueries({
+          predicate: (query) => {
+            const first = query.queryKey[0];
+            return typeof first === 'string' && first.startsWith('playbook');
+          },
+        });
+      })
+      .catch((err) => {
+        console.warn('[StepCritique] Playbook ingest-debrief failed:', err);
+      })
+      .finally(() => setPlaybookIngesting(false));
     updateStep.mutate(
       { stepId, input: { status: 'completed' } },
       {
@@ -433,7 +454,7 @@ export function StepCritiqueContent({ stepId, onNextStepCreated, readOnly }: Ste
         },
       },
     );
-  }, [stepId, updateStep, step, user?.id, currentInterest?.id, localCapabilityRatings, mappedCompetencies, localWentWell]);
+  }, [stepId, updateStep, step, user?.id, currentInterest?.id, localCapabilityRatings, mappedCompetencies, localWentWell, playbookIngesting, queryClient]);
 
   const isCompleted = step?.status === 'completed';
 
@@ -909,8 +930,16 @@ export function StepCritiqueContent({ stepId, onNextStepCreated, readOnly }: Ste
       {/* ── BUTTONS ── (hidden for collaborators) */}
       {readOnly ? null : !isCompleted ? (
         <View style={s.buttonGroup}>
-          <Pressable style={s.saveButton} onPress={handleSaveReview}>
-            <Ionicons name="checkmark-circle-outline" size={18} color="#FFFFFF" />
+          <Pressable
+            style={[s.saveButton, isSaving && { opacity: 0.6 }]}
+            onPress={handleSaveReview}
+            disabled={isSaving}
+          >
+            {isSaving ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Ionicons name="checkmark-circle-outline" size={18} color="#FFFFFF" />
+            )}
             <Text style={s.saveButtonText}>Complete & Save Review</Text>
           </Pressable>
           <Pressable style={s.shareButton} onPress={() => setShareSheetOpen(true)}>
@@ -924,6 +953,20 @@ export function StepCritiqueContent({ stepId, onNextStepCreated, readOnly }: Ste
             <Ionicons name="checkmark-circle" size={18} color={C.accent} />
             <Text style={s.completedText}>Review Complete</Text>
           </View>
+          <Pressable
+            style={[s.shareButton, isSaving && { opacity: 0.5 }]}
+            onPress={handleSaveReview}
+            disabled={isSaving}
+          >
+            {isSaving ? (
+              <ActivityIndicator size="small" color={C.labelMid} />
+            ) : (
+              <Ionicons name="refresh-outline" size={18} color={C.labelMid} />
+            )}
+            <Text style={s.shareButtonText}>
+              {isSaving ? 'Updating…' : 'Update Review'}
+            </Text>
+          </Pressable>
           {!createdNextId ? (
             <Pressable
               style={[s.saveButton, creatingNext && { opacity: 0.6 }]}

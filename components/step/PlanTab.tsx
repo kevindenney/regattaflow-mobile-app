@@ -11,10 +11,12 @@ import { PlanQuestionCard } from './PlanQuestionCard';
 import { SubStepEditor } from './SubStepEditor';
 import { BrainDumpEntry } from './BrainDumpEntry';
 import { ConversationalCapture } from './ConversationalCapture';
-import { ResourcePicker } from '@/components/library/ResourcePicker';
+import { PlaybookPicker, type PlaybookPickerSelection } from '@/components/playbook/PlaybookPicker';
 import { ResourceTypeIcon } from '@/components/library/ResourceTypeIcon';
 import { getResourcesByIds } from '@/services/LibraryService';
+import { addStepLink } from '@/services/PlaybookService';
 import { CrossInterestSuggestions } from './CrossInterestSuggestions';
+import { FromOtherPlaybooks } from './FromOtherPlaybooks';
 import { DateEnrichmentCard } from './DateEnrichmentCard';
 import { createStep } from '@/services/TimelineStepService';
 import { useAuth } from '@/providers/AuthProvider';
@@ -60,7 +62,7 @@ export function PlanTab({
   const { user } = useAuth();
   const catLabels = getStepCategoryLabels(stepCategory);
   const { userInterests } = useInterest();
-  const [showResourcePicker, setShowResourcePicker] = useState(false);
+  const [showPlaybookPicker, setShowPlaybookPicker] = useState(false);
   const [showCollaboratorPicker, setShowCollaboratorPicker] = useState(false);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [linkedResources, setLinkedResources] = useState<LibraryResourceRecord[]>([]);
@@ -77,13 +79,24 @@ export function PlanTab({
     getResourcesByIds(linkedIds).then(setLinkedResources).catch(() => {});
   }, [linkedIds.join(',')]);
 
-  const handleSelectResources = useCallback((resources: LibraryResourceRecord[]) => {
-    const newIds = resources.map((r) => r.id);
-    const existingIds = planData.linked_resource_ids ?? [];
-    const mergedIds = [...new Set([...existingIds, ...newIds])];
-    onUpdate({ linked_resource_ids: mergedIds });
-    setShowResourcePicker(false);
-  }, [planData.linked_resource_ids, onUpdate]);
+  const handleSelectPlaybookItems = useCallback((selections: PlaybookPickerSelection[]) => {
+    // Dual-write: maintain linked_resource_ids for resource-type selections (one-release migration safety)
+    const newResourceIds = selections
+      .filter((s) => s.item_type === 'resource')
+      .map((s) => s.item_id);
+    if (newResourceIds.length > 0) {
+      const existingIds = planData.linked_resource_ids ?? [];
+      const mergedIds = [...new Set([...existingIds, ...newResourceIds])];
+      onUpdate({ linked_resource_ids: mergedIds });
+    }
+    // Typed step_playbook_links for every selection (fire-and-forget)
+    if (stepId) {
+      selections.forEach((s) => {
+        addStepLink(stepId, s.item_type, s.item_id).catch(() => {});
+      });
+    }
+    setShowPlaybookPicker(false);
+  }, [planData.linked_resource_ids, onUpdate, stepId]);
 
   const handleRemoveResource = useCallback((resourceId: string) => {
     const updated = (planData.linked_resource_ids ?? []).filter((id) => id !== resourceId);
@@ -232,10 +245,10 @@ export function PlanTab({
         {!readOnly && (
           <Pressable
             style={styles.addLibraryButton}
-            onPress={() => setShowResourcePicker(true)}
+            onPress={() => setShowPlaybookPicker(true)}
           >
-            <Ionicons name="library-outline" size={18} color={STEP_COLORS.accent} />
-            <Text style={styles.addLibraryText}>Add from Library</Text>
+            <Ionicons name="book-outline" size={18} color={STEP_COLORS.accent} />
+            <Text style={styles.addLibraryText}>Add from Playbook</Text>
           </Pressable>
         )}
       </PlanQuestionCard>
@@ -469,6 +482,11 @@ export function PlanTab({
         </View>
       )}
 
+      {/* From other Playbooks — cross_interest_idea suggestions from the AI queue */}
+      {stepId && !readOnly && (
+        <FromOtherPlaybooks stepId={stepId} />
+      )}
+
       {/* Cross-interest suggestions */}
       {stepId && !readOnly && (
         <CrossInterestSuggestions
@@ -519,14 +537,14 @@ export function PlanTab({
 
       {footer}
 
-      {/* Resource picker modal */}
+      {/* Playbook picker modal */}
       {!readOnly && (
-        <ResourcePicker
-          visible={showResourcePicker}
+        <PlaybookPicker
+          visible={showPlaybookPicker}
           interestId={interestId}
-          onSelect={handleSelectResources}
-          onClose={() => setShowResourcePicker(false)}
-          excludeIds={linkedIds}
+          onSelect={handleSelectPlaybookItems}
+          onClose={() => setShowPlaybookPicker(false)}
+          excludeKeys={linkedIds.map((id) => `resource:${id}`)}
         />
       )}
 

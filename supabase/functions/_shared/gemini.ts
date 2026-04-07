@@ -66,10 +66,16 @@ export async function callGemini(options: GeminiOptions): Promise<string> {
     body.systemInstruction = { parts: [{ text: options.system }] };
   }
 
-  const generationConfig: Record<string, unknown> = {};
+  // Disable thinking by default — gemini-2.5-flash otherwise consumes the
+  // maxOutputTokens budget on internal reasoning and can return an empty
+  // response, especially on smaller budgets. Callers almost always want plain
+  // output (JSON extraction, short suggestions, etc.).
+  const generationConfig: Record<string, unknown> = {
+    thinkingConfig: { thinkingBudget: 0 },
+  };
   if (options.maxOutputTokens) generationConfig.maxOutputTokens = options.maxOutputTokens;
   if (options.temperature !== undefined) generationConfig.temperature = options.temperature;
-  if (Object.keys(generationConfig).length > 0) body.generationConfig = generationConfig;
+  body.generationConfig = generationConfig;
 
   // Call with retry on 429
   let response = await doFetch(url, body);

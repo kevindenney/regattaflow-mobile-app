@@ -16,8 +16,10 @@ import { PlanQuestionCard } from './PlanQuestionCard';
 import { SubStepEditor } from './SubStepEditor';
 import { CollaboratorPicker } from './CollaboratorPicker';
 import { CourseContextSheet } from './CourseContextSheet';
-import { ResourcePicker } from '@/components/library/ResourcePicker';
+import { PlaybookPicker, type PlaybookPickerSelection } from '@/components/playbook/PlaybookPicker';
 import { ResourceTypeIcon } from '@/components/library/ResourceTypeIcon';
+import { addStepLink } from '@/services/PlaybookService';
+import { FromOtherPlaybooks } from './FromOtherPlaybooks';
 import { useStepDetail, useUpdateStepMetadata } from '@/hooks/useStepDetail';
 import { useUpdateStep } from '@/hooks/useTimelineSteps';
 import { useQueryClient } from '@tanstack/react-query';
@@ -69,7 +71,7 @@ export function StepPlanQuestions({
   const { currentInterest, userInterests } = useInterest();
   const catLabels = getStepCategoryLabels(step?.category);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [showResourcePicker, setShowResourcePicker] = useState(false);
+  const [showPlaybookPicker, setShowPlaybookPicker] = useState(false);
   const [showCompetencyPicker, setShowCompetencyPicker] = useState(false);
   const [linkedResources, setLinkedResources] = useState<LibraryResourceRecord[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
@@ -358,12 +360,26 @@ export function StepPlanQuestions({
     debouncedSave({ where_location: location });
   }, [debouncedSave]);
 
-  const handleSelectResources = useCallback(async (resources: LibraryResourceRecord[]) => {
-    const newIds = resources.map((r) => r.id);
+  const handleSelectPlaybookItems = useCallback(async (selections: PlaybookPickerSelection[]) => {
+    // Write typed step_playbook_links for every selection (fire-and-forget)
+    selections.forEach((s) => {
+      addStepLink(stepId, s.item_type, s.item_id).catch(() => {});
+    });
+
+    // Dual-write linked_resource_ids for resource-type selections (one-release migration safety)
+    const newResourceIds = selections
+      .filter((s) => s.item_type === 'resource')
+      .map((s) => s.item_id);
+
+    // Resolve resource records for the auto-plan pathway below
+    const resources: LibraryResourceRecord[] = newResourceIds.length
+      ? await getResourcesByIds(newResourceIds).catch(() => [])
+      : [];
+
     const existingIds = planDataRef.current.linked_resource_ids ?? [];
-    const mergedIds = [...new Set([...existingIds, ...newIds])];
+    const mergedIds = [...new Set([...existingIds, ...newResourceIds])];
     debouncedSave({ linked_resource_ids: mergedIds });
-    setShowResourcePicker(false);
+    setShowPlaybookPicker(false);
 
     // If plan fields are mostly empty, auto-generate from the first new resource
     const currentPlan = planDataRef.current;
@@ -418,7 +434,7 @@ export function StepPlanQuestions({
         setAiLoading(false);
       }
     }
-  }, [debouncedSave, interestId, currentInterest, user?.id]);
+  }, [debouncedSave, interestId, currentInterest, user?.id, stepId, suggestedUserSkills]);
 
   const handleRemoveResource = useCallback((resourceId: string) => {
     const updated = (planDataRef.current.linked_resource_ids ?? []).filter((id) => id !== resourceId);
@@ -870,7 +886,7 @@ RULES:
         {!readOnly && (
           <Pressable
             style={styles.addLibraryButton}
-            onPress={() => setShowResourcePicker(true)}
+            onPress={() => setShowPlaybookPicker(true)}
           >
             <Ionicons name="library-outline" size={18} color={STEP_COLORS.accent} />
             <Text style={styles.addLibraryText}>Add from Library</Text>
@@ -1273,6 +1289,9 @@ RULES:
         </View>
       )}
 
+      {/* From other Playbooks — cross_interest_idea suggestions from the AI queue */}
+      {!readOnly && <FromOtherPlaybooks stepId={stepId} />}
+
       {/* Cross-interest suggestions */}
       {!readOnly && <CrossInterestSuggestions
         stepId={stepId}
@@ -1311,14 +1330,14 @@ RULES:
         }}
       />}
 
-      {/* Resource picker modal */}
+      {/* Playbook picker modal */}
       {!readOnly && (
-        <ResourcePicker
-          visible={showResourcePicker}
+        <PlaybookPicker
+          visible={showPlaybookPicker}
           interestId={interestId}
-          onSelect={handleSelectResources}
-          onClose={() => setShowResourcePicker(false)}
-          excludeIds={linkedIds}
+          onSelect={handleSelectPlaybookItems}
+          onClose={() => setShowPlaybookPicker(false)}
+          excludeKeys={linkedIds.map((id) => `resource:${id}`)}
         />
       )}
     </View>

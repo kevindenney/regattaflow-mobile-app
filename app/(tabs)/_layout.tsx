@@ -612,6 +612,17 @@ function TabLayoutInner() {
             tabBarButton: isTabVisible('fleet') ? undefined : () => null,
           }}
         />
+        {/* Hidden: Playbook (secondary nav item, nested stack with sub-routes) */}
+        <Tabs.Screen
+          name="playbook"
+          options={{
+            title: 'Playbook',
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="book-outline" size={size} color={color} />
+            ),
+            tabBarButton: () => null,
+          }}
+        />
         <Tabs.Screen
           name="events"
           options={{

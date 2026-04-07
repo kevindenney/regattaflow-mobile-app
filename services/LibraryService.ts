@@ -1,5 +1,11 @@
 /**
  * LibraryService — CRUD for user libraries and resources.
+ *
+ * DEPRECATED: Phase 1 of the Playbook migration renamed `user_libraries` →
+ * `playbooks` and `library_resources` → `playbook_resources` (with
+ * `library_id` → `playbook_id`). This file stays as a thin compat shim so the
+ * `components/library/*` UI keeps working unchanged; Phase 10 deletes it in
+ * favor of PlaybookService + ported UI.
  */
 
 import { supabase } from '@/services/supabase';
@@ -31,7 +37,7 @@ export async function getUserLibrary(
   try {
     // Try to find existing library
     const { data: existing, error: fetchErr } = await supabase
-      .from('user_libraries')
+      .from('playbooks')
       .select('*')
       .eq('user_id', userId)
       .eq('interest_id', interestId)
@@ -40,7 +46,7 @@ export async function getUserLibrary(
     if (fetchErr) {
       // Table may not exist yet — surface a clear message instead of cryptic 400
       if (fetchErr.code === '42P01' || fetchErr.message?.includes('relation')) {
-        logger.warn('user_libraries table not found — migration may not be applied');
+        logger.warn('playbooks table not found — migration may not be applied');
         throw new Error('Library system not yet available');
       }
       throw fetchErr;
@@ -49,8 +55,8 @@ export async function getUserLibrary(
 
     // Auto-create
     const { data: created, error: createErr } = await supabase
-      .from('user_libraries')
-      .insert({ user_id: userId, interest_id: interestId, name: 'My Library' })
+      .from('playbooks')
+      .insert({ user_id: userId, interest_id: interestId, name: 'My Playbook' })
       .select()
       .single();
 
@@ -72,9 +78,9 @@ export async function getResources(
 ): Promise<LibraryResourceRecord[]> {
   try {
     let query = supabase
-      .from('library_resources')
+      .from('playbook_resources')
       .select('*')
-      .eq('library_id', libraryId)
+      .eq('playbook_id', libraryId)
       .order('sort_order', { ascending: true })
       .order('created_at', { ascending: false });
 
@@ -101,9 +107,9 @@ export async function addResource(
 ): Promise<LibraryResourceRecord> {
   try {
     const { data, error } = await supabase
-      .from('library_resources')
+      .from('playbook_resources')
       .insert({
-        library_id: input.library_id,
+        playbook_id: input.library_id,
         user_id: userId,
         title: input.title,
         url: input.url ?? null,
@@ -138,7 +144,7 @@ export async function updateResource(
 ): Promise<LibraryResourceRecord> {
   try {
     const { data, error } = await supabase
-      .from('library_resources')
+      .from('playbook_resources')
       .update(input)
       .eq('id', resourceId)
       .select()
@@ -159,7 +165,7 @@ export async function updateResource(
 export async function deleteResource(resourceId: string): Promise<void> {
   try {
     const { error } = await supabase
-      .from('library_resources')
+      .from('playbook_resources')
       .delete()
       .eq('id', resourceId);
 
@@ -180,7 +186,7 @@ export async function getResourcesByIds(
   if (ids.length === 0) return [];
   try {
     const { data, error } = await supabase
-      .from('library_resources')
+      .from('playbook_resources')
       .select('*')
       .in('id', ids);
 
@@ -202,7 +208,7 @@ export async function markLessonCompleted(
 ): Promise<LibraryResourceRecord> {
   try {
     const { data: resource, error: fetchErr } = await supabase
-      .from('library_resources')
+      .from('playbook_resources')
       .select('metadata')
       .eq('id', resourceId)
       .single();
@@ -219,7 +225,7 @@ export async function markLessonCompleted(
     const updatedMeta = { ...meta, progress };
 
     const { data, error } = await supabase
-      .from('library_resources')
+      .from('playbook_resources')
       .update({ metadata: updatedMeta })
       .eq('id', resourceId)
       .select()
@@ -243,7 +249,7 @@ export async function unmarkLessonCompleted(
 ): Promise<LibraryResourceRecord> {
   try {
     const { data: resource, error: fetchErr } = await supabase
-      .from('library_resources')
+      .from('playbook_resources')
       .select('metadata')
       .eq('id', resourceId)
       .single();
@@ -259,7 +265,7 @@ export async function unmarkLessonCompleted(
     const updatedMeta = { ...meta, progress };
 
     const { data, error } = await supabase
-      .from('library_resources')
+      .from('playbook_resources')
       .update({ metadata: updatedMeta })
       .eq('id', resourceId)
       .select()
