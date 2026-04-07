@@ -114,12 +114,17 @@ function transformExtractionResult(result: any, raceType: string): ExtractedRace
     return undefined;
   };
 
+  // Apply length limits to extracted fields
+  const raceName = truncate(result.raceName || result.race_name, FIELD_LIMITS.raceName);
+  const location = truncate(result.venue || result.location, FIELD_LIMITS.location);
+  const description = truncate(result.courseDescription, FIELD_LIMITS.description);
+
   return {
     basic: [
-      createField('Race Name', result.raceName || result.race_name, result.raceName ? 'high' : 'missing'),
+      createField('Race Name', raceName, result.raceName ? 'high' : 'missing'),
       createField('Date', result.raceDate || result.date, result.raceDate || result.date ? 'high' : 'missing'),
       createField('Start Time', result.warningSignalTime || result.startTime, 'medium'),
-      createField('Location', result.venue || result.location, result.venue ? 'high' : 'medium'),
+      createField('Location', location, result.venue ? 'high' : 'medium'),
       createField('Organizing Authority', result.organizingAuthority, 'medium'),
     ],
     timing: [
@@ -130,7 +135,7 @@ function transformExtractionResult(result: any, raceType: string): ExtractedRace
       ? [
           createField('Total Distance (nm)', result.totalDistanceNm?.toString(), 'medium'),
           createField('Time Limit (hours)', result.timeLimitHours?.toString(), 'medium'),
-          createField('Route Description', result.courseDescription, 'medium'),
+          createField('Route Description', description, 'medium'),
         ]
       : [
           createField('Course Type', result.courseType, 'medium'),
@@ -152,6 +157,21 @@ async function hashContent(content: string): Promise<string> {
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
+
+/**
+ * Truncate a string to a maximum length, adding ellipsis if truncated.
+ */
+function truncate(value: string | undefined | null, maxLength: number): string | undefined | null {
+  if (!value) return value;
+  return value.length > maxLength ? value.slice(0, maxLength - 1) + '\u2026' : value;
+}
+
+/** Max length limits for extraction result fields */
+const FIELD_LIMITS = {
+  raceName: 200,
+  location: 500,
+  description: 5000,
+} as const;
 
 // Document types that need COURSE extraction (marks, sequence, not race details)
 const COURSE_DOCUMENT_TYPES = ['course_diagram', 'courses'];

@@ -45,6 +45,8 @@ interface PDFExtractionResult {
   error?: string;
 }
 
+const MAX_PAGES = 50;
+
 const logger = createLogger('PDFExtractionService');
 export class PDFExtractionService {
   /**
@@ -64,7 +66,7 @@ export class PDFExtractionService {
     } catch (error: any) {
       return {
         success: false,
-        error: error.message || 'Failed to extract PDF text',
+        error: error?.message ?? 'Failed to extract PDF text',
       };
     }
   }
@@ -105,7 +107,8 @@ export class PDFExtractionService {
 
       const totalPages = Math.min(
         pdf.numPages,
-        options.maxPages || pdf.numPages
+        options.maxPages || MAX_PAGES,
+        MAX_PAGES
       );
 
       let fullText = '';
@@ -137,7 +140,7 @@ export class PDFExtractionService {
     } catch (error: any) {
       return {
         success: false,
-        error: `Web PDF extraction failed: ${error.message}`,
+        error: `Web PDF extraction failed: ${error?.message ?? 'Unknown error'}`,
       };
     }
   }
@@ -187,7 +190,7 @@ export class PDFExtractionService {
     } catch (error: any) {
       return {
         success: false,
-        error: `Native PDF extraction failed: ${error.message}`,
+        error: `Native PDF extraction failed: ${error?.message ?? 'Unknown error'}`,
       };
     }
   }
@@ -252,7 +255,7 @@ export class PDFExtractionService {
       }
     } catch (error: any) {
       return {
-        error: error.message,
+        error: error?.message ?? 'Unknown error',
       };
     }
   }
