@@ -13,6 +13,23 @@ const WEATHER_API_URL = 'https://api.open-meteo.com/v1/forecast';
 const MARINE_API_URL = 'https://marine-api.open-meteo.com/v1/marine';
 const logger = createLogger('OpenMeteoService');
 
+// Circuit breaker state
+let consecutiveFailures = 0;
+let circuitOpenUntil = 0;
+const MAX_FAILURES = 3;
+const RESET_MS = 60_000;
+
+function checkCircuit(): void {
+  if (consecutiveFailures >= MAX_FAILURES && Date.now() < circuitOpenUntil) {
+    throw new Error('Weather service temporarily unavailable');
+  }
+}
+function recordSuccess(): void { consecutiveFailures = 0; }
+function recordFailure(): void {
+  consecutiveFailures++;
+  if (consecutiveFailures >= MAX_FAILURES) circuitOpenUntil = Date.now() + RESET_MS;
+}
+
 // Cache duration in milliseconds
 const CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
 
@@ -69,6 +86,8 @@ export class OpenMeteoService {
    * Combines weather API + marine API for complete data
    */
   async getMarineWeather(location: GeoLocation, hours: number = 48): Promise<AdvancedWeatherConditions[]> {
+    checkCircuit();
+
     const cacheKey = `weather_${location.latitude.toFixed(4)}_${location.longitude.toFixed(4)}_${hours}`;
     const cached = this.getCached<AdvancedWeatherConditions[]>(cacheKey);
 
@@ -90,8 +109,10 @@ export class OpenMeteoService {
       this.setCache(cacheKey, forecasts, CACHE_DURATION);
       logger.info(`[OpenMeteoService] Fetched ${forecasts.length} hours of forecast data`);
 
+      recordSuccess();
       return forecasts;
     } catch (error) {
+      recordFailure();
       logger.error('[OpenMeteoService] Marine weather error:', error);
       throw error;
     }

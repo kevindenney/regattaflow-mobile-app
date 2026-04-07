@@ -41,6 +41,7 @@ import { SharedWithMeCard } from './sidebar/SharedWithMeCard';
 import { SuggestionDrawer } from './suggestions/SuggestionDrawer';
 import { InviteCoachModal } from './shares/InviteCoachModal';
 import { QuickCaptureModal } from './QuickCaptureModal';
+import { FeatureErrorBoundary } from '@/components/ui/FeatureErrorBoundary';
 
 const SIDEBAR_BREAKPOINT = 1000;
 
@@ -175,6 +176,7 @@ export function PlaybookHome() {
   );
 
   return (
+    <FeatureErrorBoundary fallbackMessage="Something went wrong loading your playbook.">
     <View style={styles.container}>
       <ScrollView
         style={styles.scroll}
@@ -232,6 +234,7 @@ export function PlaybookHome() {
         playbookId={playbookId}
       />
     </View>
+    </FeatureErrorBoundary>
   );
 }
 
