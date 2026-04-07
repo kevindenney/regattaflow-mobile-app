@@ -90,8 +90,10 @@ CRITICAL: For concept_update, the body_md must MERGE new insights INTO the exist
 - Use markdown formatting (headings, bullets, bold for key terms)
 - The result should be richer than before, not a replacement
 
+BACKLINKING: For each proposal, also include "related_concept_ids" — an array of existing concept UUIDs that are meaningfully related to this concept (either the target or the new one). Look for topical overlap, causal relationships, or concepts that reference similar techniques/ideas. Include 0-5 related concept IDs.
+
 Return ONLY a JSON array. Each item:
-  { "type": "concept_update"|"concept_create", "target_concept_id": "<uuid or omit for create>", "title": "<concept title>", "body_md": "<merged markdown that builds on existing content>", "rationale": "<one-sentence why>" }
+  { "type": "concept_update"|"concept_create", "target_concept_id": "<uuid or omit for create>", "title": "<concept title>", "body_md": "<merged markdown that builds on existing content>", "rationale": "<one-sentence why>", "related_concept_ids": ["<uuid>", ...] }
 
 If nothing meaningful was learned, return [].`;
 
@@ -117,6 +119,7 @@ ${playbookConcepts.length === 0 ? '(none — this is a new playbook with no conc
       title?: string;
       body_md?: string;
       rationale?: string;
+      related_concept_ids?: string[];
     }> = [];
     try {
       proposals = extractJson(aiText);
@@ -133,6 +136,10 @@ ${playbookConcepts.length === 0 ? '(none — this is a new playbook with no conc
       })
       .slice(0, 3);
 
+    // Validate related_concept_ids — only keep IDs that exist in the playbook
+    const validRelated = (ids: string[] | undefined) =>
+      (ids ?? []).filter((id) => conceptIdSet.has(id)).slice(0, 5);
+
     const created = await insertSuggestions(
       supabase,
       valid.map((p) => ({
@@ -144,6 +151,7 @@ ${playbookConcepts.length === 0 ? '(none — this is a new playbook with no conc
           title: p.title,
           body_md: p.body_md,
           rationale: p.rationale,
+          related_concept_ids: validRelated(p.related_concept_ids),
         },
         provenance: {
           source_step_ids: [step_id],

@@ -72,6 +72,11 @@ export function ConceptDetail({ slug }: ConceptDetailProps) {
   const [qaHistory, setQaHistory] = useState<QAEntry[]>([]);
   const [asking, setAsking] = useState(false);
 
+  // Related concepts (backlinks)
+  const [relatedConcepts, setRelatedConcepts] = useState<
+    Array<{ id: string; title: string; slug: string }>
+  >([]);
+
   const handleAsk = async () => {
     const q = askQuestion.trim();
     if (!q || !playbook?.id) return;
@@ -211,6 +216,29 @@ export function ConceptDetail({ slug }: ConceptDetailProps) {
       cancelled = true;
     };
   }, [concept?.source_concept_id]);
+
+  // Resolve related_concept_ids to titles for display
+  useEffect(() => {
+    let cancelled = false;
+    const ids = concept?.related_concept_ids ?? [];
+    if (ids.length === 0) {
+      setRelatedConcepts([]);
+      return;
+    }
+    Promise.all(ids.map((id) => getConceptById(id)))
+      .then((results) => {
+        if (cancelled) return;
+        setRelatedConcepts(
+          results
+            .filter((r): r is PlaybookConceptRecord => r !== null)
+            .map((r) => ({ id: r.id, title: r.title, slug: r.slug })),
+        );
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [concept?.related_concept_ids]);
 
   if (isLoading) {
     return (
@@ -373,6 +401,30 @@ export function ConceptDetail({ slug }: ConceptDetailProps) {
       ) : (
         <Text style={styles.empty}>No body yet.</Text>
       )}
+
+      {/* Related concepts (backlinks) */}
+      {relatedConcepts.length > 0 ? (
+        <View style={styles.relatedSection}>
+          <View style={styles.relatedHeader}>
+            <Ionicons name="git-network-outline" size={14} color={IOS_COLORS.systemTeal} />
+            <Text style={styles.relatedTitle}>Related concepts</Text>
+          </View>
+          <View style={styles.relatedChips}>
+            {relatedConcepts.map((rc) => (
+              <Pressable
+                key={rc.id}
+                onPress={() => router.push(`/playbook/concepts/${rc.slug}` as any)}
+                style={({ pressed }) => [styles.relatedChip, pressed && styles.pressed]}
+              >
+                <Ionicons name="bulb-outline" size={12} color={IOS_COLORS.systemTeal} />
+                <Text style={styles.relatedChipText} numberOfLines={1}>
+                  {rc.title}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      ) : null}
 
       <Text style={styles.meta}>
         Updated {new Date(concept.updated_at).toLocaleString()}
@@ -717,6 +769,41 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: '#fff',
+  },
+  relatedSection: {
+    gap: IOS_SPACING.sm,
+  },
+  relatedHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: IOS_SPACING.xs,
+  },
+  relatedTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: IOS_COLORS.systemTeal,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  relatedChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  relatedChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: 'rgba(90, 200, 250, 0.1)',
+  },
+  relatedChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: IOS_COLORS.systemTeal,
+    maxWidth: 180,
   },
   backButton: {
     paddingHorizontal: IOS_SPACING.md,

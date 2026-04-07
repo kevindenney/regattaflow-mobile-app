@@ -103,6 +103,8 @@ export interface PlaybookConceptRecord {
   title: string;
   body_md: string;
   updated_by: string | null;
+  /** UUIDs of related concepts — bidirectional backlinks */
+  related_concept_ids: string[];
   created_at: string;
   updated_at: string;
 }
@@ -122,6 +124,7 @@ export interface UpdatePlaybookConceptInput {
   title?: string;
   body_md?: string;
   slug?: string;
+  related_concept_ids?: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -156,6 +159,12 @@ export interface PlaybookReviewRecord {
   summary_md: string;
   focus_suggestion_md: string | null;
   updated_pages: Array<Record<string, unknown>>;
+  /** Health check results: contradictions, gaps, stale concepts */
+  knowledge_health: {
+    contradictions?: Array<{ concept_ids: string[]; description: string }>;
+    gaps?: Array<{ topic: string; description: string }>;
+    stale_concepts?: Array<{ concept_id: string; title: string; last_updated: string }>;
+  } | null;
   created_at: string;
 }
 

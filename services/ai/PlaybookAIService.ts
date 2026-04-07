@@ -26,15 +26,55 @@ export interface IngestInboxResponse {
   error?: string;
 }
 
+export interface RaceConditionsBriefResponse {
+  brief_md: string;
+  key_points: string[];
+  error?: string;
+}
+
+export interface RaceConditionsBriefInput {
+  interest_id: string;
+  weather: {
+    wind_speed_kt?: number;
+    wind_direction?: string;
+    gusts_kt?: number;
+    wave_height_m?: number;
+    temperature_c?: number;
+  };
+  tide?: {
+    state?: string;
+    height_m?: number;
+    current_speed_kt?: number;
+    current_direction?: string;
+  };
+  race_title?: string;
+  boat_class?: string;
+}
+
 export interface PlaybookQASource {
   type: 'concept' | 'resource' | 'debrief';
   id: string;
   label: string;
 }
 
+export interface PlaybookQAConceptUpdate {
+  concept_id: string;
+  title: string;
+  new_insight: string;
+}
+
+export interface PlaybookQAKnowledgeGap {
+  topic: string;
+  description: string;
+}
+
 export interface PlaybookQAResponse {
   answer_md: string;
   sources: PlaybookQASource[];
+  /** Suggested concept updates from compounding Q&A loop */
+  concept_updates?: PlaybookQAConceptUpdate[];
+  /** Knowledge gaps detected from the question */
+  knowledge_gaps?: PlaybookQAKnowledgeGap[];
   error?: string;
 }
 
@@ -93,5 +133,12 @@ export class PlaybookAIService {
   /** Cross-interest suggestions for a newly created/edited step. */
   static crossInterest(stepId: string): Promise<SuggestionsCreatedResponse> {
     return invoke('playbook-cross-interest', { step_id: stepId });
+  }
+
+  /** Generate a personalized race conditions brief using weather + playbook concepts. */
+  static raceConditionsBrief(
+    input: RaceConditionsBriefInput,
+  ): Promise<RaceConditionsBriefResponse> {
+    return invoke('race-conditions-brief', input as unknown as Record<string, unknown>);
   }
 }

@@ -117,14 +117,40 @@ serve(async (req: Request) => {
         ? keywords.map((k) => `${col}.ilike.%${k}%`).join(',')
         : `${col}.ilike.%${question.slice(0, 40)}%`;
 
-    // Concepts (owned + baselines in this interest)
+    // Concepts (owned + baselines in this interest) — keyword match
     const { data: concepts = [] } = await supabase
       .from('playbook_concepts')
-      .select('id, title, body_md, origin')
+      .select('id, title, body_md, origin, related_concept_ids')
       .eq('interest_id', interest_id)
       .or(`playbook_id.eq.${playbook_id},playbook_id.is.null`)
       .or(orQuery('title') + ',' + orQuery('body_md'))
       .limit(8);
+
+    // Follow backlinks: gather related concept IDs from matched concepts
+    const matchedIds = new Set((concepts ?? []).map((c: any) => c.id));
+    const relatedIds = new Set<string>();
+    for (const c of concepts ?? []) {
+      for (const rid of (c as any).related_concept_ids ?? []) {
+        if (!matchedIds.has(rid)) relatedIds.add(rid);
+      }
+    }
+
+    // Fetch backlinked concepts that weren't in the keyword results
+    let backlinkConcepts: any[] = [];
+    if (relatedIds.size > 0) {
+      const ids = Array.from(relatedIds).slice(0, 5);
+      const { data: linked = [] } = await supabase
+        .from('playbook_concepts')
+        .select('id, title, body_md, origin')
+        .in('id', ids);
+      backlinkConcepts = linked ?? [];
+    }
+
+    // Merge: keyword matches first, then backlinked (deduped)
+    const allConcepts = [...(concepts ?? [])];
+    for (const bc of backlinkConcepts) {
+      if (!matchedIds.has(bc.id)) allConcepts.push(bc);
+    }
 
     // Resources — search title, description, and body_text
     const { data: resources = [] } = await supabase
@@ -156,17 +182,23 @@ serve(async (req: Request) => {
 
 IMPORTANT: If resources contain detailed technical information relevant to the question, include that detail in your answer. Don't just say "the resource mentions X" — extract and present the specific actionable information.
 
+COMPOUNDING: After answering, check if the conversation reveals NEW knowledge that should be added to an existing concept. If the answer synthesizes information in a novel way, connects ideas that weren't connected before, or fills in gaps, suggest concept updates. Also flag if the question reveals a knowledge gap — a topic the user asked about but the playbook doesn't cover well.
+
 Return ONLY a JSON object:
 {
   "answer_md": "<markdown answer with inline citations — be specific and actionable>",
-  "sources": [{"type": "concept"|"resource"|"debrief", "id": "<uuid>", "label": "<display title>"}]
+  "sources": [{"type": "concept"|"resource"|"debrief", "id": "<uuid>", "label": "<display title>"}],
+  "concept_updates": [{"concept_id": "<uuid>", "title": "<concept title>", "new_insight": "<1-2 sentence insight to add>"}],
+  "knowledge_gaps": [{"topic": "<missing topic>", "description": "<what the user asked about that isn't well covered>"}]
 }
 
+concept_updates and knowledge_gaps can be empty arrays. Only include them when genuinely useful.
 If the snippets don't contain enough information, say so honestly in answer_md and return an empty sources array.`;
 
     const sourceBlocks: string[] = [];
-    (concepts ?? []).forEach((c: any, i: number) => {
-      sourceBlocks.push(`[C${i + 1}] CONCEPT ${c.id} — ${c.title}\n${c.body_md?.slice(0, 1200) ?? ''}`);
+    allConcepts.forEach((c: any, i: number) => {
+      const backlinkNote = matchedIds.has(c.id) ? '' : ' (via backlink)';
+      sourceBlocks.push(`[C${i + 1}] CONCEPT ${c.id} — ${c.title}${backlinkNote}\n${c.body_md?.slice(0, 1200) ?? ''}`);
     });
     (resources ?? []).forEach((r: any, i: number) => {
       // Extract keyword-relevant sections from body_text (not just first N chars)
@@ -193,7 +225,12 @@ ${sourceBlocks.join('\n\n')}`;
     });
 
     // Extract JSON (tolerant)
-    let parsed: { answer_md?: string; sources?: unknown[] } = {};
+    let parsed: {
+      answer_md?: string;
+      sources?: unknown[];
+      concept_updates?: Array<{ concept_id: string; title: string; new_insight: string }>;
+      knowledge_gaps?: Array<{ topic: string; description: string }>;
+    } = {};
     try {
       const cleaned = aiText.replace(/```(?:json)?\s*/g, '').replace(/```$/g, '').trim();
       const first = cleaned.indexOf('{');
@@ -208,6 +245,8 @@ ${sourceBlocks.join('\n\n')}`;
     return jsonResponse({
       answer_md: parsed.answer_md ?? aiText,
       sources: parsed.sources ?? [],
+      concept_updates: parsed.concept_updates ?? [],
+      knowledge_gaps: parsed.knowledge_gaps ?? [],
     });
   } catch (err) {
     console.error('playbook-qa error', err);
