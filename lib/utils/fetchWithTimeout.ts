@@ -43,11 +43,12 @@ export async function fetchWithTimeout(
 
   // If the caller supplied their own signal, propagate its abort.
   const externalSignal = fetchInit.signal;
+  const onExternalAbort = externalSignal ? () => controller.abort() : undefined;
   if (externalSignal) {
     if (externalSignal.aborted) {
       controller.abort();
     } else {
-      externalSignal.addEventListener('abort', () => controller.abort(), { once: true });
+      externalSignal.addEventListener('abort', onExternalAbort!, { once: true });
     }
   }
 
@@ -55,5 +56,9 @@ export async function fetchWithTimeout(
     return await fetch(input, { ...fetchInit, signal: controller.signal });
   } finally {
     clearTimeout(timeoutId);
+    // Remove the listener to avoid retaining references after the fetch completes
+    if (externalSignal && onExternalAbort) {
+      externalSignal.removeEventListener('abort', onExternalAbort);
+    }
   }
 }

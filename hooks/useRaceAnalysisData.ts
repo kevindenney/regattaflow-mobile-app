@@ -167,12 +167,15 @@ export function useRaceAnalysisData(
   }, []);
 
   useEffect(() => {
+    const abortController = new AbortController();
+
     async function fetchAnalysisData() {
       const runId = ++fetchRunIdRef.current;
       const targetRaceId = raceId;
       const targetUserId = userId;
       const canCommit = () =>
         isMountedRef.current &&
+        !abortController.signal.aborted &&
         runId === fetchRunIdRef.current &&
         activeRaceIdRef.current === targetRaceId &&
         activeUserIdRef.current === targetUserId;
@@ -392,6 +395,7 @@ export function useRaceAnalysisData(
           strengthIdentified: aiAnalysis?.overall_summary?.split('.')[0], // First sentence as strength
         });
       } catch (err) {
+        if (abortController.signal.aborted) return;
         logger.error('Error fetching analysis', err);
         if (!canCommit()) return;
         setError('Failed to load analysis data');
@@ -403,6 +407,10 @@ export function useRaceAnalysisData(
     }
 
     void fetchAnalysisData();
+
+    return () => {
+      abortController.abort();
+    };
   }, [raceId, userId, refetchTrigger]);
 
   const refetch = () => setRefetchTrigger((prev) => prev + 1);

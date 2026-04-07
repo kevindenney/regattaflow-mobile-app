@@ -17,20 +17,28 @@ let pdfjsLib: any = null;
 
 // Initialize PDF.js on web platform
 if (Platform.OS === 'web' && typeof window !== 'undefined') {
-  // Load PDF.js from CDN
-  const script = document.createElement('script');
-  script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-  script.onload = () => {
-    // @ts-ignore - PDF.js loaded globally
-    pdfjsLib = window.pdfjsLib;
-    if (pdfjsLib && pdfjsLib.GlobalWorkerOptions) {
-      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-    }
-  };
-  script.onerror = () => {
-    logger.error('Failed to load PDF.js from CDN');
-  };
-  document.head.appendChild(script);
+  const PDFJS_SRC = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+  // Prevent duplicate script tags when this module is evaluated more than once
+  const existing = document.querySelector(`script[src="${PDFJS_SRC}"]`);
+  if (!existing) {
+    const script = document.createElement('script');
+    script.src = PDFJS_SRC;
+    script.onload = () => {
+      // @ts-ignore - PDF.js loaded globally
+      pdfjsLib = window.pdfjsLib;
+      if (pdfjsLib && pdfjsLib.GlobalWorkerOptions) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      }
+    };
+    script.onerror = () => {
+      logger.error('Failed to load PDF.js from CDN');
+    };
+    document.head.appendChild(script);
+  } else {
+    // Script already loaded or loading — pick up the global if available
+    // @ts-ignore
+    pdfjsLib = window.pdfjsLib ?? null;
+  }
 }
 
 interface PDFExtractionOptions {
