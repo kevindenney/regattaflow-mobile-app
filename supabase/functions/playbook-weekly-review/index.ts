@@ -79,14 +79,36 @@ serve(async (req: Request) => {
       .gte('created_at', startISO)
       .lte('created_at', endISO);
 
-    const system = `You are BetterAt's Playbook coach. Compile a concise weekly review for the user's practice.
+    // Fetch ALL concepts for health check analysis
+    const { data: allConcepts = [] } = await supabase
+      .from('playbook_concepts')
+      .select('id, title, body_md, updated_at')
+      .eq('interest_id', interest_id)
+      .or(`playbook_id.eq.${playbook_id},playbook_id.is.null`);
+
+    // Identify stale concepts (not updated in 60+ days)
+    const sixtyDaysAgo = new Date(end.getTime() - 60 * 24 * 60 * 60 * 1000).toISOString();
+    const staleConcepts = (allConcepts ?? [])
+      .filter((c: any) => c.updated_at < sixtyDaysAgo)
+      .map((c: any) => ({ id: c.id, title: c.title, updated_at: c.updated_at }));
+
+    const system = `You are BetterAt's Playbook coach. Compile a concise weekly review AND a knowledge health check for the user's practice.
 
 Return ONLY a JSON object:
 {
   "summary_md": "<markdown: 3-5 bullet summary of what happened and what was learned>",
   "focus_md": "<markdown: 1-3 focus areas for next week, grounded in the week's data>",
-  "updated_pages": [{"type": "concept"|"resource", "id": "<uuid>", "note": "<one line>"}]
-}`;
+  "updated_pages": [{"type": "concept"|"resource", "id": "<uuid>", "note": "<one line>"}],
+  "knowledge_health": {
+    "contradictions": [{"concept_ids": ["<uuid>", "<uuid>"], "description": "<what contradicts>"}],
+    "gaps": [{"topic": "<missing topic>", "description": "<what the playbook should cover but doesn't>"}]
+  }
+}
+
+For knowledge_health:
+- contradictions: Look at ALL concepts and flag any where the content conflicts (different advice on the same topic, outdated vs current info)
+- gaps: Look at the debriefs and resources — are there topics the user is actively practicing that don't have a concept yet?
+- Both can be empty arrays if nothing is found. Only flag genuine issues.`;
 
     const userPrompt = `WINDOW: ${startISO.slice(0, 10)} → ${endISO.slice(0, 10)}
 
@@ -97,12 +119,18 @@ CONCEPTS EDITED (${concepts?.length ?? 0}):
 ${(concepts ?? []).map((c: any) => `- [${c.id}] ${c.title}`).join('\n')}
 
 RESOURCES ADDED (${resources?.length ?? 0}):
-${(resources ?? []).map((r: any) => `- [${r.id}] ${r.title}`).join('\n')}`;
+${(resources ?? []).map((r: any) => `- [${r.id}] ${r.title}`).join('\n')}
+
+ALL CONCEPTS (for health check — check for contradictions and gaps):
+${(allConcepts ?? []).slice(0, 20).map((c: any) => `- [${c.id}] ${c.title}\n${(c.body_md || '').slice(0, 300)}`).join('\n\n')}
+
+STALE CONCEPTS (not updated in 60+ days):
+${staleConcepts.length > 0 ? staleConcepts.map((c: any) => `- [${c.id}] ${c.title} (last updated: ${c.updated_at.slice(0, 10)})`).join('\n') : '(none)'}`;
 
     const aiText = await callGemini({
       system,
       userContent: [{ text: userPrompt }],
-      maxOutputTokens: 1500,
+      maxOutputTokens: 2500,
       temperature: 0.3,
     });
 
@@ -110,10 +138,25 @@ ${(resources ?? []).map((r: any) => `- [${r.id}] ${r.title}`).join('\n')}`;
       summary_md?: string;
       focus_md?: string;
       updated_pages?: Array<Record<string, unknown>>;
+      knowledge_health?: {
+        contradictions?: Array<{ concept_ids: string[]; description: string }>;
+        gaps?: Array<{ topic: string; description: string }>;
+      };
     }>(aiText);
 
     const summary_md = parsed.summary_md ?? '(Gemini returned no summary.)';
     const updated_pages = parsed.updated_pages ?? [];
+
+    // Build health check results — combine AI findings with programmatic stale check
+    const knowledge_health = {
+      contradictions: parsed.knowledge_health?.contradictions ?? [],
+      gaps: parsed.knowledge_health?.gaps ?? [],
+      stale_concepts: staleConcepts.map((c: any) => ({
+        concept_id: c.id,
+        title: c.title,
+        last_updated: c.updated_at,
+      })),
+    };
 
     const rows: Parameters<typeof insertSuggestions>[1] = [
       {
@@ -126,6 +169,7 @@ ${(resources ?? []).map((r: any) => `- [${r.id}] ${r.title}`).join('\n')}`;
           summary_md,
           focus_suggestion_md: parsed.focus_md ?? null,
           updated_pages,
+          knowledge_health,
         },
         provenance: {
           source_step_ids: stepsWithDebrief.map((s: any) => s.id),

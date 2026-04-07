@@ -21,23 +21,121 @@ import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import {
   PlaybookAIService,
   type PlaybookQAResponse,
+  type PlaybookQAConceptUpdate,
+  type PlaybookQAKnowledgeGap,
 } from '@/services/ai/PlaybookAIService';
-import { useCreatePlaybookQA } from '@/hooks/usePlaybook';
+import { useCreatePlaybookQA, usePlaybookPendingSuggestionCount } from '@/hooks/usePlaybook';
 import { useAuth } from '@/providers/AuthProvider';
+import { supabase } from '@/services/supabase';
 
 interface AskYourPlaybookProps {
   interestName: string;
+  interestSlug?: string;
   playbookId: string | undefined;
 }
 
-const RECENT_SUGGESTIONS = [
+const DEFAULT_SUGGESTIONS = [
   'What have I been working on lately?',
   'Where am I improving the most?',
   'What should I focus on next?',
 ];
 
+const INTEREST_SUGGESTIONS: Record<string, string[]> = {
+  'sail-racing': [
+    'What mast rake should I use in 12-15 knots?',
+    'What are my key rig tuning settings for light air?',
+    'What did I learn from my last race debrief?',
+  ],
+};
+
+// ---------------------------------------------------------------------------
+// Simple markdown renderer — handles **bold**, bullet lists, paragraphs
+// ---------------------------------------------------------------------------
+
+function renderMarkdownLines(text: string): React.ReactNode[] {
+  const paragraphs = text.split(/\n\n+/);
+  return paragraphs.map((para, pIdx) => {
+    const lines = para.split('\n');
+    const isBulletBlock = lines.every(
+      (l) => /^[\-\*]\s/.test(l.trim()) || !l.trim(),
+    );
+
+    if (isBulletBlock) {
+      return (
+        <View key={pIdx} style={mdStyles.bulletBlock}>
+          {lines
+            .filter((l) => l.trim())
+            .map((line, lIdx) => (
+              <View key={lIdx} style={mdStyles.bulletRow}>
+                <Text style={mdStyles.bulletDot}>{'\u2022'}</Text>
+                <Text style={mdStyles.bulletText}>
+                  {renderBold(line.replace(/^[\-\*]\s*/, ''))}
+                </Text>
+              </View>
+            ))}
+        </View>
+      );
+    }
+
+    return (
+      <Text key={pIdx} style={mdStyles.paragraph}>
+        {renderBold(para.replace(/\n/g, ' '))}
+      </Text>
+    );
+  });
+}
+
+function renderBold(text: string): React.ReactNode[] {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return (
+        <Text key={i} style={mdStyles.bold}>
+          {part.slice(2, -2)}
+        </Text>
+      );
+    }
+    return <Text key={i}>{part}</Text>;
+  });
+}
+
+const mdStyles = StyleSheet.create({
+  paragraph: {
+    fontSize: 14,
+    color: IOS_COLORS.label,
+    lineHeight: 20,
+  },
+  bulletBlock: {
+    gap: 4,
+  },
+  bulletRow: {
+    flexDirection: 'row',
+    paddingLeft: 4,
+  },
+  bulletDot: {
+    fontSize: 14,
+    color: IOS_COLORS.secondaryLabel,
+    width: 16,
+    lineHeight: 20,
+  },
+  bulletText: {
+    flex: 1,
+    fontSize: 14,
+    color: IOS_COLORS.label,
+    lineHeight: 20,
+  },
+  bold: {
+    fontWeight: '700',
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
 export function AskYourPlaybook({
   interestName,
+  interestSlug,
   playbookId,
 }: AskYourPlaybookProps) {
   const [question, setQuestion] = useState('');
@@ -45,6 +143,11 @@ export function AskYourPlaybook({
   const [answer, setAnswer] = useState<PlaybookQAResponse | null>(null);
   const { user } = useAuth();
   const createQA = useCreatePlaybookQA();
+
+  const [savingInsight, setSavingInsight] = useState(false);
+
+  const suggestions =
+    (interestSlug && INTEREST_SUGGESTIONS[interestSlug]) || DEFAULT_SUGGESTIONS;
 
   const handleAsk = async () => {
     if (!question.trim() || !playbookId) return;
@@ -57,6 +160,31 @@ export function AskYourPlaybook({
       showAlert('Ask failed', err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setBusy(false);
+    }
+  };
+
+  /** Save a concept update insight as a suggestion in the queue */
+  const handleSaveInsight = async (update: PlaybookQAConceptUpdate) => {
+    if (!playbookId || !user?.id) return;
+    setSavingInsight(true);
+    try {
+      await supabase.from('playbook_suggestions').insert({
+        playbook_id: playbookId,
+        user_id: user.id,
+        kind: 'concept_update',
+        payload: {
+          target_concept_id: update.concept_id,
+          rationale: `From Q&A: ${update.new_insight}`,
+          append_insight: update.new_insight,
+        },
+        provenance: { source: 'qa_compounding', model: 'gemini-2.5-flash' },
+        status: 'pending',
+      });
+      showAlert('Queued', `Insight queued as suggestion for "${update.title}".`);
+    } catch (err) {
+      showAlert('Save failed', err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      setSavingInsight(false);
     }
   };
 
@@ -120,7 +248,9 @@ export function AskYourPlaybook({
       </View>
       {answer && (
         <View style={styles.answerBox}>
-          <Text style={styles.answerText}>{answer.answer_md}</Text>
+          <View style={styles.answerContent}>
+            {renderMarkdownLines(answer.answer_md)}
+          </View>
           {answer.sources.length > 0 && (
             <View style={styles.sourcesRow}>
               {answer.sources.map((s, i) => (
@@ -138,11 +268,60 @@ export function AskYourPlaybook({
               <Text style={styles.pinText}>Pin to Q&A</Text>
             </Pressable>
           </View>
+          {/* Compounding loop: concept update suggestions from Q&A */}
+          {(answer.concept_updates ?? []).length > 0 ? (
+            <View style={styles.compoundSection}>
+              <View style={styles.compoundHeader}>
+                <Ionicons name="sparkles-outline" size={13} color={IOS_COLORS.systemTeal} />
+                <Text style={styles.compoundTitle}>Strengthen your knowledge</Text>
+              </View>
+              {(answer.concept_updates ?? []).map((cu, i) => (
+                <Pressable
+                  key={`cu-${i}`}
+                  onPress={() => handleSaveInsight(cu)}
+                  disabled={savingInsight}
+                  style={({ pressed }) => [
+                    styles.compoundChip,
+                    pressed && styles.chipPressed,
+                  ]}
+                >
+                  <Ionicons name="add-circle-outline" size={14} color={IOS_COLORS.systemTeal} />
+                  <View style={styles.compoundChipText}>
+                    <Text style={styles.compoundChipTitle} numberOfLines={1}>
+                      Update "{cu.title}"
+                    </Text>
+                    <Text style={styles.compoundChipDesc} numberOfLines={2}>
+                      {cu.new_insight}
+                    </Text>
+                  </View>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
+          {/* Knowledge gaps */}
+          {(answer.knowledge_gaps ?? []).length > 0 ? (
+            <View style={styles.compoundSection}>
+              <View style={styles.compoundHeader}>
+                <Ionicons name="alert-circle-outline" size={13} color={IOS_COLORS.systemOrange} />
+                <Text style={[styles.compoundTitle, { color: IOS_COLORS.systemOrange }]}>
+                  Knowledge gaps detected
+                </Text>
+              </View>
+              {(answer.knowledge_gaps ?? []).map((gap, i) => (
+                <View key={`gap-${i}`} style={styles.gapChip}>
+                  <Text style={styles.gapTopic}>{gap.topic}</Text>
+                  <Text style={styles.gapDesc} numberOfLines={2}>
+                    {gap.description}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
         </View>
       )}
       {!answer && !busy && (
         <View style={styles.chipRow}>
-          {RECENT_SUGGESTIONS.map((s) => (
+          {suggestions.map((s) => (
             <Pressable
               key={s}
               onPress={() => setQuestion(s)}
@@ -231,10 +410,8 @@ const styles = StyleSheet.create({
     padding: IOS_SPACING.md,
     gap: IOS_SPACING.sm,
   },
-  answerText: {
-    fontSize: 14,
-    color: IOS_COLORS.label,
-    lineHeight: 20,
+  answerContent: {
+    gap: IOS_SPACING.sm,
   },
   sourcesRow: {
     flexDirection: 'row',
@@ -269,6 +446,60 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: IOS_COLORS.systemPurple,
+  },
+  compoundSection: {
+    gap: 6,
+    paddingTop: IOS_SPACING.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: IOS_COLORS.separator,
+  },
+  compoundHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  compoundTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: IOS_COLORS.systemTeal,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  compoundChip: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    padding: IOS_SPACING.sm,
+    borderRadius: 8,
+    backgroundColor: 'rgba(90, 200, 250, 0.08)',
+  },
+  compoundChipText: {
+    flex: 1,
+  },
+  compoundChipTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: IOS_COLORS.systemTeal,
+  },
+  compoundChipDesc: {
+    fontSize: 11,
+    color: IOS_COLORS.secondaryLabel,
+    marginTop: 1,
+  },
+  gapChip: {
+    padding: IOS_SPACING.sm,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 149, 0, 0.08)',
+  },
+  gapTopic: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: IOS_COLORS.systemOrange,
+  },
+  gapDesc: {
+    fontSize: 11,
+    color: IOS_COLORS.secondaryLabel,
+    marginTop: 1,
   },
   chipRow: {
     flexDirection: 'row',

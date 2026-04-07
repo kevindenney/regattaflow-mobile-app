@@ -5,7 +5,7 @@
  * playbook-weekly-review edge function (Phase 7).
  */
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
@@ -28,9 +28,11 @@ export function ReviewsList() {
   const { data: reviews = [], isLoading } = usePlaybookReviews(playbook?.id);
   const queryClient = useQueryClient();
   const [generating, setGenerating] = useState(false);
+  const generatingRef = useRef(false);
 
   const handleGenerate = async () => {
-    if (!playbook || generating) return;
+    if (!playbook || generatingRef.current) return;
+    generatingRef.current = true;
     setGenerating(true);
     try {
       const res = await PlaybookAIService.generateWeeklyReview(playbook.id);
@@ -42,6 +44,7 @@ export function ReviewsList() {
     } catch (err) {
       showAlert('Generate failed', err instanceof Error ? err.message : 'Unknown error');
     } finally {
+      generatingRef.current = false;
       setGenerating(false);
     }
   };
@@ -93,6 +96,42 @@ export function ReviewsList() {
                     <Text style={styles.focusTitle}>Focus next week</Text>
                   </View>
                   <Text style={styles.focusText}>{r.focus_suggestion_md}</Text>
+                </View>
+              ) : null}
+              {/* Knowledge Health section */}
+              {r.knowledge_health && (
+                (r.knowledge_health.contradictions?.length ?? 0) > 0 ||
+                (r.knowledge_health.gaps?.length ?? 0) > 0 ||
+                (r.knowledge_health.stale_concepts?.length ?? 0) > 0
+              ) ? (
+                <View style={styles.healthBlock}>
+                  <View style={styles.healthHeader}>
+                    <Ionicons name="pulse-outline" size={14} color={IOS_COLORS.systemRed} />
+                    <Text style={styles.healthTitle}>Knowledge health</Text>
+                  </View>
+                  {(r.knowledge_health.contradictions ?? []).map((c, i) => (
+                    <View key={`contra-${i}`} style={styles.healthItem}>
+                      <Ionicons name="warning-outline" size={12} color={IOS_COLORS.systemRed} />
+                      <Text style={styles.healthText}>{c.description}</Text>
+                    </View>
+                  ))}
+                  {(r.knowledge_health.gaps ?? []).map((g, i) => (
+                    <View key={`gap-${i}`} style={styles.healthItem}>
+                      <Ionicons name="help-circle-outline" size={12} color={IOS_COLORS.systemOrange} />
+                      <Text style={styles.healthText}>
+                        <Text style={styles.healthBold}>{g.topic}:</Text> {g.description}
+                      </Text>
+                    </View>
+                  ))}
+                  {(r.knowledge_health.stale_concepts ?? []).map((s, i) => (
+                    <View key={`stale-${i}`} style={styles.healthItem}>
+                      <Ionicons name="time-outline" size={12} color={IOS_COLORS.tertiaryLabel} />
+                      <Text style={styles.healthText}>
+                        <Text style={styles.healthBold}>{s.title}</Text> hasn't been updated since{' '}
+                        {new Date(s.last_updated).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                      </Text>
+                    </View>
+                  ))}
                 </View>
               ) : null}
             </View>
@@ -189,6 +228,39 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     color: IOS_COLORS.label,
+  },
+  healthBlock: {
+    padding: IOS_SPACING.md,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255, 59, 48, 0.06)',
+    gap: 6,
+  },
+  healthHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  healthTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    color: IOS_COLORS.systemRed,
+  },
+  healthItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    paddingLeft: 2,
+  },
+  healthText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 17,
+    color: IOS_COLORS.label,
+  },
+  healthBold: {
+    fontWeight: '700',
   },
   empty: {
     alignItems: 'center',

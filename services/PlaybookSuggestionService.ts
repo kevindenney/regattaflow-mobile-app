@@ -130,6 +130,8 @@ async function applyConceptUpdate(
     target_concept_id?: string;
     title?: string;
     body_md?: string;
+    related_concept_ids?: string[];
+    append_insight?: string;
   };
   if (!payload.target_concept_id) {
     throw new Error('concept_update suggestion missing target_concept_id');
@@ -146,10 +148,40 @@ async function applyConceptUpdate(
     conceptIdToUpdate = forked.id;
   }
 
-  await updateConcept(userId, conceptIdToUpdate, {
+  // Build the update — if append_insight is present (from Q&A compounding),
+  // append to existing body rather than replacing
+  const updateInput: { title?: string; body_md?: string; related_concept_ids?: string[] } = {
     title: payload.title ?? undefined,
-    body_md: payload.body_md ?? undefined,
-  });
+  };
+  if (payload.append_insight && !payload.body_md) {
+    updateInput.body_md = (target.body_md || '') + '\n\n' + payload.append_insight;
+  } else if (payload.body_md) {
+    updateInput.body_md = payload.body_md;
+  }
+
+  // Merge related_concept_ids (union of existing + new)
+  if (payload.related_concept_ids && payload.related_concept_ids.length > 0) {
+    const existing = target.related_concept_ids ?? [];
+    const merged = [...new Set([...existing, ...payload.related_concept_ids])];
+    updateInput.related_concept_ids = merged;
+  }
+
+  await updateConcept(userId, conceptIdToUpdate, updateInput);
+
+  // Make backlinks bidirectional: update each related concept to also reference this one
+  if (payload.related_concept_ids) {
+    for (const relatedId of payload.related_concept_ids) {
+      try {
+        const related = await getConceptById(relatedId);
+        if (related && !(related.related_concept_ids ?? []).includes(conceptIdToUpdate)) {
+          const updatedRelated = [...(related.related_concept_ids ?? []), conceptIdToUpdate];
+          await updateConcept(userId, relatedId, { related_concept_ids: updatedRelated });
+        }
+      } catch {
+        // Non-fatal: best-effort bidirectional linking
+      }
+    }
+  }
 }
 
 async function applyConceptCreate(
@@ -160,11 +192,12 @@ async function applyConceptCreate(
     title?: string;
     body_md?: string;
     interest_id?: string;
+    related_concept_ids?: string[];
   };
   if (!payload.title || !payload.interest_id) {
     throw new Error('concept_create suggestion missing title or interest_id');
   }
-  await createConcept(userId, {
+  const created = await createConcept(userId, {
     playbook_id: suggestion.playbook_id,
     origin: 'personal',
     interest_id: payload.interest_id,
@@ -172,6 +205,24 @@ async function applyConceptCreate(
     title: payload.title,
     body_md: payload.body_md ?? '',
   });
+
+  // Set backlinks on the new concept and make them bidirectional
+  if (payload.related_concept_ids && payload.related_concept_ids.length > 0) {
+    await updateConcept(userId, created.id, {
+      related_concept_ids: payload.related_concept_ids,
+    });
+    for (const relatedId of payload.related_concept_ids) {
+      try {
+        const related = await getConceptById(relatedId);
+        if (related && !(related.related_concept_ids ?? []).includes(created.id)) {
+          const updated = [...(related.related_concept_ids ?? []), created.id];
+          await updateConcept(userId, relatedId, { related_concept_ids: updated });
+        }
+      } catch {
+        // Non-fatal
+      }
+    }
+  }
 }
 
 async function applyPatternDetected(
@@ -205,6 +256,7 @@ async function applyWeeklyReview(
     summary_md?: string;
     focus_suggestion_md?: string | null;
     updated_pages?: Array<Record<string, unknown>>;
+    knowledge_health?: Record<string, unknown> | null;
   };
   if (!payload.period_start || !payload.period_end || !payload.summary_md) {
     throw new Error('weekly_review missing required payload fields');
@@ -217,6 +269,7 @@ async function applyWeeklyReview(
     summary_md: payload.summary_md,
     focus_suggestion_md: payload.focus_suggestion_md ?? null,
     updated_pages: payload.updated_pages ?? [],
+    knowledge_health: payload.knowledge_health ?? null,
   });
   if (error) throw error;
 }

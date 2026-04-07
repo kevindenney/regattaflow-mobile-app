@@ -319,8 +319,10 @@ IMPORTANT: Your job is to MERGE new insights INTO the existing concept body, not
 3. Use markdown formatting (headings, bullets, bold for key terms)
 4. Be comprehensive — combine what the user already knew with what the resource adds
 
+BACKLINKING: For each proposal, include "related_concept_ids" — an array of existing concept UUIDs that are meaningfully related to the target concept. Look for topical overlap, shared techniques, or causal relationships. Include 0-5 related concept IDs.
+
 Return ONLY a JSON array (possibly empty) of concept_update proposals:
-  [{ "target_concept_id": "<uuid>", "body_md": "<merged markdown that builds on existing content>", "rationale": "<one line>" }]
+  [{ "target_concept_id": "<uuid>", "body_md": "<merged markdown that builds on existing content>", "rationale": "<one line>", "related_concept_ids": ["<uuid>", ...] }]
 Return [] if nothing relevant.`;
 
             const userPrompt = `NEW RESOURCE: ${resource.title}
@@ -337,10 +339,14 @@ ${(concepts ?? []).map((c: any) => `- [${c.id}] ${c.title}\n  Current body:\n${(
             });
 
             const proposals = extractJson<Array<Record<string, unknown>>>(aiText);
+            const conceptIdSet = new Set((concepts ?? []).map((c: any) => c.id));
             if (Array.isArray(proposals)) {
               for (const p of proposals.slice(0, 2)) {
                 const targetId = p.target_concept_id as string | undefined;
                 if (!targetId) continue;
+                const relatedIds = ((p as any).related_concept_ids ?? [])
+                  .filter((id: string) => conceptIdSet.has(id))
+                  .slice(0, 5);
                 suggestionRows.push({
                   playbook_id,
                   user_id: userId,
@@ -349,6 +355,7 @@ ${(concepts ?? []).map((c: any) => `- [${c.id}] ${c.title}\n  Current body:\n${(
                     target_concept_id: targetId,
                     body_md: p.body_md,
                     rationale: p.rationale,
+                    related_concept_ids: relatedIds,
                   },
                   provenance: {
                     source_inbox_item_ids: [item.id],
