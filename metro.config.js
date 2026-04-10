@@ -1,6 +1,5 @@
 // Learn more https://docs.expo.io/guides/customizing-metro
 const { getDefaultConfig } = require('expo/metro-config');
-const { withSentryConfig } = require('@sentry/react-native/metro');
 const path = require('path');
 const { resolve } = require('metro-resolver');
 
@@ -108,9 +107,8 @@ if (process.env.NODE_ENV === 'production') {
   };
 }
 
-// Only apply Sentry serializer for native production builds.
-// withSentryConfig crashes web exports — its resolver calls .match() on undefined
-// module names during web bundling (Sentry RN SDK bug).
-const isWebExport = process.argv.some(a => a === '--platform' && process.argv[process.argv.indexOf(a) + 1] === 'web') ||
-  process.argv.includes('web');
-module.exports = (process.env.NODE_ENV === 'production' && !isWebExport) ? withSentryConfig(config) : config;
+// withSentryConfig (Sentry Metro serializer) is disabled: its determineDebugIdFromBundleSource
+// function crashes on Android production builds with "Cannot read properties of undefined
+// (reading 'match')" in @sentry/react-native v7.2.x — incompatible with Expo SDK 54 Metro.
+// TODO: re-enable after upgrading @sentry/react-native to >=7.3.0 where this is fixed.
+module.exports = config;
