@@ -13,7 +13,7 @@
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { callGemini } from '../_shared/gemini.ts';
+import { complete } from '../_shared/ai/provider.ts';
 import {
   assertPlaybookOwnership,
   authenticate,
@@ -63,10 +63,10 @@ serve(async (req: Request) => {
       (s: any) => (s.metadata as Record<string, unknown>)?.review,
     );
 
-    // Concept edits in the window
+    // Concept edits in the window — fetch body_md only for these (relevant context)
     const { data: concepts = [] } = await supabase
       .from('playbook_concepts')
-      .select('id, title, updated_at')
+      .select('id, title, body_md, updated_at')
       .eq('playbook_id', playbook_id)
       .gte('updated_at', startISO)
       .lte('updated_at', endISO);
@@ -79,16 +79,16 @@ serve(async (req: Request) => {
       .gte('created_at', startISO)
       .lte('created_at', endISO);
 
-    // Fetch ALL concepts for health check analysis
-    const { data: allConcepts = [] } = await supabase
+    // Fetch ALL concept titles (no body_md) for health check — lightweight query
+    const { data: allConceptTitles = [] } = await supabase
       .from('playbook_concepts')
-      .select('id, title, body_md, updated_at')
+      .select('id, title, updated_at')
       .eq('interest_id', interest_id)
       .or(`playbook_id.eq.${playbook_id},playbook_id.is.null`);
 
     // Identify stale concepts (not updated in 60+ days)
     const sixtyDaysAgo = new Date(end.getTime() - 60 * 24 * 60 * 60 * 1000).toISOString();
-    const staleConcepts = (allConcepts ?? [])
+    const staleConcepts = (allConceptTitles ?? [])
       .filter((c: any) => c.updated_at < sixtyDaysAgo)
       .map((c: any) => ({ id: c.id, title: c.title, updated_at: c.updated_at }));
 
@@ -115,21 +115,22 @@ For knowledge_health:
 DEBRIEFS (${stepsWithDebrief.length}):
 ${stepsWithDebrief.map((s: any) => `- ${s.title}\n  ${JSON.stringify(s.metadata.review)}`).join('\n')}
 
-CONCEPTS EDITED (${concepts?.length ?? 0}):
-${(concepts ?? []).map((c: any) => `- [${c.id}] ${c.title}`).join('\n')}
+CONCEPTS EDITED THIS WEEK (${concepts?.length ?? 0}):
+${(concepts ?? []).map((c: any) => `- [${c.id}] ${c.title}\n  ${(c.body_md || '').slice(0, 400)}`).join('\n')}
 
 RESOURCES ADDED (${resources?.length ?? 0}):
 ${(resources ?? []).map((r: any) => `- [${r.id}] ${r.title}`).join('\n')}
 
-ALL CONCEPTS (for health check — check for contradictions and gaps):
-${(allConcepts ?? []).slice(0, 20).map((c: any) => `- [${c.id}] ${c.title}\n${(c.body_md || '').slice(0, 300)}`).join('\n\n')}
+ALL CONCEPT TITLES (${(allConceptTitles ?? []).length} total — for gap/contradiction analysis):
+${(allConceptTitles ?? []).map((c: any) => `- [${c.id}] ${c.title}`).join('\n')}
 
 STALE CONCEPTS (not updated in 60+ days):
 ${staleConcepts.length > 0 ? staleConcepts.map((c: any) => `- [${c.id}] ${c.title} (last updated: ${c.updated_at.slice(0, 10)})`).join('\n') : '(none)'}`;
 
-    const aiText = await callGemini({
+    const { text: aiText } = await complete({
+      task: 'playbook',
       system,
-      userContent: [{ text: userPrompt }],
+      messages: [{ role: 'user', content: userPrompt }],
       maxOutputTokens: 2500,
       temperature: 0.3,
     });
@@ -144,7 +145,7 @@ ${staleConcepts.length > 0 ? staleConcepts.map((c: any) => `- [${c.id}] ${c.titl
       };
     }>(aiText);
 
-    const summary_md = parsed.summary_md ?? '(Gemini returned no summary.)';
+    const summary_md = parsed.summary_md ?? '(AI returned no summary.)';
     const updated_pages = parsed.updated_pages ?? [];
 
     // Build health check results — combine AI findings with programmatic stale check

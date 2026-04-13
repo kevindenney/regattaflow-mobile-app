@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { ClaudeClient } from '../../../../services/ai/ClaudeClient';
+import { AIClient } from '../../../../services/ai/AIClient';
 import { AIActivityLogger } from '../../../../services/ai/AIActivityLogger';
 import { resolveClubSummary } from '../../../../services/ai/ContextResolvers';
 import { buildDailySummaryPrompt } from '../../../../services/ai/PromptBuilder';
@@ -19,7 +19,7 @@ const handler = async (req: VercelRequest, res: VercelResponse) => {
   }
 
   const supabase = createServiceClient();
-  const client = new ClaudeClient();
+  const client = new AIClient();
   const logger = new AIActivityLogger(supabase);
 
   try {
@@ -37,7 +37,7 @@ const handler = async (req: VercelRequest, res: VercelResponse) => {
         const prompt = buildDailySummaryPrompt(summary, stats);
 
         const completion = await client.createMessage({
-          model: 'claude-3-haiku-20240307',
+          model: 'claude-3-5-haiku-20241022',
           system: prompt.system,
           messages: prompt.messages,
           maxTokens: 800,

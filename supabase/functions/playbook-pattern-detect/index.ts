@@ -10,7 +10,7 @@
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { callGemini } from '../_shared/gemini.ts';
+import { complete } from '../_shared/ai/provider.ts';
 import {
   assertPlaybookOwnership,
   authenticate,
@@ -75,9 +75,10 @@ Be rigorous: only surface patterns with ≥2 supporting debriefs. Return [] if n
     const userPrompt = `DEBRIEFS (${withDebrief.length}):
 ${withDebrief.map((s: any) => `[${s.id}] ${s.starts_at?.slice(0, 10)} — ${s.title}\n${JSON.stringify(s.metadata.review)}`).join('\n\n')}`;
 
-    const aiText = await callGemini({
+    const { text: aiText } = await complete({
+      task: 'playbook',
       system,
-      userContent: [{ text: userPrompt }],
+      messages: [{ role: 'user', content: userPrompt }],
       maxOutputTokens: 2000,
       temperature: 0.3,
     });

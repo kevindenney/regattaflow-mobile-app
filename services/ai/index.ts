@@ -1,17 +1,21 @@
 /**
  * AI Services - Main Export
- * Centralized export for all Claude Skills integration modules
+ * Centralized export for AI integration modules
  */
 
 // Type definitions
 export * from './types';
 
-// Core modules
-export { ClaudeClient } from './ClaudeClient';
-export type { ClaudeModel, ClaudeRequest, ClaudeMessage, ClaudeResponse } from './ClaudeClient';
+// Core modules (new names)
+export { AIClient } from './AIClient';
+export type { AIModelId, AIRequest, AIMessage, AIResponse, AIRawResponse } from './AIClient';
 
-export { EnhancedClaudeClient, enhancedClaudeClient } from './EnhancedClaudeClient';
-export type { SkillConfig, MCPResource, MCPTool, EnhancedClaudeRequest, EnhancedClaudeResponse } from './EnhancedClaudeClient';
+export { EnhancedAIClient, enhancedAIClient } from './EnhancedAIClient';
+export type { SkillConfig, MCPResource, MCPTool, EnhancedAIRequest, EnhancedAIResponse } from './EnhancedAIClient';
+
+// Backward-compatible aliases (deprecated)
+export { ClaudeClient, type ClaudeModel, type ClaudeRequest, type ClaudeMessage, type ClaudeResponse } from './AIClient';
+export { EnhancedClaudeClient, enhancedClaudeClient, type EnhancedClaudeRequest, type EnhancedClaudeResponse } from './EnhancedAIClient';
 
 export { raceTuningEngine } from './RaceTuningEngine';
 export type { RaceTuningCandidate } from './RaceTuningEngine';

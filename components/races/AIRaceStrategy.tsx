@@ -3,7 +3,7 @@ import { View, Text, ScrollView, ActivityIndicator, TouchableOpacity } from 'rea
 import { Card } from '@/components/ui/card';
 import { Button, ButtonText } from '@/components/ui/button';
 import { Sparkles, Brain, TrendingUp, Wind, Waves, Clock, AlertCircle } from 'lucide-react-native';
-import { enhancedClaudeClient } from '@/services/ai';
+import { enhancedAIClient } from '@/services/ai';
 import { createLogger } from '@/lib/utils/logger';
 
 interface AIRaceStrategyProps {
@@ -71,7 +71,7 @@ Please provide:
 Be specific, actionable, and reference the proven frameworks from your knowledge.`;
 
       // Call Claude with race strategy skills
-      const response = await enhancedClaudeClient.createEnhancedMessage({
+      const response = await enhancedAIClient.createEnhancedMessage({
         model: 'claude-3-5-sonnet-20240620',
         messages: [{
           role: 'user',

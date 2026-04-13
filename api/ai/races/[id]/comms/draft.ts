@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { withAuth, type AuthenticatedRequest } from '../../../../middleware/auth';
 import { resolveWorkspaceDomainForAuth } from '../../../../middleware/domain';
-import { ClaudeClient } from '../../../../../services/ai/ClaudeClient';
+import { AIClient } from '../../../../../services/ai/AIClient';
 import { AIActivityLogger } from '../../../../../services/ai/AIActivityLogger';
 import { resolveRaceContext, resolveClubSummary } from '../../../../../services/ai/ContextResolvers';
 import { buildRaceCommsPrompt } from '../../../../../services/ai/PromptBuilder';
@@ -45,7 +45,7 @@ const authedHandler = withAuth(async (req: AuthenticatedRequest, res: VercelResp
   }
 
   const logger = new AIActivityLogger(supabase);
-  const client = new ClaudeClient();
+  const client = new AIClient();
 
   try {
     const raceContext = await resolveRaceContext(supabase, id);
@@ -54,7 +54,7 @@ const authedHandler = withAuth(async (req: AuthenticatedRequest, res: VercelResp
 
     const started = Date.now();
     const completion = await client.createMessage({
-      model: 'claude-3-haiku-20240307',
+      model: 'claude-3-5-haiku-20241022',
       system: prompt.system,
       messages: prompt.messages,
       maxTokens: 600,

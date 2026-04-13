@@ -7,7 +7,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0';
-import { callGemini } from '../_shared/gemini.ts';
+import { complete } from '../_shared/ai/provider.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -53,15 +53,17 @@ serve(async (req: Request) => {
       );
     }
 
-    // Call Gemini Flash
+    // Call AI
     let text: string;
     try {
-      text = await callGemini({
-        userContent: [{ text: prompt }],
+      const result = await complete({
+        task: 'chat',
+        messages: [{ role: 'user', content: prompt }],
         maxOutputTokens: Math.min(max_tokens, 1024),
       });
+      text = result.text;
     } catch (aiError: any) {
-      console.error('Gemini API error:', aiError.message);
+      console.error('AI API error:', aiError.message);
       return new Response(
         JSON.stringify({ error: 'AI service unavailable' }),
         { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

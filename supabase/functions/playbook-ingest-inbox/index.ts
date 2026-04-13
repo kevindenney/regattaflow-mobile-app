@@ -21,7 +21,7 @@
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { callGemini } from '../_shared/gemini.ts';
+import { complete } from '../_shared/ai/provider.ts';
 import { getCorsHeaders } from '../_shared/cors.ts';
 import {
   assertPlaybookOwnership,
@@ -141,6 +141,12 @@ serve(async (req: Request) => {
     let ingested = 0;
     let failed = 0;
     const suggestionRows: Parameters<typeof insertSuggestions>[1] = [];
+    const aiPendingItems: Array<{
+      itemId: string;
+      resourceId: string;
+      resourceTitle: string;
+      content: string;
+    }> = [];
 
     for (const item of items) {
       try {
@@ -300,74 +306,15 @@ serve(async (req: Request) => {
           .eq('id', item.id);
         ingested += 1;
 
-        // Ask Gemini if this should trigger a concept_update
+        // Collect content for batched AI call (runs after loop)
         const contentForAI = enrichedDescription || item.raw_text || '';
         if (contentForAI.length > 50) {
-          try {
-            const { data: concepts = [] } = await supabase
-              .from('playbook_concepts')
-              .select('id, title, body_md')
-              .eq('interest_id', interest_id)
-              .or(`playbook_id.eq.${playbook_id},playbook_id.is.null`)
-              .limit(30);
-
-            const system = `You are BetterAt's Playbook coach. A new resource was added to the user's knowledge base. Decide whether it provides fresh, actionable insight for any existing concept.
-
-IMPORTANT: Your job is to MERGE new insights INTO the existing concept body, not replace it. The body_md you return must:
-1. Preserve ALL existing content from the concept
-2. ADD new bullet points, paragraphs, or sections with fresh info from the resource
-3. Use markdown formatting (headings, bullets, bold for key terms)
-4. Be comprehensive — combine what the user already knew with what the resource adds
-
-BACKLINKING: For each proposal, include "related_concept_ids" — an array of existing concept UUIDs that are meaningfully related to the target concept. Look for topical overlap, shared techniques, or causal relationships. Include 0-5 related concept IDs.
-
-Return ONLY a JSON array (possibly empty) of concept_update proposals:
-  [{ "target_concept_id": "<uuid>", "body_md": "<merged markdown that builds on existing content>", "rationale": "<one line>", "related_concept_ids": ["<uuid>", ...] }]
-Return [] if nothing relevant.`;
-
-            const userPrompt = `NEW RESOURCE: ${resource.title}
-${contentForAI.slice(0, 6000)}
-
-EXISTING CONCEPTS (with current body content):
-${(concepts ?? []).map((c: any) => `- [${c.id}] ${c.title}\n  Current body:\n${(c.body_md || '(empty)').slice(0, 800)}\n`).join('\n')}`;
-
-            const aiText = await callGemini({
-              system,
-              userContent: [{ text: userPrompt }],
-              maxOutputTokens: 2000,
-              temperature: 0.3,
-            });
-
-            const proposals = extractJson<Array<Record<string, unknown>>>(aiText);
-            const conceptIdSet = new Set((concepts ?? []).map((c: any) => c.id));
-            if (Array.isArray(proposals)) {
-              for (const p of proposals.slice(0, 2)) {
-                const targetId = p.target_concept_id as string | undefined;
-                if (!targetId) continue;
-                const relatedIds = ((p as any).related_concept_ids ?? [])
-                  .filter((id: string) => conceptIdSet.has(id))
-                  .slice(0, 5);
-                suggestionRows.push({
-                  playbook_id,
-                  user_id: userId,
-                  kind: 'concept_update',
-                  payload: {
-                    target_concept_id: targetId,
-                    body_md: p.body_md,
-                    rationale: p.rationale,
-                    related_concept_ids: relatedIds,
-                  },
-                  provenance: {
-                    source_inbox_item_ids: [item.id],
-                    source_resource_ids: [resource.id],
-                    model: 'gemini-2.5-flash',
-                  },
-                });
-              }
-            }
-          } catch (aiErr) {
-            console.warn('Inbox item AI step failed (non-fatal)', aiErr);
-          }
+          aiPendingItems.push({
+            itemId: item.id,
+            resourceId: resource.id,
+            resourceTitle: resource.title,
+            content: contentForAI.slice(0, 4000),
+          });
         }
       } catch (itemErr) {
         console.error('Inbox item failed', item.id, itemErr);
@@ -382,6 +329,104 @@ ${(concepts ?? []).map((c: any) => `- [${c.id}] ${c.title}\n  Current body:\n${(
           })
           .eq('id', item.id);
         failed += 1;
+      }
+    }
+
+    // ── Batched AI concept-matching: 1 Gemini call for ALL ingested items ──
+    if (aiPendingItems.length > 0) {
+      try {
+        const { data: concepts = [] } = await supabase
+          .from('playbook_concepts')
+          .select('id, title, body_md')
+          .eq('interest_id', interest_id)
+          .or(`playbook_id.eq.${playbook_id},playbook_id.is.null`)
+          .limit(30);
+
+        const hasExistingConcepts = (concepts ?? []).length > 0;
+        const system = hasExistingConcepts
+          ? `You are BetterAt's Playbook coach. Multiple new resources were added to the user's knowledge base. For each resource, decide whether it provides fresh, actionable insight for any existing concept.
+
+IMPORTANT: Your job is to MERGE new insights INTO the existing concept body, not replace it. The body_md you return must:
+1. Preserve ALL existing content from the concept
+2. ADD new bullet points, paragraphs, or sections with fresh info from the resource
+3. Use markdown formatting (headings, bullets, bold for key terms)
+
+BACKLINKING: For each proposal, include "related_concept_ids" — an array of existing concept UUIDs that are meaningfully related. Include 0-5 related concept IDs.
+
+Return ONLY a JSON array (possibly empty) of concept_update proposals. Include "source_index" (0-based) to indicate which resource triggered the proposal:
+  [{ "source_index": 0, "target_concept_id": "<uuid>", "title": "<short concept name>", "body_md": "<merged markdown>", "rationale": "<one line>", "related_concept_ids": ["<uuid>", ...] }]
+Return [] if nothing relevant.`
+          : `You are BetterAt's Playbook coach. Multiple new resources were added to the user's knowledge base. The user has no existing concepts yet, so suggest 1-2 NEW concepts total from the most interesting resources.
+
+Return ONLY a JSON array of new concept proposals with "source_index" (0-based) indicating which resource:
+  [{ "source_index": 0, "title": "<short concept name>", "body_md": "<concept content in markdown>", "rationale": "<one line>" }]
+Return [] if nothing worth capturing.`;
+
+        const resourcesSummary = aiPendingItems.map((item, i) =>
+          `[${i}] ${item.resourceTitle}\n${item.content}`
+        ).join('\n---\n');
+
+        const conceptsSummary = (concepts ?? []).map((c: any) =>
+          `- [${c.id}] ${c.title}\n  ${(c.body_md || '(empty)').slice(0, 500)}`
+        ).join('\n');
+
+        const userPrompt = `NEW RESOURCES (${aiPendingItems.length}):
+${resourcesSummary}
+
+${hasExistingConcepts ? `EXISTING CONCEPTS:\n${conceptsSummary}` : '(No existing concepts)'}`;
+
+        const { text: aiText } = await complete({
+          task: 'playbook',
+          system,
+          messages: [{ role: 'user', content: userPrompt }],
+          maxOutputTokens: 2000,
+          temperature: 0.3,
+        });
+
+        const proposals = extractJson<Array<Record<string, unknown>>>(aiText);
+        const conceptIdSet = new Set((concepts ?? []).map((c: any) => c.id));
+        if (Array.isArray(proposals)) {
+          for (const p of proposals.slice(0, 4)) {
+            const sourceIdx = (p.source_index as number) ?? 0;
+            const sourceItem = aiPendingItems[sourceIdx] ?? aiPendingItems[0];
+            const targetId = p.target_concept_id as string | undefined;
+            if (!targetId && hasExistingConcepts) continue;
+
+            const relatedIds = ((p as any).related_concept_ids ?? [])
+              .filter((id: string) => conceptIdSet.has(id))
+              .slice(0, 5);
+            const targetExists = targetId ? conceptIdSet.has(targetId) : false;
+
+            suggestionRows.push({
+              playbook_id,
+              user_id: userId,
+              kind: targetExists ? 'concept_update' : 'concept_create',
+              payload: targetExists
+                ? {
+                    target_concept_id: targetId,
+                    body_md: p.body_md,
+                    rationale: p.rationale,
+                    related_concept_ids: relatedIds,
+                  }
+                : {
+                    title: (p as any).title
+                      || (typeof p.body_md === 'string' && p.body_md.match(/^\*\*(.+?)\*\*/)?.[1])
+                      || sourceItem.resourceTitle
+                      || 'New Concept',
+                    body_md: p.body_md,
+                    interest_id,
+                    related_concept_ids: relatedIds,
+                  },
+              provenance: {
+                source_inbox_item_ids: [sourceItem.itemId],
+                source_resource_ids: [sourceItem.resourceId],
+                model: 'gemini-2.5-flash',
+              },
+            });
+          }
+        }
+      } catch (aiErr) {
+        console.warn('Batched inbox AI step failed (non-fatal)', aiErr);
       }
     }
 

@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { corsHeaders } from '../_shared/cors.ts';
-import { callGemini } from '../_shared/gemini.ts';
+import { complete } from '../_shared/ai/provider.ts';
 
 /**
  * Lightweight Race Info Extraction
@@ -46,14 +46,15 @@ Return ONLY valid JSON, no other text.`;
 
     let content: string;
     try {
-      content = await callGemini({
-        userContent: [{ text: prompt }],
+      const result = await complete({
+        task: 'extraction',
+        messages: [{ role: 'user', content: prompt }],
         maxOutputTokens: 1024,
         temperature: 0,
       });
-      content = content.trim();
+      content = result.text.trim();
     } catch (aiError: any) {
-      console.error('[extract-race-info] Gemini API error:', aiError.message);
+      console.error('[extract-race-info] AI API error:', aiError.message);
       return new Response(
         JSON.stringify({ success: false, error: 'AI extraction failed' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
