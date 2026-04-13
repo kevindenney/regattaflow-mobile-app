@@ -5,7 +5,7 @@
  * for the race prep checklist weather check feature.
  */
 
-import { EnhancedClaudeClient } from './ai/EnhancedClaudeClient';
+import { EnhancedAIClient } from './ai/EnhancedAIClient';
 import type {
   ForecastSnapshot,
   ForecastAnalysis,
@@ -29,16 +29,16 @@ const MAX_SNAPSHOTS = 3;
  * Service for managing weather forecast snapshots and AI analysis
  */
 export class ForecastCheckService {
-  private static claudeClient: EnhancedClaudeClient | null = null;
+  private static aiClient: EnhancedAIClient | null = null;
 
   /**
    * Get or create the Claude client instance
    */
-  private static getClaudeClient(): EnhancedClaudeClient {
-    if (!this.claudeClient) {
-      this.claudeClient = new EnhancedClaudeClient();
+  private static getAIClient(): EnhancedAIClient {
+    if (!this.aiClient) {
+      this.aiClient = new EnhancedAIClient();
     }
-    return this.claudeClient;
+    return this.aiClient;
   }
 
   /**
@@ -118,9 +118,9 @@ export class ForecastCheckService {
     );
 
     try {
-      const client = this.getClaudeClient();
+      const client = this.getAIClient();
       const response = await client.createEnhancedMessage({
-        model: 'claude-3-haiku-20240307',
+        model: 'claude-3-5-haiku-20241022',
         system: `You are an expert sailing meteorologist helping sailors understand how weather forecast changes affect their race preparation. Be concise and practical. Focus on tactical implications.`,
         messages: [{ role: 'user', content: prompt }],
         maxTokens: 1024,

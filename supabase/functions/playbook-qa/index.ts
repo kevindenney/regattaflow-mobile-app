@@ -11,7 +11,7 @@
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { callGemini } from '../_shared/gemini.ts';
+import { complete } from '../_shared/ai/provider.ts';
 import {
   assertPlaybookOwnership,
   authenticate,
@@ -217,9 +217,10 @@ If the snippets don't contain enough information, say so honestly in answer_md a
 SNIPPETS:
 ${sourceBlocks.join('\n\n')}`;
 
-    const aiText = await callGemini({
+    const { text: aiText } = await complete({
+      task: 'playbook',
       system,
-      userContent: [{ text: userPrompt }],
+      messages: [{ role: 'user', content: userPrompt }],
       maxOutputTokens: 2000,
       temperature: 0.3,
     });

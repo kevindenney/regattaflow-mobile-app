@@ -12,7 +12,7 @@
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { callGemini } from '../_shared/gemini.ts';
+import { complete } from '../_shared/ai/provider.ts';
 import {
   authenticate,
   corsHeaders,
@@ -112,9 +112,10 @@ ${step.description ?? ''}
 CANDIDATES:
 ${candidates.map((c, i) => `[${i}] ${c.item_type} ${c.item_id} (playbook ${c.source_playbook_id}) — ${c.title}\n${c.body}`).join('\n\n')}`;
 
-    const aiText = await callGemini({
+    const { text: aiText } = await complete({
+      task: 'playbook',
       system,
-      userContent: [{ text: userPrompt }],
+      messages: [{ role: 'user', content: userPrompt }],
       maxOutputTokens: 800,
       temperature: 0.3,
     });

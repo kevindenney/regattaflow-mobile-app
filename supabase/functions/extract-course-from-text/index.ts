@@ -4,7 +4,7 @@
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { callGemini } from '../_shared/gemini.ts';
+import { complete } from '../_shared/ai/provider.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -141,12 +141,14 @@ serve(async (req: Request) => {
 
     let responseText: string;
     try {
-      responseText = await callGemini({
-        userContent: [{ text: `${EXTRACTION_PROMPT}\n\n${raceContext}\n\nText content:\n${cleanContent}` }],
+      const result = await complete({
+        task: 'extraction',
+        messages: [{ role: 'user', content: `${EXTRACTION_PROMPT}\n\n${raceContext}\n\nText content:\n${cleanContent}` }],
         maxOutputTokens: 4096,
       });
+      responseText = result.text;
     } catch (aiError: any) {
-      console.error('[extract-course-text] Gemini error:', aiError.message);
+      console.error('[extract-course-text] AI error:', aiError.message);
       return new Response(
         JSON.stringify({ error: 'AI service unavailable' }),
         { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

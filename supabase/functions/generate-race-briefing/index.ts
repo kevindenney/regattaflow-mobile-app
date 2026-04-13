@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { corsHeaders } from '../_shared/cors.ts';
-import { callGemini } from '../_shared/gemini.ts';
+import { complete } from '../_shared/ai/provider.ts';
 
 /**
  * Generate Race Briefing Edge Function
@@ -73,13 +73,15 @@ Return ONLY valid JSON, no other text.`;
 
     let content: string;
     try {
-      content = await callGemini({
-        userContent: [{ text: briefingPrompt }],
+      const result = await complete({
+        task: 'generation',
+        messages: [{ role: 'user', content: briefingPrompt }],
         maxOutputTokens: 4096,
         temperature: 0.3,
       });
+      content = result.text;
     } catch (aiError: any) {
-      console.error('[generate-race-briefing] Gemini API error:', aiError.message);
+      console.error('[generate-race-briefing] AI API error:', aiError.message);
       return new Response(
         JSON.stringify({ error: 'Failed to generate briefing' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

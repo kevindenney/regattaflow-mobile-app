@@ -4,7 +4,7 @@
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { callGemini, GeminiPart } from '../_shared/gemini.ts';
+import { complete, type ContentPart } from '../_shared/ai/provider.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -185,8 +185,8 @@ serve(async (req: Request) => {
       );
     }
 
-    // Prepare Gemini parts
-    const geminiParts: GeminiPart[] = [];
+    // Prepare content parts
+    const contentParts: ContentPart[] = [];
 
     // Add context about the race type
     const raceContext = raceType === 'distance'
@@ -201,11 +201,11 @@ serve(async (req: Request) => {
 
       const mediaType = fileType || 'image/jpeg';
 
-      geminiParts.push({
-        inlineData: { mimeType: mediaType, data: base64Data },
+      contentParts.push({
+        type: 'inline_data', mimeType: mediaType, data: base64Data,
       });
-      geminiParts.push({
-        text: `${EXTRACTION_PROMPT}\n\n${raceContext}\n\nAnalyze this image (${fileName || 'course image'}) and extract all course waypoints and coordinates.`,
+      contentParts.push({
+        type: 'text', text: `${EXTRACTION_PROMPT}\n\n${raceContext}\n\nAnalyze this image (${fileName || 'course image'}) and extract all course waypoints and coordinates.`,
       });
     } else if (fileType === 'application/pdf' || fileContent.startsWith('data:application/pdf')) {
       // PDF file
@@ -213,11 +213,11 @@ serve(async (req: Request) => {
         ? fileContent.split('base64,')[1]
         : fileContent;
 
-      geminiParts.push({
-        inlineData: { mimeType: 'application/pdf', data: base64Data },
+      contentParts.push({
+        type: 'inline_data', mimeType: 'application/pdf', data: base64Data,
       });
-      geminiParts.push({
-        text: `${EXTRACTION_PROMPT}\n\n${raceContext}\n\nAnalyze this PDF document (${fileName || 'sailing instructions'}) and extract all course waypoints and coordinates.`,
+      contentParts.push({
+        type: 'text', text: `${EXTRACTION_PROMPT}\n\n${raceContext}\n\nAnalyze this PDF document (${fileName || 'sailing instructions'}) and extract all course waypoints and coordinates.`,
       });
     } else {
       // Text content
@@ -225,20 +225,22 @@ serve(async (req: Request) => {
         ? atob(fileContent.split('base64,')[1])
         : fileContent;
 
-      geminiParts.push({
-        text: `${EXTRACTION_PROMPT}\n\n${raceContext}\n\nDocument content (${fileName || 'course document'}):\n\n${textContent}`,
+      contentParts.push({
+        type: 'text', text: `${EXTRACTION_PROMPT}\n\n${raceContext}\n\nDocument content (${fileName || 'course document'}):\n\n${textContent}`,
       });
     }
 
-    // Call Gemini Flash for extraction
+    // Call AI provider for extraction
     let responseText: string;
     try {
-      responseText = await callGemini({
-        userContent: geminiParts,
+      const result = await complete({
+        task: 'extraction',
+        messages: [{ role: 'user', content: contentParts }],
         maxOutputTokens: 4096,
       });
+      responseText = result.text;
     } catch (aiError: any) {
-      console.error('[extract-course] Gemini error:', aiError.message);
+      console.error('[extract-course] AI error:', aiError.message);
       return new Response(
         JSON.stringify({ error: 'AI service unavailable' }),
         { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

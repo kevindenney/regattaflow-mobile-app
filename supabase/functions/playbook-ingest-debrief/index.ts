@@ -11,7 +11,7 @@
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { callGemini } from '../_shared/gemini.ts';
+import { complete } from '../_shared/ai/provider.ts';
 import {
   authenticate,
   corsHeaders,
@@ -106,9 +106,10 @@ ${JSON.stringify(review, null, 2)}
 PLAYBOOK CONCEPTS:
 ${playbookConcepts.length === 0 ? '(none — this is a new playbook with no concepts yet)' : playbookConcepts.map(c => `- [${c.id}] ${c.title}${linkedIds.has(c.id) ? ' (LINKED TO THIS STEP)' : ''}\n${c.body_md}`).join('\n\n')}`;
 
-    const aiText = await callGemini({
+    const { text: aiText } = await complete({
+      task: 'playbook',
       system,
-      userContent: [{ text: userPrompt }],
+      messages: [{ role: 'user', content: userPrompt }],
       maxOutputTokens: 1200,
       temperature: 0.3,
     });

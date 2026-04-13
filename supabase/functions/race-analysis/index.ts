@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from 'jsr:@supabase/supabase-js@2';
-import { callGemini } from '../_shared/gemini.ts';
+import { complete } from '../_shared/ai/provider.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -199,15 +199,19 @@ Deno.serve(async (req: Request) => {
 
     const prompt = buildRaceAnalysisPrompt(enrichedRaceData, pastLearnings || [], trackSummary, prepData, regattaPrepNotes);
 
-    // Call Gemini Flash for race analysis
+    // Call AI for race analysis
     let analysisText: string;
+    let modelUsed = 'ai-provider';
     try {
-      analysisText = await callGemini({
-        userContent: [{ text: prompt }],
+      const { text, model } = await complete({
+        task: 'analysis',
+        messages: [{ role: 'user', content: prompt }],
         maxOutputTokens: 4096,
       });
+      analysisText = text;
+      modelUsed = model;
     } catch (aiError: any) {
-      console.error('Gemini API error:', aiError.message);
+      console.error('AI API error:', aiError.message);
       return new Response(
         JSON.stringify({ error: 'Failed to generate analysis', details: aiError.message }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -239,7 +243,7 @@ Deno.serve(async (req: Request) => {
         recommendations: analysis.recommendations,
         plan_vs_execution: analysis.plan_vs_execution || null,
         confidence_score: analysis.confidence_score,
-        model_used: 'gemini-2.0-flash',
+        model_used: modelUsed,
         analysis_version: '2.0',
       })
       .select()

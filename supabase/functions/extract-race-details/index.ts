@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { corsHeaders } from '../_shared/cors.ts';
-import { callGemini } from '../_shared/gemini.ts';
+import { complete } from '../_shared/ai/provider.ts';
 
 /**
  * Enhanced Race Extraction Edge Function
@@ -204,7 +204,7 @@ Return a JSON object with this EXACT structure:
       // === BASIC INFORMATION ===
       "raceName": string,  // Full race name (include series name if applicable, e.g., "Croucher Series Race 1")
       "raceSeriesName": string | null,  // Series name if part of a series (e.g., "Croucher Series")
-      "raceDate": string,  // ISO 8601 format (YYYY-MM-DD)
+      "raceDate": string | null,  // ISO 8601 format (YYYY-MM-DD). MUST be null if no specific date is stated in the document. NEVER guess or invent dates.
       "venue": string,
       "venueVariant": string | null,  // If venue changes per race (e.g., "Port Shelter", "Clearwater Bay")
       "description": string | null,
@@ -496,6 +496,8 @@ IMPORTANT INSTRUCTIONS:
 7. For race days within series, use naming like "Croucher Series Races 1 & 2", "Croucher Series Races 3 & 4", etc. (matching the document)
 8. Extract venue variants carefully (Port Shelter vs Clearwater Bay vs Harbour)
 9. **COUNT YOUR RACES**: Before returning, verify you have extracted ALL race days from ALL series mentioned in the document. If the document mentions 5 series with 3 race days each, you should have ~15 race entries
+10. **NEVER HALLUCINATE DATES**: If the document does NOT contain specific dates for races, set raceDate to null. Do NOT invent or guess dates. Set the confidence score for raceDate to 0.0 when the date is not found. HOWEVER: Many NORs (even ones titled "Standard NOR") DO include a SCHEDULE section with explicit race dates — if the document contains a schedule with specific dates like "Saturday 27 September 2025", you MUST extract those dates. Only set raceDate to null when the document genuinely has NO dates anywhere in its content.
+11. **TIME FORMAT**: warningSignalTime MUST be in HH:MM format (e.g., "14:00"), not "1400hrs" or "14:00hrs". Strip any "hrs" suffix.
 
 **RACE TYPE DETECTION (CRITICAL)**:
    - Detect "fleet" vs "distance" race type from document content
@@ -752,20 +754,26 @@ Return ONLY the JSON object, no additional text.`;
 
     let content: string;
     try {
-      content = await callGemini({
-        userContent: [{ text: extractionPrompt }],
-        maxOutputTokens: 8192,
+      const result = await complete({
+        task: 'extraction',
+        messages: [{ role: 'user', content: extractionPrompt }],
+        maxOutputTokens: 16384,
         temperature: 0,
       });
+      content = result.text;
     } catch (aiError: any) {
-      console.error('[extract-race-details] Gemini API error:', aiError.message);
+      console.error('[extract-race-details] AI API error:', aiError.message);
       return new Response(
         JSON.stringify({
-          error: `Gemini API error: ${aiError.message}`,
+          error: `AI API error: ${aiError.message}`,
         }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    // Log raw response length and first/last chars for debugging
+    console.log(`[extract-race-details] AI response length: ${content.length}`);
+    console.log(`[extract-race-details] Response preview: ${content.substring(0, 300)}`);
 
     // Claude sometimes wraps JSON in markdown code blocks, so clean it up
     // Remove markdown code fences if present
@@ -799,20 +807,89 @@ Return ONLY the JSON object, no additional text.`;
         parseAttempts.push({ attempt: 2, error: 'No JSON object found in content' });
       }
 
-      // Attempt 3: Check if JSON is truncated (ends without closing brace)
+      // Attempt 3: Recover truncated JSON by closing open braces/brackets
       if (!extractedData) {
-        const lastBrace = content.lastIndexOf('}');
-        const lastBracket = content.lastIndexOf(']');
-        if (lastBrace > -1 || lastBracket > -1) {
-          // Try to find where the JSON starts
-          const jsonStart = content.indexOf('{');
-          if (jsonStart > -1) {
-            let truncated = content.substring(jsonStart);
-            // Count braces to see if JSON is incomplete
+        const jsonStart = content.indexOf('{');
+        if (jsonStart > -1) {
+          let truncated = content.substring(jsonStart);
+
+          // Find the last complete race object in the races array
+          // Strategy: find the last '},' or '}' that closes a race entry, then close the array and root object
+          const racesArrayStart = truncated.indexOf('"races"');
+          if (racesArrayStart > -1) {
+            // Find all complete race objects by looking for closing patterns
+            // A race object ends with '}' followed by ',' or ']'
+            const raceEndRegex = /\}[\s]*,[\s]*\{/g;
+            let lastCompleteRaceEnd = -1;
+            let raceMatch;
+            while ((raceMatch = raceEndRegex.exec(truncated)) !== null) {
+              lastCompleteRaceEnd = raceMatch.index + 1; // position after the '}'
+            }
+
+            // Also check for the very last complete object (before truncation)
+            // Look backwards from the end for a complete "confidenceScores" or closing pattern
+            const lastCloseBrace = truncated.lastIndexOf('}');
+            const lastOpenBrace = truncated.lastIndexOf('{');
+
+            // Try to close the JSON by adding missing brackets
+            // Remove any trailing partial object (after last complete '},')
+            if (lastCompleteRaceEnd > 0) {
+              let recovered = truncated.substring(0, lastCompleteRaceEnd + 1);
+              // Close the races array and root object
+              // Check what's still open
+              const openBraces = (recovered.match(/\{/g) || []).length;
+              const closeBraces = (recovered.match(/\}/g) || []).length;
+              const openBrackets = (recovered.match(/\[/g) || []).length;
+              const closeBrackets = (recovered.match(/\]/g) || []).length;
+
+              // Close remaining open brackets and braces
+              for (let i = 0; i < openBrackets - closeBrackets; i++) recovered += ']';
+              // Add required closing fields before final brace
+              if (openBraces - closeBraces > 0) {
+                // Add minimal required fields
+                recovered += ', "documentType": "NOR", "organizingAuthority": null, "overallConfidence": 0.8';
+                for (let i = 0; i < openBraces - closeBraces; i++) recovered += '}';
+              }
+
+              try {
+                extractedData = JSON.parse(recovered);
+                parseAttempts.push({ attempt: 3, error: `Recovered truncated JSON with ${extractedData.races?.length || 0} races` });
+                console.log(`[extract-race-details] Recovered ${extractedData.races?.length || 0} races from truncated JSON (${content.length} chars)`);
+              } catch (parseError3) {
+                parseAttempts.push({ attempt: 3, error: `Recovery failed: ${parseError3.message}` });
+              }
+            }
+          }
+
+          // Attempt 3b: Brute force - try progressively removing chars from the end and closing
+          if (!extractedData) {
             const openBraces = (truncated.match(/\{/g) || []).length;
             const closeBraces = (truncated.match(/\}/g) || []).length;
-            if (openBraces > closeBraces) {
-              parseAttempts.push({ attempt: 3, error: `JSON truncated: ${openBraces} open braces, ${closeBraces} close braces` });
+            parseAttempts.push({ attempt: '3b', error: `JSON truncated: ${openBraces} open braces, ${closeBraces} close braces. Trying brute force recovery...` });
+
+            // Find last complete race by looking for "}," pattern
+            let lastGoodPos = truncated.length;
+            for (let i = truncated.length - 1; i > 0; i--) {
+              if (truncated[i] === '}') {
+                const testStr = truncated.substring(0, i + 1);
+                const ob = (testStr.match(/\{/g) || []).length;
+                const cb = (testStr.match(/\}/g) || []).length;
+                const obrk = (testStr.match(/\[/g) || []).length;
+                const cbrk = (testStr.match(/\]/g) || []).length;
+
+                let attempt = testStr;
+                for (let j = 0; j < obrk - cbrk; j++) attempt += ']';
+                for (let j = 0; j < ob - cb; j++) attempt += '}';
+
+                try {
+                  extractedData = JSON.parse(attempt);
+                  console.log(`[extract-race-details] Brute force recovered JSON at position ${i}, ${extractedData.races?.length || 0} races`);
+                  parseAttempts.push({ attempt: '3b-success', error: `Recovered at pos ${i} with ${extractedData.races?.length || 0} races` });
+                  break;
+                } catch {
+                  // Continue searching
+                }
+              }
             }
           }
         }
@@ -848,6 +925,98 @@ Return ONLY the JSON object, no additional text.`;
         }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
+    }
+
+    // Log extraction summary for debugging
+    const raceCount = extractedData?.races?.length || 0;
+    const raceDates = extractedData?.races?.map((r: any) => `${r.raceName}: ${r.raceDate || 'NULL'}`).join(', ');
+    console.log(`[extract-race-details] Extracted ${raceCount} races. multipleRaces=${extractedData?.multipleRaces}. Dates: ${raceDates}`);
+    console.log(`[extract-race-details] Input text length: ${documentText.length}. Has SCHEDULE: ${documentText.includes('SCHEDULE') || documentText.includes('Schedule')}`);
+
+    // POST-PROCESSING: Patch missing dates/times from document text
+    // Gemini sometimes misses dates even when the document has a clear schedule.
+    // Parse schedule patterns and match them to extracted races.
+    if (extractedData?.races?.length > 0) {
+      // Build a schedule lookup from the document text
+      // Matches patterns like: "Races 5 & 6: Saturday 11 April 2026 (Port Shelter) max.2 1255hrs"
+      // or: "Races 1 & 2: Saturday 27 September 2025 (Port Shelter) 2 1336hrs"
+      const scheduleRegex = /Races?\s+(\d+(?:\s*[&,]\s*\d+)?)\s*:\s*\w+\s+(\d{1,2}\s+\w+\s+\d{4})\s*\(([^)]+)\)\s*(?:max\.?\s*)?(\d+)\s+(\d{3,4})hrs/gi;
+      const scheduleEntries: Array<{
+        raceNumbers: number[];
+        date: string;
+        venue: string;
+        time: string;
+      }> = [];
+
+      let match;
+      while ((match = scheduleRegex.exec(documentText)) !== null) {
+        const raceNumStr = match[1];
+        const raceNumbers = raceNumStr.split(/[&,]/).map((n: string) => parseInt(n.trim(), 10)).filter((n: number) => !isNaN(n));
+        const dateStr = match[2]; // e.g., "11 April 2026"
+        const venue = match[3];   // e.g., "Port Shelter"
+        const rawTime = match[5]; // e.g., "1255"
+
+        // Parse date to ISO format
+        const parsedDate = new Date(dateStr);
+        const isoDate = !isNaN(parsedDate.getTime())
+          ? parsedDate.toISOString().split('T')[0]
+          : null;
+
+        // Parse time to HH:MM format
+        const paddedTime = rawTime.padStart(4, '0');
+        const formattedTime = `${paddedTime.slice(0, 2)}:${paddedTime.slice(2, 4)}`;
+
+        if (isoDate) {
+          scheduleEntries.push({
+            raceNumbers,
+            date: isoDate,
+            venue,
+            time: formattedTime,
+          });
+        }
+      }
+
+      console.log(`[extract-race-details] Found ${scheduleEntries.length} schedule entries in document text`);
+
+      // Also try to extract series context: match series names to their race number ranges
+      // Pattern: "3.4 Moonraker Series" followed by race entries
+      const seriesRegex = /\d+\.\d+\s+(\w[\w\s]*?)\s+Series/gi;
+      const seriesNames: string[] = [];
+      while ((match = seriesRegex.exec(documentText)) !== null) {
+        seriesNames.push(match[1].trim());
+      }
+      console.log(`[extract-race-details] Found series in document: ${seriesNames.join(', ')}`);
+
+      // Patch missing dates and times into extracted races
+      for (const race of extractedData.races) {
+        // Extract race number from race name (e.g., "Moonraker Series Race 5" -> 5)
+        const raceNumMatch = race.raceName?.match(/Race\s+(\d+)/i);
+        const raceNum = raceNumMatch ? parseInt(raceNumMatch[1], 10) : null;
+
+        if (raceNum) {
+          // Find matching schedule entry
+          const scheduleEntry = scheduleEntries.find((e: any) =>
+            e.raceNumbers.includes(raceNum) &&
+            // Also check series name match if possible
+            (!race.raceSeriesName || scheduleEntries.filter((se: any) => se.raceNumbers.includes(raceNum)).length === 1 ||
+              documentText.includes(race.raceSeriesName))
+          );
+
+          if (scheduleEntry) {
+            if (!race.raceDate) {
+              race.raceDate = scheduleEntry.date;
+              console.log(`[extract-race-details] Patched date for ${race.raceName}: ${scheduleEntry.date}`);
+            }
+            if (!race.warningSignalTime || race.warningSignalTime === '14:00') {
+              race.warningSignalTime = scheduleEntry.time;
+              console.log(`[extract-race-details] Patched time for ${race.raceName}: ${scheduleEntry.time}`);
+            }
+            if (!race.venueVariant && scheduleEntry.venue) {
+              race.venueVariant = scheduleEntry.venue;
+            }
+          }
+        }
+      }
     }
 
     // Build source tracking information for provenance

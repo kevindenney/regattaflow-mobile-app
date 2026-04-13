@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { corsHeaders } from '../_shared/cors.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
-import { callGemini } from '../_shared/gemini.ts';
+import { complete } from '../_shared/ai/provider.ts';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
@@ -42,7 +42,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // GOOGLE_AI_API_KEY is checked inside callGemini()
+    // API key is checked inside complete()
 
     let documentText = text;
     let docRecord: any = null;
@@ -250,14 +250,15 @@ Return ONLY the JSON object, no additional text.`;
 
     let content: string;
     try {
-      content = await callGemini({
-        userContent: [{ text: ssiPrompt }],
+      const result = await complete({
+        task: 'extraction',
+        messages: [{ role: 'user', content: ssiPrompt }],
         maxOutputTokens: 4096,
         temperature: 0,
       });
-      content = content.trim();
+      content = result.text.trim();
     } catch (aiError: any) {
-      console.error('[extract-ssi-details] Gemini API error:', aiError.message);
+      console.error('[extract-ssi-details] AI API error:', aiError.message);
 
       if (documentId) {
         const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -271,7 +272,7 @@ Return ONLY the JSON object, no additional text.`;
       }
 
       return new Response(
-        JSON.stringify({ error: `Gemini API error: ${aiError.message}` }),
+        JSON.stringify({ error: `AI API error: ${aiError.message}` }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -302,7 +303,7 @@ Return ONLY the JSON object, no additional text.`;
 
     // Add metadata
     extractedData.extractedAt = new Date().toISOString();
-    extractedData.modelVersion = 'gemini-2.0-flash';
+    extractedData.modelVersion = 'ai-provider';
 
     // If documentId provided, update the record with extracted data
     if (documentId) {

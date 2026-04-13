@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { corsHeaders } from '../_shared/cors.ts';
-import { callGemini, GeminiPart } from '../_shared/gemini.ts';
+import { complete, type ContentPart } from '../_shared/ai/provider.ts';
 
 /**
  * Course Image/PDF Extraction Edge Function
@@ -140,31 +140,32 @@ IMPORTANT for PDFs with MULTIPLE courses: If the document contains multiple cour
 
 If there's only one course, return the standard single-course format.`;
 
-    // Build Gemini parts with inline data
-    const geminiParts: GeminiPart[] = [
+    // Build content parts with inline data
+    const contentParts: ContentPart[] = [
       {
-        inlineData: {
-          mimeType: isPdf ? 'application/pdf' : mediaType,
-          data: base64Data,
-        },
+        type: 'inline_data',
+        mimeType: isPdf ? 'application/pdf' : mediaType,
+        data: base64Data,
       },
-      { text: prompt },
+      { type: 'text', text: prompt },
     ];
 
-    // Call Gemini Flash
+    // Call AI provider
     let content: string;
     try {
-      content = await callGemini({
-        userContent: geminiParts,
+      const result = await complete({
+        task: 'extraction',
+        messages: [{ role: 'user', content: contentParts }],
         maxOutputTokens: 4096,
         temperature: 0.2,
       });
+      content = result.text;
     } catch (aiError: any) {
-      console.error('[extract-course-image] Gemini API error:', aiError.message);
+      console.error('[extract-course-image] AI API error:', aiError.message);
       return new Response(
         JSON.stringify({
           success: false,
-          error: `Gemini API error: ${aiError.message}`,
+          error: `AI API error: ${aiError.message}`,
         }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
