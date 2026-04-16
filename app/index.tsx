@@ -1,105 +1,96 @@
 /**
- * RegattaFlow Landing Page - Clean, conversion-focused landing experience
+ * BetterAt — Logo-only public page.
+ * Signed-in users are redirected to their dashboard.
+ * Everyone else sees just the logo.
+ * Login is available at /(auth)/login for those who know the URL.
  */
 
-import { SimpleLandingNav } from '@/components/landing/SimpleLandingNav';
-import { DataBrowserLandingPage } from '@/components/landing/DataBrowserLandingPage';
-import { ScrollFix } from '@/components/landing/ScrollFix';
+import { BetterAtLogo } from '@/components/BetterAtLogo';
 import { DashboardSkeleton } from '@/components/ui/loading';
 import { getLastTabRoute } from '@/lib/utils/userTypeRouting';
 import { useAuth } from '@/providers/AuthProvider';
 import { hasPersistedSessionHint, hasPersistedSessionHintAsync } from '@/services/supabase';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Platform, StyleSheet, View, type ViewStyle } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 
 export default function LandingPage() {
   const { signedIn, ready, userProfile, loading, isGuest, state } = useAuth();
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [showSkeleton, setShowSkeleton] = useState(() => hasPersistedSessionHint());
-  const searchParams = useLocalSearchParams<{ view?: string }>();
 
-  // Allow authenticated users to view landing page if they explicitly request it
-  const bypassRedirect = searchParams.view === 'landing';
+  const isNative = Platform.OS !== 'web';
 
-  // Check storage on mount (for native async check)
+  // Native: always redirect (to dashboard or login)
   useEffect(() => {
-    if (bypassRedirect || showSkeleton) return;
+    if (!(isNative && ready && !loading && !isRedirecting)) return;
 
+    setIsRedirecting(true);
+    if (signedIn) {
+      router.replace(getLastTabRoute(userProfile?.user_type ?? null));
+    } else {
+      router.replace('/(auth)/login');
+    }
+  }, [isNative, ready, loading, isRedirecting, signedIn, userProfile]);
+
+  // Web: check for persisted session hint
+  useEffect(() => {
+    if (isNative || showSkeleton) return;
     hasPersistedSessionHintAsync().then((hasSession) => {
       if (hasSession) setShowSkeleton(true);
     });
-  }, [bypassRedirect, showSkeleton]);
+  }, [isNative, showSkeleton]);
 
+  // Web: redirect signed-in users to dashboard
   useEffect(() => {
-    // Wait for auth to be ready AND not loading profile
-    if (!ready || loading || isRedirecting) return;
+    if (isNative || !ready || loading || isRedirecting) return;
 
-    // Native app should never show the web landing page.
-    // Signed in: send to last-tab destination. Signed out/guest: enter app at races.
-    if (Platform.OS !== 'web' && !bypassRedirect) {
+    if (signedIn) {
       setIsRedirecting(true);
-      if (signedIn) {
-        const destination = getLastTabRoute(userProfile?.user_type ?? null);
-        router.replace(destination);
-      } else {
-        router.replace('/(tabs)/races');
-      }
-      return;
-    }
-
-    // Guest users: redirect to races tab
-    if ((isGuest || state === 'guest') && !bypassRedirect) {
-      setIsRedirecting(true);
-      router.replace('/(tabs)/races');
-      return;
-    }
-
-    // Signed-in users: redirect to their dashboard
-    if (signedIn && !bypassRedirect) {
-      if (userProfile || (!loading && ready)) {
-        setIsRedirecting(true);
-        const destination = getLastTabRoute(userProfile?.user_type ?? null);
-        router.replace(destination);
-      }
-    } else if (ready && !signedIn && !isGuest && showSkeleton) {
-      // Session hint was wrong (expired/invalid token) - show landing page
+      router.replace(getLastTabRoute(userProfile?.user_type ?? null));
+    } else if (showSkeleton) {
+      // Session hint was stale — stop showing skeleton, show logo
       setShowSkeleton(false);
     }
-  }, [signedIn, ready, userProfile, loading, isRedirecting, bypassRedirect, showSkeleton, isGuest, state]);
+  }, [isNative, signedIn, ready, userProfile, loading, isRedirecting, showSkeleton]);
 
-  // Show skeleton while auth is loading, for returning users, or during redirect
-  // On native, always show skeleton to prevent landing page flash before redirect
-  if ((!ready || showSkeleton || signedIn || isRedirecting || Platform.OS !== 'web') && !bypassRedirect) {
+  // Native: skeleton while redirecting
+  if (isNative) {
     return <DashboardSkeleton />;
   }
 
-  // Show landing page for unauthenticated visitors
-  const Container = Platform.OS === 'web' ? View : SafeAreaView;
-  const containerStyle = Platform.OS === 'web'
-    ? [styles.container, styles.webContainer]
-    : styles.container;
+  // Web: skeleton while checking auth or redirecting
+  if (!ready || showSkeleton || signedIn || isRedirecting) {
+    return <DashboardSkeleton />;
+  }
 
+  // Public page: just the logo
   return (
-    <Container style={containerStyle}>
-      <ScrollFix />
-      <SimpleLandingNav />
-      <DataBrowserLandingPage />
-    </Container>
+    <View style={styles.container}>
+      <View style={styles.centered}>
+        <BetterAtLogo size={72} />
+        <Text style={styles.wordmark}>BetterAt</Text>
+      </View>
+    </View>
   );
 }
 
-const styles = StyleSheet.create<{
-  container: ViewStyle;
-  webContainer: ViewStyle;
-}>({
+const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F8FAFC',
-  },
-  webContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
     minHeight: '100vh' as any,
-    width: '100%',
+  },
+  centered: {
+    alignItems: 'center',
+    gap: 16,
+  },
+  wordmark: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    letterSpacing: 0.5,
   },
 });

@@ -30,7 +30,7 @@ import { initializeMutationQueueHandlers } from '@/services/userManualClubsServi
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ToastProvider } from '@/components/ui/AppToast';
 import { WebAlertProvider } from '@/components/ui/WebAlertDialog';
-import { Stack, router } from 'expo-router';
+import { Stack, router, useSegments } from 'expo-router';
 import {
   useFonts,
   Manrope_400Regular,
@@ -359,17 +359,44 @@ function InterestSelectionGate() {
   );
 }
 
+/**
+ * Global auth guard — unauthenticated users on non-public routes get sent to `/`.
+ * Public routes: index (logo page), (auth) screens, callback, privacy, welcome.
+ */
+function AuthGate() {
+  const { signedIn, ready, loading, isGuest, state } = useAuth();
+  const segments = useSegments();
+
+  useEffect(() => {
+    if (!ready || loading) return;
+
+    const firstSegment = segments[0] ?? '';
+    const publicSegments = ['index', '(auth)', 'privacy', 'welcome', 'callback'];
+    const isPublicRoute = !firstSegment || publicSegments.includes(firstSegment);
+
+    if (isPublicRoute) return;
+
+    // Not signed in and on a protected route → send to index (logo page)
+    if (!signedIn || isGuest || state === 'guest') {
+      router.replace('/');
+    }
+  }, [ready, loading, signedIn, isGuest, state, segments]);
+
+  return null;
+}
+
 function StackWithSplash() {
   const {state} = useAuth()
 
-  // Don't block the app while checking auth - let routes handle their own loading states
-  // This allows the landing page to render immediately
   return (
     <>
       <FirebaseBridgeHandler />
       <NetworkStatusBanner />
+      <AuthGate />
       <InterestSelectionGate />
       <Stack screenOptions={{headerShown: false}}>
+        <Stack.Screen name="index" options={{ headerShown: false }} />
+        <Stack.Screen name="welcome" options={{ headerShown: false, gestureEnabled: false }} />
         <Stack.Screen name="account" options={{ presentation: 'transparentModal', headerShown: false, animation: 'fade' }} />
         <Stack.Screen name="venue/post/create" options={{ presentation: 'modal', headerShown: false }} />
         <Stack.Screen name="org-welcome-modal" options={{ presentation: 'transparentModal', headerShown: false, animation: 'fade' }} />

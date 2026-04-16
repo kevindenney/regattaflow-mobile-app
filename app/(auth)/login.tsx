@@ -368,14 +368,7 @@ export default function Login() {
             </TouchableOpacity>
           </View>
 
-          <View style={styles.footerRow}>
-            <Text style={styles.footerText}>Don't have an account?</Text>
-            <Link href="/(auth)/signup" asChild>
-              <TouchableOpacity testID="login-create-account-link">
-                <Text style={styles.linkText}>Create one</Text>
-              </TouchableOpacity>
-            </Link>
-          </View>
+          {/* Sign-up link hidden — signup route still works for direct access */}
 
           {/* Marketing blurb */}
           <Text style={styles.marketingText}>
