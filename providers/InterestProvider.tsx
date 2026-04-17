@@ -623,6 +623,8 @@ export function InterestProvider({ children }: PropsWithChildren) {
         }
       }
 
+      if (!target) return
+
       if (signedIn && user?.id) {
         // Write to DB
         const { error } = await supabase

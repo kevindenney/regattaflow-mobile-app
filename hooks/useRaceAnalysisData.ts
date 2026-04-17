@@ -251,7 +251,7 @@ export function useRaceAnalysisData(
         }
 
         const hasSession = !!sessionData;
-        const hasNotes = hasSession && typeof sessionData.notes === 'string' && sessionData.notes.trim().length > 0;
+        const hasNotes = !!sessionData && typeof sessionData.notes === 'string' && sessionData.notes.trim().length > 0;
         const explicitKeyMoment = sessionData?.key_moment?.trim() || undefined;
 
         // Extract key learning from structured debrief responses
@@ -298,7 +298,7 @@ export function useRaceAnalysisData(
           confidence_score?: number;
         } | null = null;
 
-        if (hasSession && sessionData.id) {
+        if (sessionData?.id) {
           const { data: aiData, error: aiError } = await supabase
             .from('ai_coach_analysis')
             .select('id, overall_summary, recommendations, confidence_score')

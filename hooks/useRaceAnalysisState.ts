@@ -167,17 +167,17 @@ export function useRaceAnalysisState(
           sessionData = sessionFallback.data as TimerSessionStateRow | null;
         }
 
-        const hasNotes = sessionData && typeof sessionData.notes === 'string' && sessionData.notes.trim().length > 0;
+        const hasNotes = !!(sessionData && typeof sessionData.notes === 'string' && sessionData.notes.trim().length > 0);
         const hasSelfReportedResult = !!sessionData?.self_reported_position;
-        const hasExplicitKeyMoment = sessionData && typeof sessionData.key_moment === 'string' && sessionData.key_moment.trim().length > 0;
+        const hasExplicitKeyMoment = !!(sessionData && typeof sessionData.key_moment === 'string' && sessionData.key_moment.trim().length > 0);
 
         // Check for multi-race results (JSONB array)
-        const hasMultiRaceResults = sessionData?.race_results &&
+        const hasMultiRaceResults = !!(sessionData?.race_results &&
           Array.isArray(sessionData.race_results) &&
-          (sessionData.race_results as { position?: number | null }[]).some(r => r.position != null);
-        const hasMultiRaceKeyMoments = sessionData?.race_results &&
+          (sessionData.race_results as { position?: number | null }[]).some(r => r.position != null));
+        const hasMultiRaceKeyMoments = !!(sessionData?.race_results &&
           Array.isArray(sessionData.race_results) &&
-          (sessionData.race_results as { key_moment?: string | null }[]).some(r => r.key_moment?.trim());
+          (sessionData.race_results as { key_moment?: string | null }[]).some(r => r.key_moment?.trim()));
 
         // Check for full race_analysis (structured form-based analysis)
         interface RaceAnalysisStateRow {
@@ -222,7 +222,8 @@ export function useRaceAnalysisState(
         const hasResult = hasOfficialResult || hasSelfReportedResult || hasMultiRaceResults;
 
         // Key moment: explicit field OR notes OR key_learnings from analysis OR multi-race key moments
-        const hasKeyMoment = hasExplicitKeyMoment || hasNotes || hasMultiRaceKeyMoments || (analysisData?.key_learnings && analysisData.key_learnings.length > 0);
+        const keyLearnings = analysisData?.key_learnings;
+        const hasKeyMoment = hasExplicitKeyMoment || hasNotes || hasMultiRaceKeyMoments || (Array.isArray(keyLearnings) && keyLearnings.length > 0);
 
         // Fetch coach annotations from coach_race_annotations table
         interface AnnotationRow {
@@ -275,10 +276,10 @@ export function useRaceAnalysisState(
         // Transform to CoachAnnotation interface
         const coachAnnotations: CoachAnnotation[] = (annotationsData || []).map((ann) => ({
           id: ann.id,
-          raceId: ann.race_id || ann.regatta_id,
+          raceId: ann.race_id || ann.regatta_id || targetRaceId,
           coachId: ann.coach_id,
           coachName: ann.coach?.full_name || 'Coach',
-          field: ann.field,
+          field: ann.field as CoachAnnotation['field'],
           comment: ann.comment,
           createdAt: new Date(ann.created_at),
           isRead: ann.is_read,

@@ -1084,15 +1084,13 @@ export interface PlaybookSectionCounts {
   qa: number;
 }
 
-type SupabaseFilterQuery = ReturnType<ReturnType<typeof supabase.from>['select']>;
-
 async function tableCount(
   table: string,
   playbookId: string,
-  extraFilter?: (q: SupabaseFilterQuery) => SupabaseFilterQuery,
+  extraFilter?: (q: any) => any,
 ): Promise<number> {
   try {
-    let q: SupabaseFilterQuery = supabase.from(table).select('id', { count: 'exact', head: true }).eq('playbook_id', playbookId);
+    let q: any = supabase.from(table).select('id', { count: 'exact', head: true }).eq('playbook_id', playbookId);
     if (extraFilter) q = extraFilter(q);
     const { count, error } = await q;
     if (error) throw error;
