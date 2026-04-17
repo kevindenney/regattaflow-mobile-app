@@ -60,3 +60,11 @@ docs/deployment-readiness.md
 
 # local scratch artifacts
 TasteHK_GourmetGuide_EN.pdf
+
+# editor swap files (vim/neovim, macOS AppleDouble)
+*.swp
+.*.swp
+._*
+
+# claude code worktrees
+.claude/worktrees/
