@@ -1483,16 +1483,16 @@ export default function RacesScreen() {
           onCardPress={onCardPress}
           refetchTrigger={refetchTrigger}
           onContentScroll={handleToolbarScroll}
-          onMoveStepEarlier={canManage ? () => handleMoveStepEarlier(race.id) : undefined}
-          onMoveStepLater={canManage ? () => handleMoveStepLater(race.id) : undefined}
-          onMoveStepToPlannedNext={canManage ? () => handleMoveStepToPlannedNext(race.id) : undefined}
-          onMoveStepToCompletedMostRecent={canManage ? () => handleMoveStepToCompletedMostRecent(race.id) : undefined}
-          onSetDueDate={canManage ? (dateIso: string | null) => handleSetDueDate(race.id, dateIso) : undefined}
-          onNextStepCreated={(newStepId) => { pendingNewStepIdRef.current = newStepId; }}
+          onMoveStepEarlier={canManage ? handleMoveStepEarlier : undefined}
+          onMoveStepLater={canManage ? handleMoveStepLater : undefined}
+          onMoveStepToPlannedNext={canManage ? handleMoveStepToPlannedNext : undefined}
+          onMoveStepToCompletedMostRecent={canManage ? handleMoveStepToCompletedMostRecent : undefined}
+          onSetDueDate={canManage ? handleSetDueDate : undefined}
+          onNextStepCreated={handleNextStepCreatedForCard}
         />
       );
     },
-    [cardGridDimensions, currentSeasonWeek, handleMoveStepEarlier, handleMoveStepLater, handleMoveStepToCompletedMostRecent, handleMoveStepToPlannedNext, handleSetDueDate, handleToolbarScroll]
+    [cardGridDimensions, currentSeasonWeek, handleMoveStepEarlier, handleMoveStepLater, handleMoveStepToCompletedMostRecent, handleMoveStepToPlannedNext, handleSetDueDate, handleToolbarScroll, handleNextStepCreatedForCard]
   );
 
   // Handle race change from CardGrid
@@ -1727,6 +1727,11 @@ export default function RacesScreen() {
 
   // Quick-create a timeline step — optionally pre-filled from a template
   const pendingNewStepIdRef = useRef<string | null>(null);
+
+  // Stable per-render identity so RaceSummaryCard can rely on React.memo.
+  const handleNextStepCreatedForCard = useCallback((newStepId: string) => {
+    pendingNewStepIdRef.current = newStepId;
+  }, []);
 
   const handleAddStep = useCallback(async () => {
     if (!user?.id || !currentInterest?.id) return;

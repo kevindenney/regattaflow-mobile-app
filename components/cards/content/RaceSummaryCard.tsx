@@ -1675,10 +1675,10 @@ function RaceSummaryCardImpl({
     // Only show edit/delete for owners
     if (isOwner) {
       if (onMoveStepEarlier) {
-        items.push({ label: 'Move Earlier', icon: 'arrow-back-outline', onPress: onMoveStepEarlier });
+        items.push({ label: 'Move Earlier', icon: 'arrow-back-outline', onPress: () => onMoveStepEarlier(race.id) });
       }
       if (onMoveStepLater) {
-        items.push({ label: 'Move Later', icon: 'arrow-forward-outline', onPress: onMoveStepLater });
+        items.push({ label: 'Move Later', icon: 'arrow-forward-outline', onPress: () => onMoveStepLater(race.id) });
       }
       // Mark Done / Mark Not Done handled by the status toggle in the header
       // Due date
@@ -1787,10 +1787,10 @@ function RaceSummaryCardImpl({
     if (!isOverdue) return;
     const actions: Array<{ text: string; onPress?: () => void; style?: 'default' | 'cancel' | 'destructive' }> = [];
     if (onMoveStepToCompletedMostRecent) {
-      actions.push({ text: 'Mark Done', onPress: onMoveStepToCompletedMostRecent });
+      actions.push({ text: 'Mark Done', onPress: () => onMoveStepToCompletedMostRecent(race.id) });
     }
     if (onMoveStepToPlannedNext) {
-      actions.push({ text: 'Mark Not Done', onPress: onMoveStepToPlannedNext });
+      actions.push({ text: 'Mark Not Done', onPress: () => onMoveStepToPlannedNext(race.id) });
     }
     if (onOpenPostRaceInterview) {
       actions.push({ text: 'Reflect + AI', onPress: onOpenPostRaceInterview });
@@ -1801,7 +1801,7 @@ function RaceSummaryCardImpl({
       'What would you like to do?',
       actions,
     );
-  }, [isOverdue, isTimelineStep, onMoveStepToCompletedMostRecent, onMoveStepToPlannedNext, onOpenPostRaceInterview]);
+  }, [isOverdue, isTimelineStep, onMoveStepToCompletedMostRecent, onMoveStepToPlannedNext, onOpenPostRaceInterview, race.id]);
 
   // Render race type badge component
   const RaceTypeBadgeIcon = raceTypeBadge.icon;
@@ -2362,9 +2362,9 @@ function RaceSummaryCardImpl({
                   onPress={() => {
                     triggerHaptic('impactLight');
                     if (isTimelineDone && onMoveStepToPlannedNext) {
-                      onMoveStepToPlannedNext();
+                      onMoveStepToPlannedNext(race.id);
                     } else if (!isTimelineDone && onMoveStepToCompletedMostRecent) {
-                      onMoveStepToCompletedMostRecent();
+                      onMoveStepToCompletedMostRecent(race.id);
                     }
                   }}
                   style={[styles.statusToggle, isTimelineDone && styles.statusToggleDone]}
@@ -2617,7 +2617,7 @@ function RaceSummaryCardImpl({
                   </Text>
                 </Pressable>
                 {onSetDueDate && (
-                  <Pressable onPress={() => onSetDueDate(null)} hitSlop={8}>
+                  <Pressable onPress={() => onSetDueDate(race.id, null)} hitSlop={8}>
                     <Ionicons name="close-circle" size={14} color="#C7C7CC" />
                   </Pressable>
                 )}
@@ -2999,11 +2999,11 @@ function RaceSummaryCardImpl({
           visible={showDueDatePicker}
           currentDate={(race as any).due_at || null}
           onSelect={(iso) => {
-            onSetDueDate(iso);
+            onSetDueDate(race.id, iso);
             setShowDueDatePicker(false);
           }}
           onClear={() => {
-            onSetDueDate(null);
+            onSetDueDate(race.id, null);
             setShowDueDatePicker(false);
           }}
           onClose={() => setShowDueDatePicker(false)}

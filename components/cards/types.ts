@@ -429,16 +429,15 @@ export interface CardContentProps {
   onCardPress?: () => void;
   /** Incrementing counter to trigger data refetch (e.g., after PostRaceInterview completes) */
   refetchTrigger?: number;
-  /** Callback to move a timeline step earlier */
-  onMoveStepEarlier?: () => void;
-  /** Callback to move a timeline step later */
-  onMoveStepLater?: () => void;
-  /** Callback to mark step not done (back to pending) */
-  onMoveStepToPlannedNext?: () => void;
-  /** Callback to mark step done */
-  onMoveStepToCompletedMostRecent?: () => void;
-  /** Callback to set or clear due date */
-  onSetDueDate?: (dateIso: string | null) => void;
+  /**
+   * Callbacks take the raceId so parents can pass stable handler refs.
+   * The card curries these internally with its own race.id via useCallback.
+   */
+  onMoveStepEarlier?: (raceId: string) => void;
+  onMoveStepLater?: (raceId: string) => void;
+  onMoveStepToPlannedNext?: (raceId: string) => void;
+  onMoveStepToCompletedMostRecent?: (raceId: string) => void;
+  onSetDueDate?: (raceId: string, dateIso: string | null) => void;
   /** Callback when a next step is created from the review phase */
   onNextStepCreated?: (newStepId: string) => void;
 }
