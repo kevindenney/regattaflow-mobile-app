@@ -360,6 +360,11 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
   const activeOrganizationIdRef = React.useRef<string | null>(null);
   const membershipRealtimeCommitRef = React.useRef<Map<string, number>>(new Map());
   const membershipRealtimeSubscribedOnceRef = React.useRef(false);
+  // Inflight guard — dedupe concurrent refreshMemberships calls so we don't
+  // stack supabase.auth.getSession() / membership queries behind each other's
+  // locks (the Nth call would otherwise exceed the 10s client timeout even
+  // when the server responds quickly).
+  const refreshInflightRef = React.useRef<Promise<void> | null>(null);
 
   const membershipColumns =
     'id, organization_id, role, status, membership_status, is_verified, verification_source, joined_at, organization:organizations(id, name, slug, organization_type, verification_mode, allowed_email_domains, metadata, is_active)';
@@ -386,7 +391,27 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
     logger.debug('mounted', mountedAt);
   }, []);
 
-  const refreshMemberships = useCallback(async () => {
+  const doRefreshMembershipsRef = React.useRef<() => Promise<void>>(async () => {});
+
+  const refreshMemberships = useCallback(async (): Promise<void> => {
+    // Dedupe: if a refresh is already running, return the same promise so
+    // callers await the existing work instead of spawning parallel queries
+    // that would each take a supabase-js auth lock and pile up behind each
+    // other (the Nth would exceed the 10s client timeout even when the
+    // server responds in ~300ms).
+    if (refreshInflightRef.current) {
+      return refreshInflightRef.current;
+    }
+    const run = doRefreshMembershipsRef.current();
+    refreshInflightRef.current = run;
+    try {
+      await run;
+    } finally {
+      refreshInflightRef.current = null;
+    }
+  }, []);
+
+  doRefreshMembershipsRef.current = async () => {
     const currentSignedIn = signedInRef.current;
     const currentUserId = userIdRef.current;
     const startedAt = new Date().toISOString();
@@ -540,8 +565,12 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
       );
 
       // Preserve existing in-memory choice first, then persisted choice, but only if still ACTIVE.
-      const inMemoryActive = activeOrganizationId
-        ? activeRows.find((row) => row.organization_id === activeOrganizationId)
+      // Read from ref (not the state closure) so this function is not rebuilt
+      // every time activeOrganizationId changes — that was causing the useEffect
+      // that depends on `refreshMemberships` to re-fire after every load.
+      const currentActiveOrgId = activeOrganizationIdRef.current;
+      const inMemoryActive = currentActiveOrgId
+        ? activeRows.find((row) => row.organization_id === currentActiveOrgId)
         : null;
       const storedActive = storedId
         ? activeRows.find((row) => row.organization_id === storedId)
@@ -615,7 +644,7 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
       setLoading(false);
       setReady(true);
     }
-  }, [activeOrganizationId]);
+  };
 
   useEffect(() => {
     void refreshMemberships();
