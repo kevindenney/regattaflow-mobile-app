@@ -14,7 +14,11 @@ export function timelineStepToCardRaceData(step: TimelineStepRecord): CardRaceDa
     name: step.title,
     interest_id: step.interest_id,
     venue: step.location_name ?? '',
-    date: step.starts_at || undefined,
+    // Only surface a `date` when the user has set an explicit due date.
+    // `due_at` is the sole anchor for timeline ordering (see lib/races/anchorDate.ts).
+    // `starts_at` is deliberately not consulted here — it is null for new steps
+    // and a stale artifact on older rows that would misflag fresh steps as "past".
+    date: step.due_at || undefined,
     status: STATUS_MAP[step.status] ?? 'scheduled',
     created_by: step.user_id,
     user_id: step.user_id,
@@ -26,6 +30,10 @@ export function timelineStepToCardRaceData(step: TimelineStepRecord): CardRaceDa
     description: step.description,
     due_at: step.due_at,
     completed_at: step.completed_at,
+    source_type: step.source_type,
+    source_blueprint_id: step.source_blueprint_id ?? null,
+    copied_from_user_id: step.copied_from_user_id ?? null,
+    isPinned: Boolean((step as any)._pinned),
     metadata: {
       ...(step.metadata ?? {}),
       timeline_step_id: step.id,

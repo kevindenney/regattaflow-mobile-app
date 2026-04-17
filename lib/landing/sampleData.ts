@@ -386,6 +386,16 @@ const TRIBAL_CUISINE_DETAILS = [
   'Plating and presentation — farm-to-table dining experience',
 ];
 
+/** Domain grouping for the interest catalog. Shared by landing page and nav. */
+export const INTEREST_DOMAINS = [
+  { name: 'Healthcare', color: '#6366F1', slugs: ['nursing', 'global-health'] },
+  { name: 'Creative Arts', color: '#F59E0B', slugs: ['drawing', 'design', 'knitting', 'fiber-arts', 'painting-printing'] },
+  { name: 'Sports & Outdoors', color: '#0EA5E9', slugs: ['sail-racing', 'golf', 'health-and-fitness'] },
+  { name: 'Livelihoods & Enterprise', color: '#D35400', slugs: ['lac-craft-business', 'food-processing', 'textile-weaving'] },
+  { name: 'Education & Learning', color: '#5C6BC0', slugs: ['lifelong-learning', 'self-mastery'] },
+  { name: 'Agriculture & Environment', color: '#2E7D32', slugs: ['regenerative-agriculture'] },
+];
+
 export const SAMPLE_INTERESTS: SampleInterest[] = [
   {
     slug: 'nursing',
@@ -4254,6 +4264,48 @@ export const SAMPLE_INTERESTS: SampleInterest[] = [
     color: '#8B5CF6',
     icon: 'shield-checkmark',
     organizations: [],
+  },
+  {
+    slug: 'lac-craft-business',
+    name: 'Lac Craft Business',
+    color: '#E67E22',
+    icon: 'storefront',
+    organizations: [
+      {
+        slug: 'pradan-khunti',
+        name: 'PRADAN — Khunti Unit',
+        groupLabel: 'Programs' as const,
+        groups: [],
+      },
+    ],
+  },
+  {
+    slug: 'food-processing',
+    name: 'Food Processing',
+    color: '#E67E22',
+    icon: 'restaurant',
+    organizations: [
+      {
+        slug: 'pradan-ranchi-food',
+        name: 'PRADAN — Ranchi Food Hub',
+        groupLabel: 'Programs' as const,
+        groups: [],
+      },
+    ],
+  },
+  {
+    slug: 'textile-weaving',
+    name: 'Textile & Weaving',
+    color: '#E67E22',
+    icon: 'color-palette',
+    organizations: [
+      {
+        slug: 'pradan-hazaribagh-textiles',
+        name: 'PRADAN — Hazaribagh Textiles',
+        groupLabel: 'Programs' as const,
+        groups: [],
+      },
+    ],
   },
 ];
 

@@ -175,6 +175,53 @@ const SPORT_LABELS: StepCategoryLabels = {
   refinementPlaceholder: 'Add a drill, swap an activity, adjust...',
 };
 
+const RACE_DAY_CHECK_LABELS: StepCategoryLabels = {
+  badge: 'RACE DAY',
+  tabs: { plan: 'Prep', act: 'Check', review: 'Debrief' },
+  questions: {
+    what: 'What needs to be checked?',
+    how: 'What is your checklist?',
+    why: 'What race is this for?',
+    who: 'Who is on your crew?',
+    where: 'Where is the race venue?',
+  },
+  placeholders: {
+    what: 'e.g. Mast rake, shroud tension, sail inventory...',
+    why: 'e.g. Moonraker race, Dragon Worlds qualifier, April 11th',
+    where: 'Race venue or start area...',
+    subStep: 'Add a check item',
+  },
+  aiGuidance: 'This is a race day preparation checklist for sailing. Help enumerate pre-race checks: rig tuning measurements, equipment, sail selection, logistics, and crew coordination. Reference any linked playbook resources for specific tuning values.',
+  actHeader: 'CHECKLIST',
+  planHeader: 'RACE DAY PREP',
+  planSubheader: 'Rig checks, logistics, and crew tasks',
+  refinementPlaceholder: 'Add a check item, rig setting, or note...',
+};
+
+const READING_LABELS: StepCategoryLabels = {
+  badge: 'READING',
+  tabs: { plan: 'Plan', act: 'Read', review: 'Review' },
+  questions: {
+    what: 'What will you read?',
+    how: 'How will you approach this reading?',
+    why: 'Why this book or article now?',
+    who: 'Who recommended this or who will you discuss it with?',
+    where: 'Where will you read?',
+  },
+  placeholders: {
+    what: 'Book title, article, chapter, or newsletter...',
+    why: 'e.g. Recommended by coach, relevant to current challenge, book club...',
+    where: 'Coffee shop, commute, before bed...',
+    subStep: 'Add a chapter or section',
+  },
+  aiGuidance:
+    'This is a READING step. Help the user plan their reading: key themes to watch for, questions to hold while reading, and how to connect insights to their practice. Ask about specific chapters, takeaways, and application to their goals.',
+  actHeader: 'READING LOG',
+  planHeader: 'READING PLAN',
+  planSubheader: 'Plan what to read and why it matters',
+  refinementPlaceholder: 'Add a chapter, note a key idea, adjust focus...',
+};
+
 // ---------------------------------------------------------------------------
 // Lookup
 // ---------------------------------------------------------------------------
@@ -185,6 +232,9 @@ const CATEGORY_CONFIGS: Record<string, StepCategoryLabels> = {
   cardio: CARDIO_LABELS,
   hiit: HIIT_LABELS,
   sport: SPORT_LABELS,
+  race_day_check: RACE_DAY_CHECK_LABELS,
+  reading: READING_LABELS,
+  reading_study: READING_LABELS,
 };
 
 /**
