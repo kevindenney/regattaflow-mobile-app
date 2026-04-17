@@ -16,9 +16,10 @@
  * timelines, and my adopted-step set, and pass them in.
  */
 
-import React, { useMemo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSharedValue } from 'react-native-reanimated';
+import { Ionicons } from '@expo/vector-icons';
 import { TimelineLane, TimelineLaneTile } from './TimelineLane';
 import type { TimelineStepRecord } from '@/types/timeline-steps';
 import type { PeerTimeline } from '@/types/blueprint';
@@ -80,6 +81,11 @@ export function BlueprintPanel({
 }: BlueprintPanelProps) {
   // Panel-local shared scroll offset — curriculum + peer rows stay in sync.
   const scrollOffsetX = useSharedValue(0);
+
+  // Peers collapsed by default — without this, every subscribed blueprint
+  // floods the screen with N follower rows on first load. User taps
+  // "Following · N" to expand.
+  const [peersExpanded, setPeersExpanded] = useState(false);
 
   // Set of curriculum step IDs the user has already adopted.
   const adoptedCurriculumIds = useMemo(() => {
@@ -169,34 +175,48 @@ export function BlueprintPanel({
         onHeaderAction={onOpenBlueprint}
         headerActionIcon={onOpenBlueprint ? 'open-outline' : undefined}
       />
-      {/* "Following" section header — clarifies the rows below are peers
-          following the blueprint, not additional curriculum content. */}
+      {/* "Following" section header — tappable toggle for the peer rows
+          below. Collapsed by default so a single panel doesn't flood the
+          screen when a user follows many peers. */}
       {peerLanes.length > 0 ? (
-        <View style={styles.followingHeader}>
+        <Pressable
+          style={styles.followingHeader}
+          onPress={() => setPeersExpanded((v) => !v)}
+          accessibilityRole="button"
+          accessibilityLabel={`${peersExpanded ? 'Collapse' : 'Expand'} ${peerLanes.length} follower${peerLanes.length === 1 ? '' : 's'}`}
+        >
+          <Ionicons
+            name={peersExpanded ? 'chevron-down' : 'chevron-forward'}
+            size={12}
+            color="#8E8E93"
+            style={styles.followingChevron}
+          />
           <Text style={styles.followingLabel}>
             Following · {peerLanes.length}
           </Text>
-        </View>
+        </Pressable>
       ) : null}
-      {/* Peer rows — follow curriculum scroll. */}
-      {peerLanes.map(({ peer, tiles }) => (
-        <TimelineLane
-          key={peer.subscriber_id}
-          laneKind="peer"
-          laneId={peer.subscriber_id}
-          label={peer.subscriber_name ?? 'Peer'}
-          avatarEmoji={peer.subscriber_avatar_emoji ?? undefined}
-          progress={{ done: peer.completed_count, total: peer.total_count }}
-          tiles={tiles}
-          scrollOffsetX={scrollOffsetX}
-          isScrollDriver={false}
-          tileWidth={tileWidth}
-          tileSpacing={tileSpacing}
-          gutterWidth={gutterWidth}
-          onHeaderAction={onOpenPeer ? () => onOpenPeer(peer.subscriber_id) : undefined}
-          headerActionIcon={onOpenPeer ? 'person-circle-outline' : undefined}
-        />
-      ))}
+      {/* Peer rows — follow curriculum scroll. Only rendered when expanded. */}
+      {peersExpanded
+        ? peerLanes.map(({ peer, tiles }) => (
+            <TimelineLane
+              key={peer.subscriber_id}
+              laneKind="peer"
+              laneId={peer.subscriber_id}
+              label={peer.subscriber_name ?? 'Peer'}
+              avatarEmoji={peer.subscriber_avatar_emoji ?? undefined}
+              progress={{ done: peer.completed_count, total: peer.total_count }}
+              tiles={tiles}
+              scrollOffsetX={scrollOffsetX}
+              isScrollDriver={false}
+              tileWidth={tileWidth}
+              tileSpacing={tileSpacing}
+              gutterWidth={gutterWidth}
+              onHeaderAction={onOpenPeer ? () => onOpenPeer(peer.subscriber_id) : undefined}
+              headerActionIcon={onOpenPeer ? 'person-circle-outline' : undefined}
+            />
+          ))
+        : null}
     </View>
   );
 }
@@ -211,11 +231,17 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   followingHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 8,
     backgroundColor: '#FAFAFA',
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#E5E4E1',
+  },
+  followingChevron: {
+    width: 12,
   },
   followingLabel: {
     fontSize: 11,
