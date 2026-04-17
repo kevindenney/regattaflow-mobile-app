@@ -26,7 +26,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { router, usePathname } from 'expo-router';
 import { useAuth } from '@/providers/AuthProvider';
-import { RegattaFlowLogo } from '@/components/RegattaFlowLogo';
+import { BetterAtLogo } from '@/components/BetterAtLogo';
 import { getDashboardRoute } from '@/lib/utils/userTypeRouting';
 
 interface NavItem {
@@ -248,8 +248,8 @@ export function LandingNav({ transparent = false, sticky = true }: LandingNavPro
             style={styles.logoContainer}
             onPress={() => handleNavClick('/')}
           >
-            <RegattaFlowLogo size={28} variant="filled" />
-            <Text style={styles.logoText}>RegattaFlow</Text>
+            <BetterAtLogo size={28} variant="filled" />
+            <Text style={styles.logoText}>BetterAt</Text>
           </TouchableOpacity>
 
           {/* Visual Separator */}
@@ -335,8 +335,8 @@ export function LandingNav({ transparent = false, sticky = true }: LandingNavPro
               style={styles.logoContainer}
               onPress={() => handleNavClick('/')}
             >
-              <RegattaFlowLogo size={24} variant="filled" />
-              <Text style={[styles.logoText, styles.logoTextMobile]}>RegattaFlow</Text>
+              <BetterAtLogo size={24} variant="filled" />
+              <Text style={[styles.logoText, styles.logoTextMobile]}>BetterAt</Text>
             </TouchableOpacity>
 
             {/* Right side: Sign In + Hamburger */}
@@ -393,8 +393,8 @@ export function LandingNav({ transparent = false, sticky = true }: LandingNavPro
               {/* Header */}
               <View style={styles.mobileMenuHeader}>
                 <View style={styles.logoContainer}>
-                  <RegattaFlowLogo size={28} variant="filled" />
-                  <Text style={styles.logoText}>RegattaFlow</Text>
+                  <BetterAtLogo size={28} variant="filled" />
+                  <Text style={styles.logoText}>BetterAt</Text>
                 </View>
                 <TouchableOpacity
                   style={styles.menuCloseButton}

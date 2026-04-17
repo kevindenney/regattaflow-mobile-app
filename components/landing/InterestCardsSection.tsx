@@ -11,6 +11,20 @@ import { router } from 'expo-router';
 
 const INTERESTS = [
   {
+    slug: 'nursing',
+    name: 'Nursing',
+    description: 'Clinical skills & professional development',
+    color: '#0097A7',
+    icon: '\uD83E\uDE7A',
+  },
+  {
+    slug: 'lac-craft-business',
+    name: 'Lac Craft Business',
+    description: 'Micro-enterprise, government loans & SHG support',
+    color: '#E67E22',
+    icon: '\uD83D\uDC5C',
+  },
+  {
     slug: 'sail-racing',
     name: 'Sail Racing',
     description: 'Tactics, strategy & boat speed for club racers',
@@ -18,11 +32,11 @@ const INTERESTS = [
     icon: '\u26F5',
   },
   {
-    slug: 'nursing',
-    name: 'Nursing',
-    description: 'Clinical skills & professional development',
-    color: '#0097A7',
-    icon: '\uD83E\uDE7A',
+    slug: 'food-processing',
+    name: 'Food Processing',
+    description: 'Puffed rice, pickles, FSSAI & cottage food business',
+    color: '#D35400',
+    icon: '\uD83C\uDF36\uFE0F',
   },
   {
     slug: 'drawing',

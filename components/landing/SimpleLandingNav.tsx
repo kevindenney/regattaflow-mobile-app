@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, usePathname } from 'expo-router';
 import { BetterAtLogo } from '@/components/BetterAtLogo';
 import { InterestDropdown } from './InterestDropdown';
-import { SAMPLE_INTERESTS } from '@/lib/landing/sampleData';
+import { SAMPLE_INTERESTS, INTEREST_DOMAINS } from '@/lib/landing/sampleData';
 import { useAuth } from '@/providers/AuthProvider';
 import { getDashboardRoute } from '@/lib/utils/userTypeRouting';
 import { ProfileDropdown } from '@/components/ui/ProfileDropdown';
@@ -54,6 +54,18 @@ export function SimpleLandingNav({ currentInterestSlug }: SimpleLandingNavProps 
         ]}
       >
         <View style={[styles.inner, isDesktop && styles.innerDesktop]}>
+          {/* Back button (native only, when there's history) */}
+          {Platform.OS !== 'web' && router.canGoBack() && (
+            <TouchableOpacity
+              style={styles.backBtn}
+              onPress={() => router.back()}
+              accessibilityLabel="Go back"
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+          )}
+
           {/* Logo */}
           <TouchableOpacity
             style={styles.logoRow}
@@ -68,6 +80,9 @@ export function SimpleLandingNav({ currentInterestSlug }: SimpleLandingNavProps 
           {isDesktop ? (
             <View style={styles.desktopLinks}>
               <InterestDropdown currentSlug={currentInterestSlug} />
+              <TouchableOpacity onPress={() => router.push('/how-it-works' as any)}>
+                <Text style={styles.navLink}>How It Works</Text>
+              </TouchableOpacity>
               <View style={styles.pricingContainer}>
                 <TouchableOpacity
                   onPress={() => setPricingMenuOpen(!pricingMenuOpen)}
@@ -160,13 +175,7 @@ export function SimpleLandingNav({ currentInterestSlug }: SimpleLandingNavProps 
 
               {/* Menu items — grouped by domain */}
               <ScrollView style={styles.mobileMenuItems} showsVerticalScrollIndicator={false}>
-                {[
-                  { name: 'Healthcare', color: '#6366F1', slugs: ['nursing', 'global-health'] },
-                  { name: 'Creative Arts', color: '#F59E0B', slugs: ['drawing', 'design', 'knitting', 'fiber-arts', 'painting-printing'] },
-                  { name: 'Sports & Outdoors', color: '#0EA5E9', slugs: ['sail-racing', 'golf', 'health-and-fitness'] },
-                  { name: 'Education & Learning', color: '#5C6BC0', slugs: ['lifelong-learning'] },
-                  { name: 'Agriculture & Environment', color: '#2E7D32', slugs: ['regenerative-agriculture'] },
-                ].map((domain) => {
+                {INTEREST_DOMAINS.map((domain) => {
                   const domainInterests = domain.slugs
                     .map((slug) => SAMPLE_INTERESTS.find((i) => i.slug === slug))
                     .filter(Boolean) as typeof SAMPLE_INTERESTS;
@@ -198,6 +207,20 @@ export function SimpleLandingNav({ currentInterestSlug }: SimpleLandingNavProps 
                   );
                 })}
 
+                <TouchableOpacity
+                  style={styles.mobileMenuItem}
+                  onPress={() => {
+                    setMobileMenuOpen(false);
+                    router.push('/how-it-works' as any);
+                  }}
+                >
+                  <Ionicons
+                    name="bulb-outline"
+                    size={22}
+                    color="rgba(255, 255, 255, 0.7)"
+                  />
+                  <Text style={styles.mobileMenuText}>How It Works</Text>
+                </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.mobileMenuItem}
                   onPress={() => {
@@ -342,6 +365,10 @@ const styles = StyleSheet.create({
   },
   innerDesktop: {},
 
+  backBtn: {
+    padding: 4,
+    marginRight: 4,
+  },
   logoRow: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -10,6 +10,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useAuth } from '@/providers/AuthProvider';
+import { SearchBar } from './SearchBar';
 
 export function HeroSection() {
   const { width } = useWindowDimensions();
@@ -38,6 +39,11 @@ export function HeroSection() {
           whatever your discipline. Plan. Do. Review.
         </Text>
 
+        {/* Search */}
+        <View style={styles.searchWrapper}>
+          <SearchBar />
+        </View>
+
         {/* CTAs */}
         <View style={[styles.ctaRow, isDesktop && styles.ctaRowDesktop]}>
           <TouchableOpacity
@@ -61,31 +67,20 @@ export function HeroSection() {
 
         <Text style={styles.trustLine}>No credit card required</Text>
 
-        {/* Interest pills */}
-        <View style={styles.personaPills}>
-          {[
-            { name: 'Sail Racing', slug: 'sail-racing', color: '#003DA5' },
-            { name: 'Nursing', slug: 'nursing', color: '#0097A7' },
-            { name: 'Drawing', slug: 'drawing', color: '#E64A19' },
-            { name: 'Health & Fitness', slug: 'health-and-fitness', color: '#2E7D32' },
-          ].map((interest) => (
-            <TouchableOpacity
-              key={interest.slug}
-              style={[styles.personaPill, { borderColor: `${interest.color}80`, backgroundColor: `${interest.color}20` }]}
-              onPress={() => router.push(`/${interest.slug}` as any)}
-            >
-              <Text style={styles.personaPillText}>{interest.name}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* Sign-in link */}
+        {/* Sign-in + how it works */}
         <View style={styles.signInRow}>
           <Text style={styles.signInLabel}>Already have an account?</Text>
           <TouchableOpacity onPress={() => router.push('/(auth)/login')}>
             <Text style={styles.signInLink}> Log In</Text>
           </TouchableOpacity>
         </View>
+
+        <TouchableOpacity
+          style={styles.howItWorksLink}
+          onPress={() => router.push('/how-it-works' as any)}
+        >
+          <Text style={styles.howItWorksText}>See how it works →</Text>
+        </TouchableOpacity>
       </View>
     </LinearGradient>
   );
@@ -124,11 +119,17 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 28,
     maxWidth: 560,
-    marginBottom: 32,
+    marginBottom: 28,
   },
   subtitleDesktop: {
     fontSize: 20,
     lineHeight: 30,
+  },
+
+  searchWrapper: {
+    width: '100%',
+    marginBottom: 28,
+    zIndex: 50,
   },
 
   ctaRow: {
@@ -186,33 +187,10 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
 
-  personaPills: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 24,
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-  },
-  personaPill: {
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.35)',
-    borderRadius: 999,
-    paddingVertical: 8,
-    paddingHorizontal: 18,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    ...Platform.select({
-      web: { cursor: 'pointer', transition: 'background-color 0.2s' },
-    }),
-  },
-  personaPillText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-
   signInRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 12,
   },
   signInLabel: {
     fontSize: 14,
@@ -226,5 +204,16 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: { cursor: 'pointer' },
     }),
+  },
+
+  howItWorksLink: {
+    ...Platform.select({
+      web: { cursor: 'pointer' },
+    }),
+  },
+  howItWorksText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: 'rgba(255, 255, 255, 0.6)',
   },
 });

@@ -9,11 +9,13 @@ import { PersonTimelineRow } from './PersonTimelineRow';
 import { SubscribeCTA } from './SubscribeCTA';
 import { getInterest, getOrganization, type SampleCohort } from '@/lib/landing/sampleData';
 import { useAuth } from '@/providers/AuthProvider';
-import { useOrganizationBlueprints, useBlueprintSteps, useSubscribe, useBlueprintSubscription } from '@/hooks/useBlueprint';
-import { showAlert } from '@/lib/utils/crossPlatformAlert';
+import { useInterest } from '@/providers/InterestProvider';
+import { useOrganizationBlueprints, useBlueprintSteps, useSubscribe, useUnsubscribe, useBlueprintSubscription } from '@/hooks/useBlueprint';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import type { BlueprintRecord } from '@/types/blueprint';
 import { organizationDiscoveryService, type OrganizationJoinMode } from '@/services/OrganizationDiscoveryService';
 import { useOrgPrograms, useOrgMemberTimelines } from '@/hooks/usePrograms';
+import { programService } from '@/services/ProgramService';
 import { supabase } from '@/services/supabase';
 
 interface OrganizationBrowserPageProps {
@@ -27,12 +29,15 @@ export function OrganizationBrowserPage({ interestSlug, orgSlug }: OrganizationB
   const { width } = useWindowDimensions();
   const isDesktop = width > 768;
   const { user, isGuest } = useAuth();
+  const { switchInterest } = useInterest();
   const isLoggedIn = !!user && !isGuest;
   const [joinState, setJoinState] = useState<'idle' | 'joined' | 'pending' | 'blocked'>('idle');
   const [joinMode, setJoinMode] = useState<OrganizationJoinMode | null>(null);
   const [dbOrgId, setDbOrgId] = useState<string | null>(null);
   const [interestDbId, setInterestDbId] = useState<string | null>(null);
   const [blueprintCount, setBlueprintCount] = useState<number>(0);
+  const [subscribedPrograms, setSubscribedPrograms] = useState<Set<string>>(new Set());
+  const [subscribeInProgress, setSubscribeInProgress] = useState<string | null>(null);
   const { data: orgBlueprints } = useOrganizationBlueprints(dbOrgId);
   const publishedOrgBlueprints = orgBlueprints?.filter((bp) => bp.is_published) ?? [];
   const { data: dbPrograms } = useOrgPrograms(dbOrgId);
@@ -130,6 +135,75 @@ export function OrganizationBrowserPage({ interestSlug, orgSlug }: OrganizationB
     lookupOrg();
   }, [isLoggedIn, org?.name, orgSlug, user?.id]);
 
+  // Check which programs the user is already subscribed to
+  useEffect(() => {
+    if (!isLoggedIn || !user?.id || !dbPrograms || dbPrograms.length === 0) return;
+    const checkSubscribed = async () => {
+      const results = await Promise.all(
+        dbPrograms.map(async (prog) => {
+          const isSubscribed = await programService.isSubscribedToProgram(user.id, prog.id);
+          return { id: prog.id, isSubscribed };
+        })
+      );
+      const subscribed = new Set(results.filter((r) => r.isSubscribed).map((r) => r.id));
+      setSubscribedPrograms(subscribed);
+    };
+    checkSubscribed();
+  }, [isLoggedIn, user?.id, dbPrograms]);
+
+  const handleToggleSubscribeProgram = async (programId: string) => {
+    if (!isLoggedIn || !user?.id || !interestDbId) {
+      router.push({ pathname: '/(auth)/signup', params: { interest: interestSlug, org: orgSlug } } as any);
+      return;
+    }
+
+    // If already subscribed, confirm and unsubscribe. Don't navigate.
+    if (subscribedPrograms.has(programId)) {
+      showConfirm(
+        'Unsubscribe from program?',
+        "You'll stop receiving new steps from this program. Your existing timeline steps will stay.",
+        async () => {
+          try {
+            setSubscribeInProgress(programId);
+            await programService.unsubscribeFromProgram(user.id, programId);
+            setSubscribedPrograms((prev) => {
+              const next = new Set(prev);
+              next.delete(programId);
+              return next;
+            });
+          } catch (err: any) {
+            console.error('[OrgBrowserPage] unsubscribeFromProgram error:', err);
+            showAlert('Error', err?.message || 'Could not unsubscribe from program. Please try again.');
+          } finally {
+            setSubscribeInProgress(null);
+          }
+        },
+        { destructive: true, confirmText: 'Unsubscribe' },
+      );
+      return;
+    }
+
+    try {
+      setSubscribeInProgress(programId);
+      await programService.subscribeToProgram(user.id, programId, interestDbId);
+      setSubscribedPrograms((prev) => new Set([...prev, programId]));
+      setSubscribeInProgress(null);
+
+      // Switch to this interest so the Clinical tab shows the right timeline
+      await switchInterest(interestSlug);
+
+      // Navigate to the Clinical tab so the user sees their new timeline steps
+      // Brief delay so the "Subscribed" badge is visible before navigating
+      setTimeout(() => {
+        router.push('/(tabs)/races' as any);
+      }, 600);
+    } catch (err: any) {
+      console.error('[OrgBrowserPage] subscribeToProgram error:', err);
+      showAlert('Error', err?.message || 'Could not subscribe to program. Please try again.');
+      setSubscribeInProgress(null);
+    }
+  };
+
   const handleJoinOrg = async () => {
     if (!isLoggedIn) {
       router.push({ pathname: '/(auth)/signup', params: { interest: interestSlug, org: orgSlug, orgName: displayOrg?.name } } as any);
@@ -178,7 +252,7 @@ export function OrganizationBrowserPage({ interestSlug, orgSlug }: OrganizationB
     if (joinMode === 'request_to_join') return 'Request to Join';
     if (joinMode === 'open_join') return `Join ${displayOrg?.name ?? 'Organization'}`;
     // Default when join_mode not yet loaded
-    return `Follow ${displayOrg?.name ?? 'Organization'}`;
+    return `Join ${displayOrg?.name ?? 'Organization'}`;
   };
 
   const isJoinDisabled = joinState === 'joined' || joinState === 'pending';
@@ -250,6 +324,88 @@ export function OrganizationBrowserPage({ interestSlug, orgSlug }: OrganizationB
         </View>
       </View>
 
+      {/* Degree Programs (programs with program_path and NO blueprint — programs with
+          a blueprint are rendered in the richer section below to avoid duplicates) */}
+      {dbPrograms && dbPrograms.length > 0 && dbPrograms.some((prog) => (prog.metadata as Record<string, unknown>)?.program_path && !blueprintsByProgram.has(prog.id)) && (
+        <View style={[styles.body, isDesktop && styles.bodyDesktop]}>
+          <Text style={styles.sectionTitle}>Degree Programs</Text>
+          <Text style={styles.sectionSubtitle}>
+            Subscribe to a program to add its curriculum milestones to your timeline
+          </Text>
+          {dbPrograms
+            .filter((prog) => (prog.metadata as Record<string, unknown>)?.program_path && !blueprintsByProgram.has(prog.id))
+            .map((prog) => {
+              const meta = prog.metadata as Record<string, unknown>;
+              return (
+                <View key={prog.id} style={styles.degreeProgramCard}>
+                  <View style={styles.dbProgramHeader}>
+                    <Ionicons name="school-outline" size={18} color={interest.color} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.dbProgramTitle}>{prog.title}</Text>
+                      {prog.description && (
+                        <Text style={styles.degreeProgramDesc} numberOfLines={2}>{prog.description}</Text>
+                      )}
+                    </View>
+                    {isLoggedIn && (
+                      <TouchableOpacity
+                        style={[
+                          styles.programFollowBtn,
+                          subscribedPrograms.has(prog.id) && { backgroundColor: interest.color + '12', borderColor: interest.color + '40' },
+                        ]}
+                        onPress={() => handleToggleSubscribeProgram(prog.id)}
+                        disabled={subscribeInProgress === prog.id}
+                        activeOpacity={0.7}
+                      >
+                        {subscribeInProgress === prog.id ? (
+                          <ActivityIndicator size="small" color={interest.color} />
+                        ) : (
+                          <>
+                            <Ionicons
+                              name={subscribedPrograms.has(prog.id) ? 'checkmark-circle' : 'add-circle-outline'}
+                              size={14}
+                              color={subscribedPrograms.has(prog.id) ? interest.color : '#6B7280'}
+                            />
+                            <Text style={[
+                              styles.programFollowBtnText,
+                              subscribedPrograms.has(prog.id) && { color: interest.color },
+                            ]}>
+                              {subscribedPrograms.has(prog.id) ? 'Subscribed' : 'Subscribe'}
+                            </Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  {meta.degree_type && (
+                    <View style={styles.degreeProgramMeta}>
+                      <View style={[styles.degreeMetaBadge, { backgroundColor: interest.color + '12' }]}>
+                        <Text style={[styles.degreeMetaBadgeText, { color: interest.color }]}>
+                          {meta.degree_type as string}
+                        </Text>
+                      </View>
+                      {meta.duration_semesters && (
+                        <Text style={styles.degreeMetaText}>
+                          {meta.duration_semesters as number} semesters
+                        </Text>
+                      )}
+                      {(meta.clinical_hours || meta.practicum_hours) && (
+                        <Text style={styles.degreeMetaText}>
+                          {((meta.clinical_hours || meta.practicum_hours) as number).toLocaleString()} clinical hours
+                        </Text>
+                      )}
+                      {meta.nclex_pass_rate && (
+                        <Text style={styles.degreeMetaText}>
+                          {Math.round((meta.nclex_pass_rate as number) * 100)}% NCLEX pass rate
+                        </Text>
+                      )}
+                    </View>
+                  )}
+                </View>
+              );
+            })}
+        </View>
+      )}
+
       {/* DB Programs with associated blueprints and real member timelines */}
       {dbPrograms && dbPrograms.length > 0 && dbPrograms.some((prog) => blueprintsByProgram.has(prog.id)) && (
         <View style={[styles.body, isDesktop && styles.bodyDesktop]}>
@@ -264,6 +420,35 @@ export function OrganizationBrowserPage({ interestSlug, orgSlug }: OrganizationB
                     <View style={styles.dbProgramHeader}>
                       <Ionicons name="school-outline" size={18} color={interest.color} />
                       <Text style={styles.dbProgramTitle}>{prog.title}</Text>
+                      {isLoggedIn && (
+                        <TouchableOpacity
+                          style={[
+                            styles.programFollowBtn,
+                            subscribedPrograms.has(prog.id) && { backgroundColor: interest.color + '12', borderColor: interest.color + '40' },
+                          ]}
+                          onPress={() => handleToggleSubscribeProgram(prog.id)}
+                          disabled={subscribeInProgress === prog.id}
+                          activeOpacity={0.7}
+                        >
+                          {subscribeInProgress === prog.id ? (
+                            <ActivityIndicator size="small" color={interest.color} />
+                          ) : (
+                            <>
+                              <Ionicons
+                                name={subscribedPrograms.has(prog.id) ? 'checkmark-circle' : 'add-circle-outline'}
+                                size={14}
+                                color={subscribedPrograms.has(prog.id) ? interest.color : '#6B7280'}
+                              />
+                              <Text style={[
+                                styles.programFollowBtnText,
+                                subscribedPrograms.has(prog.id) && { color: interest.color },
+                              ]}>
+                                {subscribedPrograms.has(prog.id) ? 'Subscribed' : 'Subscribe'}
+                              </Text>
+                            </>
+                          )}
+                        </TouchableOpacity>
+                      )}
                     </View>
                   )}
                   {progBlueprints.length > 0 && (
@@ -477,8 +662,10 @@ function OrgBlueprintCard({
   );
   const { data: steps } = useBlueprintSteps(blueprint.id);
   const subscribeMutation = useSubscribe();
+  const unsubscribeMutation = useUnsubscribe();
   const isSubscribed = !!subscription;
   const isLocked = blueprint.access_level === 'org_members' && !isMember;
+  const mutationPending = subscribeMutation.isPending || unsubscribeMutation.isPending;
 
   const handleSubscribe = () => {
     if (!isLoggedIn) {
@@ -489,7 +676,20 @@ function OrgBlueprintCard({
       showAlert('Members Only', 'Join the organization to access this pathway.');
       return;
     }
-    if (isSubscribed || subscribeMutation.isPending) return;
+    if (mutationPending) return;
+
+    if (isSubscribed) {
+      showConfirm(
+        'Unsubscribe from pathway?',
+        "You'll stop receiving new steps from this pathway. Your existing timeline steps will stay.",
+        () => {
+          unsubscribeMutation.mutate(blueprint.id);
+        },
+        { destructive: true, confirmText: 'Unsubscribe' },
+      );
+      return;
+    }
+
     subscribeMutation.mutate(blueprint.id);
   };
 
@@ -599,7 +799,7 @@ function OrgBlueprintCard({
             }}
             activeOpacity={0.7}
           >
-            {subLoading || subscribeMutation.isPending ? (
+            {subLoading || mutationPending ? (
               <ActivityIndicator size="small" color={isSubscribed ? '#FFFFFF' : accentColor} />
             ) : (
               <Text style={[
@@ -811,6 +1011,67 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1F2937',
     flex: 1,
+  },
+  programFollowBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    backgroundColor: '#FFFFFF',
+  },
+  programFollowBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+
+  // Degree Program Cards
+  degreeProgramCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    ...Platform.select({
+      web: { boxShadow: '0 1px 3px rgba(0,0,0,0.06)' } as any,
+    }),
+  },
+  degreeProgramDesc: {
+    fontSize: 13,
+    color: '#6B7280',
+    lineHeight: 18,
+    marginTop: 4,
+  },
+  degreeProgramMeta: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
+  degreeMetaBadge: {
+    borderRadius: 10,
+    paddingVertical: 2,
+    paddingHorizontal: 8,
+  },
+  degreeMetaBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  degreeMetaText: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    fontWeight: '500',
   },
 
   // Pathways

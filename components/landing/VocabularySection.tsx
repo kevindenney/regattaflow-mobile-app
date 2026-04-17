@@ -12,23 +12,24 @@ import {
 const INTERESTS = [
   { slug: 'sail-racing', name: 'Sailing', color: '#003DA5' },
   { slug: 'nursing', name: 'Nursing', color: '#0097A7' },
+  { slug: 'lac-craft-business', name: 'Lac Craft', color: '#E67E22' },
   { slug: 'drawing', name: 'Drawing', color: '#E64A19' },
   { slug: 'health-and-fitness', name: 'Health & Fitness', color: '#2E7D32' },
 ];
 
 const VOCAB: Record<string, Record<string, string>> = {
-  'Learning Event': { 'sail-racing': 'Race', nursing: 'Clinical Shift', drawing: 'Drawing Session', 'health-and-fitness': 'Workout' },
-  'Plan Phase': { 'sail-racing': 'Race Prep', nursing: 'Pre-Shift Prep', drawing: 'Sketch Planning', 'health-and-fitness': 'Warm-up Plan' },
-  'Do Phase': { 'sail-racing': 'On the Water', nursing: 'On-Unit Care', drawing: 'Active Drawing', 'health-and-fitness': 'Training' },
-  'Review Phase': { 'sail-racing': 'Debrief', nursing: 'Post-Shift Reflection', drawing: 'Critique', 'health-and-fitness': 'Cool-down Review' },
-  Practice: { 'sail-racing': 'Drill Session', nursing: 'Skills Lab', drawing: 'Study Sketch', 'health-and-fitness': 'Practice Set' },
-  Institution: { 'sail-racing': 'Yacht Club', nursing: 'Hospital / School', drawing: 'Art Studio', 'health-and-fitness': 'Gym / Club' },
-  Coach: { 'sail-racing': 'Sailing Coach', nursing: 'Clinical Instructor', drawing: 'Drawing Teacher', 'health-and-fitness': 'Personal Trainer' },
-  Passport: { 'sail-racing': 'Sailor Record', nursing: 'Competency Passport', drawing: 'Portfolio', 'health-and-fitness': 'Training Log' },
-  Period: { 'sail-racing': 'Season', nursing: 'Semester / Rotation', drawing: 'Project Series', 'health-and-fitness': 'Training Block' },
-  Milestone: { 'sail-racing': 'First Win', nursing: 'First IV Start', drawing: 'First Exhibition', 'health-and-fitness': 'First PR' },
-  Skill: { 'sail-racing': 'Tactical Skill', nursing: 'Clinical Competency', drawing: 'Technique', 'health-and-fitness': 'Movement Pattern' },
-  Equipment: { 'sail-racing': 'Boat / Sails', nursing: 'Stethoscope / Scrubs', drawing: 'Pencils / Tablet', 'health-and-fitness': 'Shoes / Watch' },
+  'Learning Event': { 'sail-racing': 'Race', nursing: 'Clinical Shift', 'lac-craft-business': 'Activity', drawing: 'Drawing Session', 'health-and-fitness': 'Workout' },
+  'Plan Phase': { 'sail-racing': 'Race Prep', nursing: 'Pre-Shift Prep', 'lac-craft-business': 'Gather Documents', drawing: 'Sketch Planning', 'health-and-fitness': 'Warm-up Plan' },
+  'Do Phase': { 'sail-racing': 'On the Water', nursing: 'On-Unit Care', 'lac-craft-business': 'Bank Visit / Filing', drawing: 'Active Drawing', 'health-and-fitness': 'Training' },
+  'Review Phase': { 'sail-racing': 'Debrief', nursing: 'Post-Shift Reflection', 'lac-craft-business': 'Progress Check', drawing: 'Critique', 'health-and-fitness': 'Cool-down Review' },
+  Practice: { 'sail-racing': 'Drill Session', nursing: 'Skills Lab', 'lac-craft-business': 'SHG Meeting', drawing: 'Study Sketch', 'health-and-fitness': 'Practice Set' },
+  Institution: { 'sail-racing': 'Yacht Club', nursing: 'Hospital / School', 'lac-craft-business': 'NGO / SHG', drawing: 'Art Studio', 'health-and-fitness': 'Gym / Club' },
+  Coach: { 'sail-racing': 'Sailing Coach', nursing: 'Clinical Instructor', 'lac-craft-business': 'Field Coordinator', drawing: 'Drawing Teacher', 'health-and-fitness': 'Personal Trainer' },
+  Passport: { 'sail-racing': 'Sailor Record', nursing: 'Competency Passport', 'lac-craft-business': 'Business Diary', drawing: 'Portfolio', 'health-and-fitness': 'Training Log' },
+  Period: { 'sail-racing': 'Season', nursing: 'Semester / Rotation', 'lac-craft-business': 'Loan Cycle', drawing: 'Project Series', 'health-and-fitness': 'Training Block' },
+  Milestone: { 'sail-racing': 'First Win', nursing: 'First IV Start', 'lac-craft-business': 'First Loan Approved', drawing: 'First Exhibition', 'health-and-fitness': 'First PR' },
+  Skill: { 'sail-racing': 'Tactical Skill', nursing: 'Clinical Competency', 'lac-craft-business': 'Business Skill', drawing: 'Technique', 'health-and-fitness': 'Movement Pattern' },
+  Equipment: { 'sail-racing': 'Boat / Sails', nursing: 'Stethoscope / Scrubs', 'lac-craft-business': 'Tools / Materials', drawing: 'Pencils / Tablet', 'health-and-fitness': 'Shoes / Watch' },
 };
 
 const UNIVERSAL_TERMS = Object.keys(VOCAB);
