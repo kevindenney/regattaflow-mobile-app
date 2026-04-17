@@ -21,12 +21,15 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  FileText,
   Map,
   MapPin,
   Navigation,
+  Plus,
   Sailboat,
   Trophy,
   Users,
+  CheckCircle2,
 } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -50,6 +53,7 @@ import { CourseSelector } from '@/components/races/AddRaceDialog/CourseSelector'
 import { ExtractedDetailsData, ExtractedDetailsSummary } from '@/components/races/AddRaceDialog/ExtractedDetailsSummary';
 import type { ExtractedData, MultiRaceExtractedData } from '@/components/races/AIValidationScreen';
 import { CoursePositionEditor } from '@/components/races/CoursePositionEditor';
+import { CourseMapTile } from '@/components/races/prep/CourseMapTile';
 import { DistanceRouteMap } from '@/components/races/DistanceRouteMap';
 import { LocationMapPicker } from '@/components/races/LocationMapPicker';
 import type { CourseType as PositionedCourseType, PositionedCourse } from '@/types/courses';
@@ -61,6 +65,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { useRaceSuggestions } from '@/hooks/useRaceSuggestions';
 import { extractSuggestionFailureSources } from '@/hooks/useRaceSuggestions.errors';
 import { UnifiedDocumentInput } from '@/components/documents/UnifiedDocumentInput';
+import { GeocodingService } from '@/services/GeocodingService';
 import { supabase } from '@/services/supabase';
 import type { RaceSuggestion } from '@/services/RaceSuggestionService';
 
@@ -385,6 +390,16 @@ export default function AddRaceScreen() {
   // Course position editor state
   const [showCoursePositionEditor, setShowCoursePositionEditor] = useState(false);
   const [positionedCourse, setPositionedCourse] = useState<PositionedCourse | null>(null);
+
+  // Additional documents state (SI, supplementary SI added after NOR extraction)
+  const [additionalDocs, setAdditionalDocs] = useState<Array<{
+    type: 'si' | 'supplementary_si';
+    label: string;
+    url?: string;
+    filename?: string;
+  }>>([]);
+  const [showAddDocInput, setShowAddDocInput] = useState(false);
+  const [addDocType, setAddDocType] = useState<'si' | 'supplementary_si'>('si');
   const hasAppliedRouteTemplateRef = useRef(false);
 
   const routeTemplatePrefill = useMemo(() => {
@@ -537,7 +552,7 @@ export default function AddRaceScreen() {
 
       if (race.raceName) { updates.name = race.raceName; aiFields.add('name'); }
       if (race.raceDate) { updates.date = race.raceDate; aiFields.add('date'); }
-      if (race.warningSignalTime) { updates.time = race.warningSignalTime; aiFields.add('time'); }
+      if (race.warningSignalTime) { updates.time = race.warningSignalTime.replace(/[^\d:]/g, ''); aiFields.add('time'); }
       if (race.venue) { updates.location = race.venue; aiFields.add('location'); }
 
       setForm(prev => ({
@@ -568,12 +583,13 @@ export default function AddRaceScreen() {
       const createdRaces: string[] = [];
 
       for (const race of selectedRaces) {
-        // Normalize time format
-        const time = race.warningSignalTime || '12:00';
-        const normalizedTime = time.includes(':')
-          ? time
-          : `${time.slice(0, 2)}:${time.slice(2)}`;
-        const startTime = `${race.raceDate}T${normalizedTime}:00`;
+        // Normalize time format — strip non-digit/colon chars (e.g. "14:00hrs" → "14:00")
+        const rawTime = (race.warningSignalTime || '12:00').replace(/[^\d:]/g, '');
+        const normalizedTime = rawTime.includes(':')
+          ? rawTime
+          : `${rawTime.slice(0, 2)}:${rawTime.slice(2, 4)}`;
+        const raceDate = race.raceDate || format(new Date(), 'yyyy-MM-dd');
+        const startTime = `${raceDate}T${normalizedTime}:00`;
 
         // Build comprehensive race data from extracted NOR fields
         const raceData: Record<string, any> = {
@@ -582,7 +598,7 @@ export default function AddRaceScreen() {
           start_date: startTime,
           created_by: user.id,
           status: 'planned',
-          race_type: race.raceType || 'distance',
+          race_type: race.raceType || 'fleet',
           start_area_name: race.venue || race.venueVariant || race.startAreaName || null,
 
           // === COMMUNICATIONS ===
@@ -736,6 +752,48 @@ export default function AddRaceScreen() {
     setShowLocationPicker(false);
   }, []);
 
+  // Handle additional document extraction (SI, supplementary SI)
+  const handleAdditionalDocExtraction = useCallback((data: any, rawData?: any) => {
+    const docType = addDocType;
+    const sourceUrl = rawData?.sourceTracking?.sourceUrl;
+    const sourceType = rawData?.sourceTracking?.sourceType;
+
+    // Add to linked docs list
+    setAdditionalDocs(prev => [...prev, {
+      type: docType,
+      label: docType === 'si' ? 'Sailing Instructions' : 'Supplementary SI',
+      url: sourceUrl,
+      filename: sourceType === 'url' ? sourceUrl?.split('/').pop() : rawData?.sourceTracking?.filename,
+    }]);
+
+    // Merge any new extracted fields into existing extractedDetails
+    if (rawData) {
+      setForm(prev => {
+        const existing = prev.extractedDetails || {} as ExtractedDetailsData;
+        const merged: ExtractedDetailsData = { ...existing };
+
+        // Only overwrite empty fields — don't clobber NOR data with SI data
+        if (!merged.schedule?.length && rawData.schedule) merged.schedule = rawData.schedule;
+        if (!merged.entryFees?.length && rawData.entryFees) merged.entryFees = rawData.entryFees;
+        if (!merged.entryDeadline && rawData.entryDeadline) merged.entryDeadline = rawData.entryDeadline;
+        if (!merged.scoringFormulaDescription && rawData.scoringFormulaDescription) merged.scoringFormulaDescription = rawData.scoringFormulaDescription;
+        if (!merged.handicapSystem?.length && rawData.handicapSystem) merged.handicapSystem = rawData.handicapSystem;
+        if (!merged.vhfChannels?.length && rawData.vhfChannels) merged.vhfChannels = rawData.vhfChannels;
+        if (!merged.safetyRequirements && rawData.safetyRequirements) merged.safetyRequirements = rawData.safetyRequirements;
+        if (!merged.insuranceRequirements && rawData.insuranceRequirements) merged.insuranceRequirements = rawData.insuranceRequirements;
+        if (!merged.classRules?.length && rawData.classRules) merged.classRules = rawData.classRules;
+        if (!merged.prizesDescription && rawData.prizesDescription) merged.prizesDescription = rawData.prizesDescription;
+        if (!merged.organizingAuthority && rawData.organizingAuthority) merged.organizingAuthority = rawData.organizingAuthority;
+        if (!merged.contactEmail && rawData.contactEmail) merged.contactEmail = rawData.contactEmail;
+
+        return { ...prev, extractedDetails: merged };
+      });
+    }
+
+    // Collapse the input
+    setShowAddDocInput(false);
+  }, [addDocType]);
+
   // Handle route waypoints change
   const handleWaypointsChange = useCallback((waypoints: RouteWaypoint[]) => {
     setForm(prev => ({ ...prev, routeWaypoints: waypoints }));
@@ -772,10 +830,11 @@ export default function AddRaceScreen() {
 
     setIsSaving(true);
     try {
-      // Normalize time format - handle both "10:30" and "1030" formats
-      const normalizedTime = form.time.includes(':')
-        ? form.time
-        : `${form.time.slice(0, 2)}:${form.time.slice(2)}`;
+      // Normalize time format — strip non-digit/colon chars (e.g. "14:00hrs" → "14:00")
+      const rawTime = form.time.replace(/[^\d:]/g, '');
+      const normalizedTime = rawTime.includes(':')
+        ? rawTime
+        : `${rawTime.slice(0, 2)}:${rawTime.slice(2, 4)}`;
       const startTime = `${form.date}T${normalizedTime}:00`;
       const subtypeLabel = eventConfig.eventSubtypes.find((s) => s.id === form.eventSubtype)?.label || 'Activity';
       const generatedName = `${subtypeLabel} ${form.date}`;
@@ -835,6 +894,14 @@ export default function AddRaceScreen() {
       // Add coordinates to metadata
       if (form.latitude && form.longitude) {
         metadata.start_coordinates = { lat: form.latitude, lng: form.longitude };
+      }
+
+      // Geocode fallback: if location name set but no coordinates, resolve via Nominatim
+      if (!metadata.start_coordinates && form.location) {
+        const geocoded = await GeocodingService.geocode(form.location);
+        if (geocoded) {
+          metadata.start_coordinates = geocoded;
+        }
       }
 
       // Add boat and class if selected
@@ -904,12 +971,16 @@ export default function AddRaceScreen() {
         // Entry & Registration
         if (details.entryFees?.length) raceData.entry_fees = details.entryFees;
         if (details.entryDeadline) raceData.entry_deadline = details.entryDeadline;
+        if (details.entryFormUrl) raceData.entry_form_url = details.entryFormUrl;
 
         // Crew & Safety
         if (details.minimumCrew) raceData.minimum_crew = details.minimumCrew;
         if (details.crewRequirements) raceData.crew_requirements = details.crewRequirements;
         if (details.safetyRequirements) raceData.safety_requirements = details.safetyRequirements;
         if (details.retirementNotification) raceData.retirement_notification = details.retirementNotification;
+        if (details.insuranceRequirements) raceData.insurance_requirements = details.insuranceRequirements;
+        if (details.classRules?.length) raceData.class_rules = details.classRules;
+        if (details.eligibilityRequirements) raceData.eligibility_requirements = details.eligibilityRequirements;
 
         // Schedule
         if (details.schedule?.length) raceData.schedule = details.schedule;
@@ -917,8 +988,12 @@ export default function AddRaceScreen() {
         // Course Details
         if (details.prohibitedAreas?.length) raceData.prohibited_areas = details.prohibitedAreas;
         if (details.tideGates?.length) raceData.tide_gates = details.tideGates;
+        if (details.trafficSeparationSchemes?.length) raceData.traffic_separation_schemes = details.trafficSeparationSchemes;
+        if (details.routeWaypoints?.length) raceData.route_waypoints = details.routeWaypoints;
         if (details.startAreaName) raceData.start_area_name = details.startAreaName;
         if (details.startAreaDescription) raceData.start_area_description = details.startAreaDescription;
+        if (details.finishAreaName) raceData.finish_area_name = details.finishAreaName;
+        if (details.finishAreaDescription) raceData.finish_area_description = details.finishAreaDescription;
 
         // Scoring
         if (details.scoringFormulaDescription) raceData.scoring_formula = details.scoringFormulaDescription;
@@ -941,9 +1016,6 @@ export default function AddRaceScreen() {
         if (details.expectedWindDirection) raceData.expected_wind_direction = details.expectedWindDirection;
         if (details.expectedWindSpeedMin) raceData.expected_wind_speed_min = details.expectedWindSpeedMin;
         if (details.expectedWindSpeedMax) raceData.expected_wind_speed_max = details.expectedWindSpeedMax;
-
-        // Insurance
-        if (details.insuranceRequirements) raceData.insurance_requirements = details.insuranceRequirements;
 
         // Prizes
         if (details.prizesDescription) raceData.prizes_description = details.prizesDescription;
@@ -1153,8 +1225,29 @@ export default function AddRaceScreen() {
 
               if (rawData?.raceName) { updates.name = rawData.raceName; aiFields.add('name'); }
               if (rawData?.raceDate || rawData?.date) { updates.date = rawData.raceDate || rawData.date; aiFields.add('date'); }
-              if (rawData?.warningSignalTime || rawData?.startTime) { updates.time = rawData.warningSignalTime || rawData.startTime; aiFields.add('time'); }
-              if (rawData?.venue || rawData?.location) { updates.location = rawData.venue || rawData.location; aiFields.add('location'); }
+              if (rawData?.warningSignalTime || rawData?.startTime) { updates.time = (rawData.warningSignalTime || rawData.startTime).replace(/[^\d:]/g, ''); aiFields.add('time'); }
+              if (rawData?.venue || rawData?.location) {
+                updates.location = rawData.venue || rawData.location;
+                aiFields.add('location');
+                // Also use extracted coordinates if available
+                if (rawData?.startAreaCoordinates) {
+                  updates.latitude = rawData.startAreaCoordinates.lat;
+                  updates.longitude = rawData.startAreaCoordinates.lng;
+                  aiFields.add('latitude');
+                  aiFields.add('longitude');
+                } else {
+                  // Geocode the venue name to get coordinates for map display
+                  GeocodingService.geocode(updates.location).then(coords => {
+                    if (coords) {
+                      setForm(prev => ({
+                        ...prev,
+                        latitude: coords.lat,
+                        longitude: coords.lng,
+                      }));
+                    }
+                  }).catch(() => {}); // Geocoding is best-effort
+                }
+              }
               if (rawData?.raceType && ['fleet', 'distance', 'match', 'team'].includes(rawData.raceType)) {
                 updates.raceType = rawData.raceType as RaceType;
                 aiFields.add('raceType');
@@ -1177,22 +1270,63 @@ export default function AddRaceScreen() {
 
               // Build extracted details for display
               const extractedDetails: ExtractedDetailsData = {
+                // Schedule
                 schedule: rawData?.schedule,
+
+                // Crew & Safety
                 minimumCrew: rawData?.minimumCrew,
                 crewRequirements: rawData?.crewRequirements,
                 minorSailorRules: rawData?.minorSailorRules,
+                safetyRequirements: rawData?.safetyRequirements,
+                retirementNotification: rawData?.retirementNotification,
+                insuranceRequirements: rawData?.insuranceRequirements,
+                classRules: rawData?.classRules,
+                eligibilityRequirements: rawData?.eligibilityRequirements,
+
+                // Areas & Course
                 prohibitedAreas: rawData?.prohibitedAreas?.map((a: any) => ({
                   name: a.name,
                   description: a.description,
                 })),
                 startAreaName: rawData?.startAreaName,
                 startAreaDescription: rawData?.startAreaDescription,
+                startAreaCoordinates: rawData?.startAreaCoordinates,
                 finishAreaName: rawData?.finishAreaName,
                 finishAreaDescription: rawData?.finishAreaDescription,
+                finishAreaCoordinates: rawData?.finishAreaCoordinates,
+                tideGates: rawData?.tideGates,
+                trafficSeparationSchemes: rawData?.trafficSeparationSchemes,
+                routeWaypoints: rawData?.routeWaypoints,
+
+                // Entry & Registration
+                entryFees: rawData?.entryFees,
+                entryDeadline: rawData?.entryDeadline,
+                entryFormUrl: rawData?.entryFormUrl,
+
+                // Scoring
+                scoringFormulaDescription: rawData?.scoringFormulaDescription,
+                handicapSystem: rawData?.handicapSystem,
+
+                // Motoring
+                motoringDivisionAvailable: rawData?.motoringDivisionAvailable,
+                motoringDivisionRules: rawData?.motoringDivisionRules,
+
+                // Communications
                 vhfChannels: rawData?.vhfChannels,
+
+                // Organization
                 organizingAuthority: rawData?.organizingAuthority,
                 eventWebsite: rawData?.eventWebsite,
-                safetyRequirements: rawData?.safetyRequirements,
+                contactEmail: rawData?.contactEmail,
+
+                // Weather
+                expectedConditions: rawData?.expectedConditions,
+                expectedWindDirection: rawData?.expectedWindDirection,
+                expectedWindSpeedMin: rawData?.expectedWindSpeedMin,
+                expectedWindSpeedMax: rawData?.expectedWindSpeedMax,
+
+                // Prizes
+                prizesDescription: rawData?.prizesDescription,
               };
 
               setForm(prev => ({
@@ -1201,6 +1335,9 @@ export default function AddRaceScreen() {
                 aiExtractedFields: aiFields,
                 extractionComplete: true,
                 extractedDetails,
+                // Preserve input method and URL for NOR document saving
+                aiInputMethod: rawData?.sourceTracking?.sourceType || prev.aiInputMethod,
+                aiInputText: rawData?.sourceTracking?.sourceUrl || prev.aiInputText,
               }));
 
               if (documentId) {
@@ -1215,6 +1352,76 @@ export default function AddRaceScreen() {
             raceType={form.raceType}
             initialExpanded={true}
           />
+
+          {/* Additional Documents Section - shown after NOR extraction */}
+          {form.extractionComplete && (
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>DOCUMENTS</Text>
+
+              {/* NOR (primary extraction) */}
+              <View style={styles.docRow}>
+                <CheckCircle2 size={16} color={COLORS.success} />
+                <View style={styles.docRowContent}>
+                  <Text style={styles.docRowLabel}>Notice of Race</Text>
+                  {form.aiInputText ? (
+                    <Text style={styles.docRowUrl} numberOfLines={1}>
+                      {form.aiInputText.split('/').pop() || form.aiInputText}
+                    </Text>
+                  ) : null}
+                </View>
+                <Text style={styles.docRowBadge}>Extracted</Text>
+              </View>
+
+              {/* Additional linked documents */}
+              {additionalDocs.map((doc, idx) => (
+                <View key={idx} style={styles.docRow}>
+                  <CheckCircle2 size={16} color={COLORS.success} />
+                  <View style={styles.docRowContent}>
+                    <Text style={styles.docRowLabel}>{doc.label}</Text>
+                    {(doc.url || doc.filename) && (
+                      <Text style={styles.docRowUrl} numberOfLines={1}>
+                        {doc.filename || doc.url?.split('/').pop() || ''}
+                      </Text>
+                    )}
+                  </View>
+                  <Text style={styles.docRowBadge}>Extracted</Text>
+                </View>
+              ))}
+
+              {/* Add another document */}
+              {showAddDocInput ? (
+                <View style={{ marginTop: 8 }}>
+                  <View style={styles.addDocTypeRow}>
+                    <Pressable
+                      style={[styles.addDocTypeButton, addDocType === 'si' && styles.addDocTypeButtonActive]}
+                      onPress={() => setAddDocType('si')}
+                    >
+                      <Text style={[styles.addDocTypeText, addDocType === 'si' && styles.addDocTypeTextActive]}>Sailing Instructions</Text>
+                    </Pressable>
+                    <Pressable
+                      style={[styles.addDocTypeButton, addDocType === 'supplementary_si' && styles.addDocTypeButtonActive]}
+                      onPress={() => setAddDocType('supplementary_si')}
+                    >
+                      <Text style={[styles.addDocTypeText, addDocType === 'supplementary_si' && styles.addDocTypeTextActive]}>Supplementary SI</Text>
+                    </Pressable>
+                  </View>
+                  <UnifiedDocumentInput
+                    mode="race_creation"
+                    defaultDocumentType={addDocType}
+                    compact={true}
+                    onExtractionComplete={handleAdditionalDocExtraction}
+                    raceType={form.raceType}
+                    initialExpanded={true}
+                  />
+                </View>
+              ) : (
+                <Pressable style={styles.addDocButton} onPress={() => setShowAddDocInput(true)}>
+                  <Plus size={16} color={COLORS.accent} />
+                  <Text style={styles.addDocButtonText}>Add Sailing Instructions or Supplementary SI</Text>
+                </Pressable>
+              )}
+            </View>
+          )}
 
           {/* Essentials Section */}
           <View style={styles.section}>
@@ -1267,6 +1474,18 @@ export default function AddRaceScreen() {
               <ChevronRight size={20} color={COLORS.tertiary} />
             </Pressable>
 
+            {/* Inline Location Map Preview (non-fleet, or fleet without course type yet) */}
+            {form.latitude != null && form.longitude != null && !(form.raceType === 'fleet' && form.courseType) && (
+              <View style={styles.inlineMapContainerSmall}>
+                <CourseMapTile
+                  coords={{ lat: form.latitude, lng: form.longitude }}
+                  onPress={() => setShowLocationPicker(true)}
+                  fullWidth
+                  venueName={form.location}
+                />
+              </View>
+            )}
+
             {/* Boat Selector (Fleet/Distance) */}
             {(form.raceType === 'fleet' || form.raceType === 'distance') && (
               <BoatSelector
@@ -1292,18 +1511,27 @@ export default function AddRaceScreen() {
                 />
               </View>
 
-              {/* Position Course on Map Button */}
+              {/* Inline Course Map Preview */}
               {form.courseType && form.latitude && form.longitude && (
-                <Pressable
-                  style={[styles.mapToggle, { marginBottom: 16 }]}
-                  onPress={() => setShowCoursePositionEditor(true)}
-                >
-                  <Map size={16} color={positionedCourse ? COLORS.success : COLORS.accent} />
-                  <Text style={[styles.mapToggleText, positionedCourse && { color: COLORS.success }]}>
-                    {positionedCourse ? 'Course Positioned on Map' : 'Position Course on Map'}
-                  </Text>
-                  <ChevronRight size={18} color={positionedCourse ? COLORS.success : COLORS.accent} />
-                </Pressable>
+                <View style={styles.inlineMapContainer}>
+                  <CourseMapTile
+                    coords={{ lat: form.latitude, lng: form.longitude }}
+                    positionedCourse={positionedCourse}
+                    isComplete={!!positionedCourse}
+                    onPress={() => setShowCoursePositionEditor(true)}
+                    fullWidth
+                    venueName={form.location}
+                  />
+                  {!positionedCourse && (
+                    <Pressable
+                      style={styles.mapOverlayButton}
+                      onPress={() => setShowCoursePositionEditor(true)}
+                    >
+                      <Map size={14} color="#FFFFFF" />
+                      <Text style={styles.mapOverlayText}>Tap to position course</Text>
+                    </Pressable>
+                  )}
+                </View>
               )}
 
               <View style={styles.row}>
@@ -1664,6 +1892,7 @@ export default function AddRaceScreen() {
         regattaId="" // Will be set after race is created
         initialCourseType={mapCourseTypeToPositionedType(form.courseType)}
         initialLocation={form.latitude && form.longitude ? { lat: form.latitude, lng: form.longitude } : undefined}
+        numberOfBoats={form.expectedFleetSize ? parseInt(form.expectedFleetSize) : undefined}
         onSave={(course) => {
           setPositionedCourse(course);
           setShowCoursePositionEditor(false);
@@ -2208,6 +2437,104 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.success,
     fontWeight: '500',
+  },
+
+  // Inline Map Preview
+  inlineMapContainer: {
+    marginBottom: 16,
+    borderRadius: 12,
+    overflow: 'hidden',
+    position: 'relative' as const,
+  },
+  inlineMapContainerSmall: {
+    marginTop: 12,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  mapOverlayButton: {
+    position: 'absolute' as const,
+    bottom: 40,
+    left: '50%' as any,
+    transform: [{ translateX: -85 }],
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 6,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  mapOverlayText: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: '#FFFFFF',
+  },
+
+  // Document Rows
+  docRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 10,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: COLORS.separator,
+  },
+  docRowContent: {
+    flex: 1,
+  },
+  docRowLabel: {
+    fontSize: 14,
+    fontWeight: '500' as const,
+    color: COLORS.ink,
+  },
+  docRowUrl: {
+    fontSize: 11,
+    color: COLORS.tertiary,
+    marginTop: 1,
+  },
+  docRowBadge: {
+    fontSize: 11,
+    fontWeight: '600' as const,
+    color: COLORS.success,
+    textTransform: 'uppercase' as const,
+  },
+  addDocButton: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 8,
+    paddingVertical: 12,
+    marginTop: 4,
+  },
+  addDocButtonText: {
+    fontSize: 14,
+    color: COLORS.accent,
+    fontWeight: '500' as const,
+  },
+  addDocTypeRow: {
+    flexDirection: 'row' as const,
+    gap: 8,
+    marginBottom: 8,
+  },
+  addDocTypeButton: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.separator,
+    alignItems: 'center' as const,
+  },
+  addDocTypeButtonActive: {
+    borderColor: COLORS.accent,
+    backgroundColor: `${COLORS.accent}10`,
+  },
+  addDocTypeText: {
+    fontSize: 13,
+    color: COLORS.secondary,
+    fontWeight: '500' as const,
+  },
+  addDocTypeTextActive: {
+    color: COLORS.accent,
   },
 
   // Multi-Race Modal
