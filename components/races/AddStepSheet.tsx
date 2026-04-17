@@ -33,7 +33,7 @@ import {
   IOS_ANIMATIONS,
 } from '@/lib/design-tokens-ios';
 import { useInterestEventConfig } from '@/hooks/useInterestEventConfig';
-import { useVocabulary } from '@/hooks/useVocabulary';
+
 import type { BlueprintSuggestedNextStep } from '@/types/blueprint';
 
 interface AddStepSheetProps {
@@ -43,12 +43,7 @@ interface AddStepSheetProps {
   onAdoptSuggestion: (s: BlueprintSuggestedNextStep) => void;
   onDismissSuggestion: (s: BlueprintSuggestedNextStep) => void;
   onAddStep: () => void;
-  /** Create a step with a specific event subtype (e.g. 'nutrition', 'strength') */
-  onAddStepWithSubtype?: (subtypeId: string, title: string) => void;
   onAddRace?: () => void;
-  onAddPractice?: () => void;
-  onNewSeason?: () => void;
-  onBrowseCatalog?: () => void;
   onPublishBlueprint?: () => void;
   blueprintLabel?: string;
 }
@@ -60,16 +55,12 @@ export function AddStepSheet({
   onAdoptSuggestion,
   onDismissSuggestion,
   onAddStep,
-  onAddStepWithSubtype,
   onAddRace,
-  onAddPractice,
-  onNewSeason,
-  onBrowseCatalog,
   onPublishBlueprint,
   blueprintLabel,
 }: AddStepSheetProps) {
   const config = useInterestEventConfig();
-  const { vocab } = useVocabulary();
+
   const fadeAnim = useSharedValue(0);
   const scaleAnim = useSharedValue(0.95);
 
@@ -116,7 +107,7 @@ export function AddStepSheet({
             <TouchableOpacity
               onPress={onClose}
               style={styles.closeButton}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
             >
               <Ionicons name="close-circle" size={24} color={IOS_COLORS.systemGray3} />
             </TouchableOpacity>
@@ -200,6 +191,16 @@ export function AddStepSheet({
               </View>
             )}
 
+            {/* Hint when no suggestions */}
+            {!hasSuggestions && (
+              <View style={styles.emptyHint}>
+                <Ionicons name="sparkles-outline" size={16} color={IOS_COLORS.systemBlue} />
+                <Text style={styles.emptyHintText}>
+                  Subscribe to a program to get personalized step suggestions here.
+                </Text>
+              </View>
+            )}
+
             {/* Create Your Own Section */}
             <View style={styles.section}>
               {hasSuggestions && <View style={styles.sectionSeparator} />}
@@ -226,35 +227,11 @@ export function AddStepSheet({
                 <View style={styles.menuOptionContent}>
                   <Text style={styles.menuOptionTitle}>Add Step</Text>
                   <Text style={styles.menuOptionSubtitle}>
-                    Dump ideas, links, and notes — AI structures your plan
+                    Plan what to work on — training, prep, or goals
                   </Text>
                 </View>
                 <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />
               </TouchableOpacity>
-
-              {/* Quick-create by subtype (e.g. Strength, Cardio, Nutrition) */}
-              {onAddStepWithSubtype && config.eventSubtypes?.length > 1 && (
-                <>
-                  <View style={styles.optionSeparator} />
-                  <View style={styles.subtypeRow}>
-                    {config.eventSubtypes.map((subtype) => (
-                      <TouchableOpacity
-                        key={subtype.id}
-                        style={styles.subtypeChip}
-                        onPress={() => handleOption(() => onAddStepWithSubtype(subtype.id, subtype.label))}
-                        activeOpacity={0.7}
-                      >
-                        <MaterialCommunityIcons
-                          name={(subtype.icon || 'plus-circle-outline') as any}
-                          size={14}
-                          color={IOS_COLORS.systemTeal}
-                        />
-                        <Text style={styles.subtypeChipText}>{subtype.label}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </>
-              )}
 
               {/* Add Race / Event */}
               {onAddRace && (
@@ -280,8 +257,7 @@ export function AddStepSheet({
                     <View style={styles.menuOptionContent}>
                       <Text style={styles.menuOptionTitle}>{config.addEventLabel}</Text>
                       <Text style={styles.menuOptionSubtitle}>
-                        {config.eventSubtypes?.[0]?.description ||
-                          `Add a new ${config.eventNoun.toLowerCase()}`}
+                        Full setup — venue, wind, tides, boat & tuning
                       </Text>
                     </View>
                     <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />
@@ -289,106 +265,7 @@ export function AddStepSheet({
                 </>
               )}
 
-              {/* Add Practice */}
-              {onAddPractice && (
-                <>
-                  <View style={styles.optionSeparator} />
-                  <TouchableOpacity
-                    style={styles.menuOption}
-                    onPress={() => handleOption(onAddPractice)}
-                    activeOpacity={0.7}
-                  >
-                    <View
-                      style={[
-                        styles.menuOptionIcon,
-                        { backgroundColor: `${IOS_COLORS.systemGreen}15` },
-                      ]}
-                    >
-                      <MaterialCommunityIcons
-                        name="sail-boat"
-                        size={24}
-                        color={IOS_COLORS.systemGreen}
-                      />
-                    </View>
-                    <View style={styles.menuOptionContent}>
-                      <Text style={styles.menuOptionTitle}>Add {vocab('Practice')}</Text>
-                      <Text style={styles.menuOptionSubtitle}>
-                        {vocab('Practice')} session or training
-                      </Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />
-                  </TouchableOpacity>
-                </>
-              )}
-
-              {/* New Season */}
-              {onNewSeason && (
-                <>
-                  <View style={styles.optionSeparator} />
-                  <TouchableOpacity
-                    style={styles.menuOption}
-                    onPress={() => handleOption(onNewSeason)}
-                    activeOpacity={0.7}
-                  >
-                    <View
-                      style={[
-                        styles.menuOptionIcon,
-                        { backgroundColor: `${IOS_COLORS.systemOrange}15` },
-                      ]}
-                    >
-                      <MaterialCommunityIcons
-                        name="calendar-plus"
-                        size={24}
-                        color={IOS_COLORS.systemOrange}
-                      />
-                    </View>
-                    <View style={styles.menuOptionContent}>
-                      <Text style={styles.menuOptionTitle}>New {vocab('Period')}</Text>
-                      <Text style={styles.menuOptionSubtitle}>
-                        Start a new {vocab('Period').toLowerCase()}
-                      </Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />
-                  </TouchableOpacity>
-                </>
-              )}
-
-              {/* Browse Catalog */}
-              {onBrowseCatalog && (
-                <>
-                  <View style={styles.optionSeparator} />
-                  <TouchableOpacity
-                    style={styles.menuOption}
-                    onPress={() => handleOption(onBrowseCatalog)}
-                    activeOpacity={0.7}
-                  >
-                    <View
-                      style={[
-                        styles.menuOptionIcon,
-                        { backgroundColor: `${IOS_COLORS.systemPurple}15` },
-                      ]}
-                    >
-                      <MaterialCommunityIcons
-                        name="trophy-outline"
-                        size={24}
-                        color={IOS_COLORS.systemPurple}
-                      />
-                    </View>
-                    <View style={styles.menuOptionContent}>
-                      <Text style={styles.menuOptionTitle}>
-                        Browse {config.eventNoun} Catalog
-                      </Text>
-                      <Text style={styles.menuOptionSubtitle}>
-                        {config.catalogSubtitle ??
-                          `Find and follow ${config.eventNoun.toLowerCase()}s`}
-                      </Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />
-                  </TouchableOpacity>
-                </>
-              )}
-
-              {/* Publish Blueprint */}
+              {/* Publish as Blueprint */}
               {onPublishBlueprint && (
                 <>
                   <View style={styles.optionSeparator} />
@@ -406,9 +283,7 @@ export function AddStepSheet({
                       <Ionicons name="layers-outline" size={24} color="#00897B" />
                     </View>
                     <View style={styles.menuOptionContent}>
-                      <Text style={styles.menuOptionTitle}>
-                        {blueprintLabel ?? 'Publish as Blueprint'}
-                      </Text>
+                      <Text style={styles.menuOptionTitle}>{blueprintLabel ?? 'Publish as Blueprint'}</Text>
                       <Text style={styles.menuOptionSubtitle}>
                         Make your timeline subscribable for others
                       </Text>
@@ -417,6 +292,7 @@ export function AddStepSheet({
                   </TouchableOpacity>
                 </>
               )}
+
             </View>
           </ScrollView>
         </Animated.View>
@@ -464,6 +340,23 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: IOS_SPACING.lg,
+  },
+  emptyHint: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginHorizontal: IOS_SPACING.lg,
+    marginTop: IOS_SPACING.xs,
+    marginBottom: IOS_SPACING.sm,
+    padding: IOS_SPACING.md,
+    backgroundColor: `${IOS_COLORS.systemBlue}08`,
+    borderRadius: IOS_RADIUS.md,
+  },
+  emptyHintText: {
+    flex: 1,
+    fontSize: 13,
+    color: IOS_COLORS.secondaryLabel,
+    lineHeight: 18,
   },
   section: {
     paddingTop: IOS_SPACING.xs,
@@ -565,8 +458,10 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   skipButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    minHeight: 44,
+    justifyContent: 'center',
   },
   skipButtonText: {
     fontSize: 13,

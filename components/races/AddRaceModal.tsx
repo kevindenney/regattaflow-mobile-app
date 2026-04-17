@@ -20,6 +20,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
+import { computeNextRegattaSortOrder } from '@/lib/utils/regattaSortOrder';
 import { BoatSelector } from './BoatSelector';
 import { createLogger } from '@/lib/utils/logger';
 
@@ -77,6 +78,9 @@ export function AddRaceModal({ visible, onClose, onRaceAdded }: AddRaceModalProp
       const extractedDate = extracted.raceDate || extracted.date || new Date().toISOString().split('T')[0];
 
       // Save to Supabase - match actual schema with created_by field
+      // sort_order = max + 1 so new regattas land at the end of the user's
+      // manual order instead of jumping to the top via the default value of 0.
+      const sortOrder = await computeNextRegattaSortOrder(user.id);
       const { data: _data, error } = await supabase.from('regattas').insert({
         created_by: user.id,
         name: extractedName,
@@ -93,6 +97,7 @@ export function AddRaceModal({ visible, onClose, onRaceAdded }: AddRaceModalProp
         start_date: extractedDate,
         end_date: extractedDate, // Single day race by default
         status: 'planned', // Valid enum value: planned, active, completed, cancelled
+        sort_order: sortOrder,
       });
 
       if (error) throw error;
@@ -180,6 +185,7 @@ export function AddRaceModal({ visible, onClose, onRaceAdded }: AddRaceModalProp
       inferredStartDate.setHours(inferredStartDate.getHours() + 24);
       const startDateIso = inferredStartDate.toISOString().split('T')[0];
 
+      const sortOrder = await computeNextRegattaSortOrder(user.id);
       const { error: saveError } = await supabase.from('regattas').insert({
         created_by: user.id,
         name: extractedName,
@@ -197,6 +203,7 @@ export function AddRaceModal({ visible, onClose, onRaceAdded }: AddRaceModalProp
         start_date: startDateIso,
         end_date: startDateIso,
         status: 'planned',
+        sort_order: sortOrder,
       });
 
       if (saveError) throw saveError;

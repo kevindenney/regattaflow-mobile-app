@@ -242,7 +242,7 @@ export function TufteAIExtractionSection({
   const canExtract = useCallback(() => {
     if (activeMethod === 'paste') return pasteContent.trim().length > 20;
     if (activeMethod === 'upload') return selectedFile !== null;
-    if (activeMethod === 'url') return urlContent.trim().startsWith('http');
+    if (activeMethod === 'url') return /https?:\/\//i.test(urlContent.trim());
     return false;
   }, [activeMethod, pasteContent, urlContent, selectedFile]);
 
@@ -271,17 +271,47 @@ export function TufteAIExtractionSection({
         }
         textContent = pdfResult.text;
       } else if (activeMethod === 'url' && urlContent.trim()) {
-        const url = urlContent.trim();
+        // Extract just the URL from the input (user may type extra text like "moonraker 5&6 https://...")
+        const rawInput = urlContent.trim();
+        const urlMatch = rawInput.match(/(https?:\/\/[^\s]+)/i);
+        const url = urlMatch ? urlMatch[1] : rawInput;
 
         // Check if URL is a PDF
         const isPdfUrl = url.toLowerCase().includes('.pdf') ||
                          url.toLowerCase().includes('pdf=') ||
                          url.includes('_files/ugd/'); // Wix PDF pattern
 
-        if (isPdfUrl) {
-          // Use server-side PDF text extraction (works on all platforms including native)
+        if (isPdfUrl && Platform.OS === 'web') {
+          // On web: use PDF.js to extract text directly from the URL
+          try {
+            const pdfResult = await PDFExtractionService.extractText(url, {
+              maxPages: 50,
+            });
+
+            if (!pdfResult.success || !pdfResult.text) {
+              throw new Error(pdfResult.error || 'Failed to extract text from PDF URL');
+            }
+            textContent = pdfResult.text;
+          } catch (pdfError: any) {
+            logger.error('PDF URL extraction failed', pdfError);
+            // If CORS blocks direct access, try sending URL to edge function for extraction
+            const result = await extractRaceDetailsFromText(`[PDF URL: ${url}]\n\nPlease extract race details from this PDF URL.`);
+            if (result.success && result.data) {
+              // Edge function handled it via URL parameter
+              throw new Error(
+                'Could not directly read this PDF due to website restrictions.\n\n' +
+                'Try: Download the PDF and use the "PDF" upload tab instead.'
+              );
+            }
+            throw new Error(
+              `Could not read PDF from this URL: ${pdfError.message}\n\n` +
+              'Try: Download the PDF and use the "PDF" upload tab instead.'
+            );
+          }
+        } else if (isPdfUrl) {
+          // On native: send URL to edge function for server-side extraction
           const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-          const extractUrl = `${supabaseUrl}/functions/v1/extract-pdf-text`;
+          const extractUrl = `${supabaseUrl}/functions/v1/extract-race-details`;
 
           try {
             const extractResponse = await fetch(extractUrl, {
@@ -295,14 +325,31 @@ export function TufteAIExtractionSection({
 
             const extractResult = await extractResponse.json();
 
-            if (!extractResponse.ok || !extractResult.success) {
-              throw new Error(extractResult.error || `Failed to extract PDF text: ${extractResponse.status}`);
+            if (!extractResponse.ok || extractResult.error) {
+              throw new Error(extractResult.error || `Extraction failed: ${extractResponse.status}`);
             }
 
-            textContent = extractResult.text;
-          } catch (pdfError: any) {
-            logger.error('PDF extraction failed', pdfError);
-            throw new Error(`PDF extraction failed: ${pdfError.message}`);
+            // Edge function returned structured data directly - use it
+            if (extractResult.races) {
+              // The edge function already parsed it, pass through
+              const result = { success: true, data: extractResult };
+
+              if (result.data.multipleRaces && result.data.races?.length > 1 && onMultiRaceDetected) {
+                setExtractionComplete(true);
+                setIsExtracting(false);
+                onMultiRaceDetected(result.data as MultiRaceExtractedData);
+                setTimeout(() => onToggle(), 500);
+                return;
+              }
+            }
+
+            throw new Error('PDF extraction from URL is not supported on this platform. Please download the PDF and upload it.');
+          } catch (nativeError: any) {
+            logger.error('Native PDF URL extraction failed', nativeError);
+            throw new Error(
+              `Could not extract PDF from URL: ${nativeError.message}\n\n` +
+              'Try: Download the PDF and use the "PDF" upload tab.'
+            );
           }
         } else {
           // Non-PDF URL - try direct fetch
@@ -311,10 +358,20 @@ export function TufteAIExtractionSection({
             const contentType = response.headers.get('content-type') || '';
 
             if (contentType.includes('pdf')) {
-              throw new Error('This URL returns a PDF. Please use the PDF upload option or enter a direct webpage URL.');
+              // Detected PDF content-type - use PDF.js on web
+              if (Platform.OS === 'web') {
+                const pdfResult = await PDFExtractionService.extractText(url, { maxPages: 50 });
+                if (pdfResult.success && pdfResult.text) {
+                  textContent = pdfResult.text;
+                } else {
+                  throw new Error('This URL returns a PDF that could not be read. Try downloading and uploading it instead.');
+                }
+              } else {
+                throw new Error('This URL returns a PDF. Please download it and use the PDF upload option.');
+              }
+            } else {
+              textContent = await response.text();
             }
-
-            textContent = await response.text();
           } catch (fetchError: any) {
             if (fetchError.message?.includes('PDF')) {
               throw fetchError;
@@ -337,6 +394,8 @@ export function TufteAIExtractionSection({
       if (!result.success || !result.data) {
         throw new Error(result.error || 'Failed to extract race details');
       }
+
+      const races = result.data.races || [];
 
       // Check for multi-race detection
       if (result.data.multipleRaces && result.data.races && result.data.races.length > 1) {
@@ -491,7 +550,7 @@ export function TufteAIExtractionSection({
             ) : (
               <>
                 <Sparkles size={16} color="#FFFFFF" />
-                <Text style={styles.extractButtonText}>🔥 EXTRACT v3 🔥</Text>
+                <Text style={styles.extractButtonText}>Extract Race Details</Text>
               </>
             )}
           </Pressable>

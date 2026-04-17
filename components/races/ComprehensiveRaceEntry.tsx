@@ -17,6 +17,7 @@ import type { RaceSuggestion } from '@/services/RaceSuggestionService';
 import { RaceWeatherService } from '@/services/RaceWeatherService';
 import { sailorBoatService } from '@/services/SailorBoatService';
 import { supabase } from '@/services/supabase';
+import { computeNextRegattaSortOrder } from '@/lib/utils/regattaSortOrder';
 import type { CourseMark, RaceEventWithDetails } from '@/types/raceEvents';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
@@ -2794,10 +2795,13 @@ export function ComprehensiveRaceEntry({
         logger.debug('[handleSubmit] Authenticated user ID:', user.id);
         logger.debug('[handleSubmit] Race data keys:', Object.keys(raceData));
 
+        // sort_order = max + 1 so new regattas land at the end of the user's
+        // manual order instead of jumping to the top via the default value of 0.
+        const sortOrder = await computeNextRegattaSortOrder(user.id);
         logger.debug('[handleSubmit] Calling supabase.from("regattas").insert()...');
         const { data, error } = await supabase
           .from('regattas')
-          .insert(raceData)
+          .insert({ ...raceData, sort_order: sortOrder })
           .select('id')
           .single();
 
