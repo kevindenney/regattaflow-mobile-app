@@ -273,14 +273,23 @@ export async function createStep(
   input: CreateTimelineStepInput,
 ): Promise<TimelineStepRecord> {
   try {
-    logger.debug('Creating timeline step', { title: input.title, userId: input.user_id });
+    // Guard: titles are NOT NULL in schema, but an empty string still passes.
+    // Rejecting here prevents "Untitled step" placeholders from leaking into
+    // the user's timeline from any creation flow.
+    const trimmedTitle = input.title?.trim();
+    if (!trimmedTitle) {
+      throw new Error('Timeline step title is required and cannot be empty.');
+    }
+    const normalizedInput = { ...input, title: trimmedTitle };
+
+    logger.debug('Creating timeline step', { title: trimmedTitle, userId: input.user_id });
 
     // Single round-trip: the create_timeline_step RPC runs the visibility
     // cascade (interest default → profile default → 'followers'), assigns a
     // monotonically-increasing sort_order, defaults starts_at to NOW() when
     // the caller omits it, and performs the insert — all server-side.
     const { data, error } = await supabase
-      .rpc('create_timeline_step', { p_input: input as unknown as Record<string, unknown> })
+      .rpc('create_timeline_step', { p_input: normalizedInput as unknown as Record<string, unknown> })
       .single();
 
     if (error) throw error;
@@ -427,6 +436,15 @@ export async function adoptStep(
       }
     }
 
+    // Guard against the source step having a null/empty title. Without this,
+    // adopters inherited blank titles that rendered as "Untitled step" cards.
+    const sourceTitle = typeof (source as any).title === 'string'
+      ? (source as any).title.trim()
+      : '';
+    const adoptedTitle = sourceTitle.length > 0
+      ? sourceTitle
+      : `Step ${nextSort}`;
+
     const insertPayload: Record<string, unknown> = {
         user_id: userId,
         interest_id: interestId,
@@ -434,7 +452,7 @@ export async function adoptStep(
         source_type: 'copied',
         source_id: sourceStepId,
         copied_from_user_id: (source as any).user_id,
-        title: (source as any).title,
+        title: adoptedTitle,
         description: (source as any).description,
         category: (source as any).category ?? 'general',
         status: 'pending',
