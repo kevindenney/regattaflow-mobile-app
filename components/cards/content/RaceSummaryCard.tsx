@@ -2316,66 +2316,6 @@ export function RaceSummaryCard({
   const showNextRibbon = isNextStepCard && !isTimelineDone && !isOverdue;
   const hideTypeChipForNextNonSailing = showNextRibbon && !isSailing;
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Collapsed variant — used by the swim-lane parent. Shows just the essentials
-  // (status + title + context) so many cards can stack on one screen. Tapping
-  // the collapsed card fires `onToggleExpand` so the parent can swap to the
-  // full render. The full horizontal grid always passes isExpanded={true}.
-  // ─────────────────────────────────────────────────────────────────────────
-  if (!isExpanded) {
-    const collapsedStatus = isTimelineDone
-      ? { label: 'Done', color: IOS_COLORS.green, icon: 'checkmark-circle' as const }
-      : isOverdue
-        ? { label: isTimelineStep ? 'Overdue' : 'Review Due', color: '#B45309', icon: 'warning' as const }
-        : showNextRibbon
-          ? { label: 'Up next', color: IOS_COLORS.blue, icon: 'flag' as const }
-          : { label: 'Planned', color: IOS_COLORS.secondaryLabel, icon: 'ellipse-outline' as const };
-
-    const contextParts: string[] = [];
-    if (race.venue) contextParts.push(race.venue);
-    if (countdown.isToday) {
-      contextParts.push('Today');
-    } else if (countdown.isTomorrow) {
-      contextParts.push('Tomorrow');
-    } else if (countdown.isPast && countdown.daysSince > 0) {
-      contextParts.push(`${countdown.daysSince}d ago`);
-    } else if (!countdown.isPast && countdown.days > 0) {
-      contextParts.push(`in ${countdown.days}d`);
-    }
-    const contextLine = contextParts.join(' · ');
-
-    return (
-      <Pressable
-        onPress={() => {
-          triggerHaptic('impactLight');
-          onToggleExpand?.();
-        }}
-        onLongPress={handleLongPress}
-        delayLongPress={500}
-        style={styles.collapsedContainer}
-        accessibilityRole="button"
-        accessibilityLabel={`Expand ${displayRaceName || race.name}`}
-      >
-        <View style={styles.collapsedHeaderRow}>
-          <View style={[styles.collapsedStatusPill, { backgroundColor: collapsedStatus.color + '18' }]}>
-            <Ionicons name={collapsedStatus.icon} size={12} color={collapsedStatus.color} />
-            <Text style={[styles.collapsedStatusText, { color: collapsedStatus.color }]}>
-              {collapsedStatus.label}
-            </Text>
-          </View>
-          <Text style={styles.collapsedTitle} numberOfLines={1} ellipsizeMode="tail">
-            {displayRaceName || race.name}
-          </Text>
-        </View>
-        {contextLine ? (
-          <Text style={styles.collapsedContext} numberOfLines={1} ellipsizeMode="tail">
-            {contextLine}
-          </Text>
-        ) : null}
-      </Pressable>
-    );
-  }
-
   return (
     <>
         <Pressable onPress={onCardPress || (() => {})} onLongPress={handleLongPress} delayLongPress={500} style={{ flex: 1, opacity: 1 }} disabled={isActive}>
@@ -3137,47 +3077,6 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
     backgroundColor: '#FFFFFF',
-  },
-
-  // ==========================================================================
-  // COLLAPSED VARIANT (used by the swim-lane parent)
-  // Target height ~120–140px; header line + context line. Tap to expand.
-  // ==========================================================================
-
-  collapsedContainer: {
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
-    gap: 6,
-  },
-  collapsedHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  collapsedStatusPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 999,
-  },
-  collapsedStatusText: {
-    fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 0.2,
-  },
-  collapsedTitle: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: '600',
-    color: IOS_COLORS.label,
-  },
-  collapsedContext: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: IOS_COLORS.secondaryLabel,
   },
 
   // ==========================================================================

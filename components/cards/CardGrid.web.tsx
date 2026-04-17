@@ -49,7 +49,7 @@ interface CardGridWebProps extends CardGridProps {
     cardType: CardType,
     isActive: boolean,
     isExpanded: boolean,
-    onToggleExpand: () => void,
+    onToggleExpand: (() => void) | undefined,
     canManage: boolean,
     onEdit?: () => void,
     onDelete?: () => void,
@@ -93,9 +93,6 @@ function CardGridComponent({
   topInset,
   refetchTrigger,
   nowBarWeather,
-  expandedRaceId,
-  onToggleRaceExpand,
-  renderFooter,
 }: CardGridWebProps & { nextRaceIndex?: number | null; topInset?: number }) {
   // Refs for scroll container
   const horizontalScrollRef = useRef<ScrollView>(null);
@@ -396,9 +393,10 @@ function CardGridComponent({
             race,
             'race_summary',
             isActive,
-            // Collapsed by default; only the explicitly expanded race renders full.
-            expandedRaceId ? race.id === expandedRaceId : false,
-            () => onToggleRaceExpand?.(race.id),
+            // Cards in the horizontal carousel are always fully expanded; the
+            // zoomed-out grid view owns the compact/mini-tile variant.
+            true,
+            undefined,
             canManage,
             handleEdit,
             handleDelete,
@@ -503,10 +501,6 @@ function CardGridComponent({
           );
         })}
       </ScrollView>
-
-      {/* Footer (subscribed blueprints + followed peers) — sibling below the
-          horizontal scroll so it doesn't pan with the cards */}
-      {renderFooter?.()}
 
       {/* Navigation Arrows - appear on hover */}
       {isHovering && showLeftArrow && (

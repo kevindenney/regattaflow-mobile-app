@@ -2056,15 +2056,6 @@ export default function RacesScreen() {
     }
   }, [nextActionItem?.id, isGridView]);
 
-  // Auto-expand the next-action card when landing on card view with no selection.
-  // Without this, RaceSummaryCard's collapsed-by-default branch makes every card
-  // render as just [status pill + title], producing a sparse/empty-looking grid.
-  useEffect(() => {
-    if (!isGridView && !selectedRaceId && !hasManuallySelected && nextActionItem?.id) {
-      setSelectedRaceId(nextActionItem.id);
-    }
-  }, [isGridView, selectedRaceId, hasManuallySelected, nextActionItem?.id]);
-
   // Toggle grid/card view.
   // Android's slowness on this toggle is dominated by (1) React re-rendering
   // the whole races screen tree and (2) the Grid remount animation. We defer
@@ -4535,22 +4526,6 @@ export default function RacesScreen() {
               onDismissSample={isViewingOtherTimeline ? undefined : handleDismissSampleRace}
               refetchTrigger={refetchTrigger}
               nowBarWeather={nowBarWeather}
-              // Slice C: collapsed-by-default expansion. The carousel treats
-              // the currently selected card as the expanded one; tapping it
-              // collapses back to the compact header-only variant.
-              expandedRaceId={selectedRaceId}
-              onToggleRaceExpand={(raceId) => {
-                setSelectedRaceId((prev) => (prev === raceId ? null : raceId));
-              }}
-              // Subscribed blueprints + followed peers panel below the card
-              // strip (parity with TimelineGridView on non-sailing interests).
-              renderFooter={!isViewingOtherTimeline ? () => (
-                <BlueprintPanelsStack
-                  interestId={currentInterest?.id}
-                  subscribedBlueprints={subscribedBlueprints ?? []}
-                  myTimelineSteps={myTimelineSteps}
-                />
-              ) : undefined}
             />
           )}
         </View>
