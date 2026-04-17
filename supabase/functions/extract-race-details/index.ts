@@ -97,7 +97,24 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { text, url } = await req.json();
+    const {
+      text,
+      url,
+      compactMode = false,
+      currentDate,
+      includePast = true,
+    }: {
+      text?: string;
+      url?: string;
+      compactMode?: boolean;
+      currentDate?: string;
+      includePast?: boolean;
+    } = await req.json();
+
+    // Default currentDate to today (UTC) if not provided
+    const todayIso = currentDate && /^\d{4}-\d{2}-\d{2}$/.test(currentDate)
+      ? currentDate
+      : new Date().toISOString().split('T')[0];
 
     // Determine the document text - either provided directly or fetched from URL
     let documentText = text;
@@ -166,6 +183,54 @@ Deno.serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    // === COMPACT / CALENDAR MODE ===
+    // Used for season calendar PDFs that contain 50-200+ races.
+    // Skips the comprehensive schema and just extracts the per-race essentials,
+    // so we can fit a full season in the AI's output token budget.
+    const compactPrompt = `You are extracting races from a sailing season calendar.
+
+Your job: enumerate EVERY race day in the document.${includePast ? '' : `
+
+DATE FILTER: Today is ${todayIso}. SKIP any race whose raceDate is BEFORE ${todayIso}. Only include races on or after ${todayIso}.`}
+
+Document:
+${documentText}
+
+Return JSON ONLY (no prose, no markdown), in this EXACT shape:
+
+{
+  "multipleRaces": true,
+  "documentType": "CALENDAR",
+  "organizingAuthority": string | null,
+  "overallConfidence": number,
+  "races": [
+    {
+      "raceName": string,                  // e.g., "Around the Island Race", "Croucher Series Race 1"
+      "raceSeriesName": string | null,     // e.g., "Croucher Series" — null if standalone
+      "raceDate": string | null,           // ISO 8601 (YYYY-MM-DD). NEVER guess.
+      "venue": string,                     // The host club / sailing venue (e.g., "Royal Hong Kong Yacht Club")
+      "venueVariant": string | null,       // Sub-area if specified (e.g., "Port Shelter", "Middle Island", "Harbour")
+      "warningSignalTime": string | null,  // HH:MM (24h). Strip "hrs" suffix.
+      "eligibleClasses": string[] | null,  // e.g., ["IRC", "PHS", "Dragon"]
+      "raceType": "fleet" | "distance" | null,
+      "notes": string | null               // Anything else worth preserving in 1 short sentence
+    }
+  ]
+}
+
+CRITICAL RULES:
+1. EXTRACT EVERY RACE DAY. A season calendar typically has 50-200+ entries. Do not stop early.
+2. ONE entry per race day per series. If the calendar lists the same date for "IRC Division 1" and "IRC Division 2" as part of the same race, that is ONE race entry — combine the divisions into eligibleClasses.
+3. NEVER invent dates. If a row has no clear date, set raceDate to null.
+4. Common venue abbreviations: RHKYC = Royal Hong Kong Yacht Club, ABC = Aberdeen Boat Club, HHYC = Hebe Haven Yacht Club, RHKABT = Royal Hong Kong Yacht Club (some references). Expand to the full club name in the "venue" field. If the row only shows a single-letter code (M, L, H, etc.) and you cannot confidently expand it, set venue to "Unknown" rather than guessing.
+5. Tabular text in calendar PDFs is often jumbled. Use the date column and race-name column as the source of truth; ignore garbled single-letter cells.
+6. warningSignalTime: only set if explicitly stated in the schedule.
+7. Resolve dates relative to the calendar's stated season (e.g., "Saturday 27 September" in a 2025-2026 calendar → "2025-09-27").
+8. ALWAYS set documentType to "CALENDAR".${includePast ? '' : `
+9. Today is ${todayIso}. Skip any race before this date.`}
+
+Return ONLY the JSON object.`;
 
     // Call Gemini Flash with enhanced multi-race detection prompt
     const extractionPrompt = `You are an expert at extracting structured race information from sailing documents (NOR, SI, calendars).
@@ -752,12 +817,16 @@ IMPORTANT INSTRUCTIONS:
 
 Return ONLY the JSON object, no additional text.`;
 
+    const promptToUse = compactMode ? compactPrompt : extractionPrompt;
+    console.log(`[extract-race-details] Mode: ${compactMode ? 'COMPACT/CALENDAR' : 'COMPREHENSIVE'}, includePast: ${includePast}, currentDate: ${todayIso}, prompt length: ${promptToUse.length}`);
+
     let content: string;
     try {
       const result = await complete({
         task: 'extraction',
-        messages: [{ role: 'user', content: extractionPrompt }],
-        maxOutputTokens: 16384,
+        messages: [{ role: 'user', content: promptToUse }],
+        // Compact mode emits ~50 tokens per race, so 16k handles ~250 races; bump higher for safety on long calendars
+        maxOutputTokens: compactMode ? 32768 : 16384,
         temperature: 0,
       });
       content = result.text;
@@ -847,7 +916,8 @@ Return ONLY the JSON object, no additional text.`;
               // Add required closing fields before final brace
               if (openBraces - closeBraces > 0) {
                 // Add minimal required fields
-                recovered += ', "documentType": "NOR", "organizingAuthority": null, "overallConfidence": 0.8';
+                const fallbackDocType = compactMode ? 'CALENDAR' : 'NOR';
+                recovered += `, "documentType": "${fallbackDocType}", "organizingAuthority": null, "overallConfidence": 0.8`;
                 for (let i = 0; i < openBraces - closeBraces; i++) recovered += '}';
               }
 
@@ -933,10 +1003,29 @@ Return ONLY the JSON object, no additional text.`;
     console.log(`[extract-race-details] Extracted ${raceCount} races. multipleRaces=${extractedData?.multipleRaces}. Dates: ${raceDates}`);
     console.log(`[extract-race-details] Input text length: ${documentText.length}. Has SCHEDULE: ${documentText.includes('SCHEDULE') || documentText.includes('Schedule')}`);
 
+    // Force documentType to a non-null value so downstream UI never renders 'undefined'
+    if (!extractedData.documentType) {
+      extractedData.documentType = compactMode ? 'CALENDAR' : 'OTHER';
+    }
+    if (compactMode) {
+      // Compact mode is always multi-race by intent
+      extractedData.multipleRaces = true;
+      // Belt-and-suspenders: drop any past races if includePast is false and AI ignored the instruction
+      if (includePast === false && Array.isArray(extractedData.races)) {
+        const before = extractedData.races.length;
+        extractedData.races = extractedData.races.filter((r: any) => !r.raceDate || r.raceDate >= todayIso);
+        const after = extractedData.races.length;
+        if (after !== before) {
+          console.log(`[extract-race-details] Filtered out ${before - after} past races (cutoff: ${todayIso})`);
+        }
+      }
+    }
+
     // POST-PROCESSING: Patch missing dates/times from document text
     // Gemini sometimes misses dates even when the document has a clear schedule.
     // Parse schedule patterns and match them to extracted races.
-    if (extractedData?.races?.length > 0) {
+    // Skipped in compact/calendar mode — the document text is huge and schedule patterns differ.
+    if (!compactMode && extractedData?.races?.length > 0) {
       // Build a schedule lookup from the document text
       // Matches patterns like: "Races 5 & 6: Saturday 11 April 2026 (Port Shelter) max.2 1255hrs"
       // or: "Races 1 & 2: Saturday 27 September 2025 (Port Shelter) 2 1336hrs"
