@@ -132,6 +132,14 @@ export function useNotifications() {
         queryClient.invalidateQueries({
           queryKey: ['unread-notification-count', targetUserId],
         });
+
+        // When a mentor reviews a step, invalidate the step detail cache
+        // so the mentee sees the feedback in real time.
+        if (notification.type === 'step_reviewed' && notification.data?.step_id) {
+          queryClient.invalidateQueries({
+            queryKey: ['timeline-steps', 'detail', notification.data.step_id],
+          });
+        }
       }
     );
 

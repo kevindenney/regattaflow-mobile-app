@@ -923,7 +923,14 @@ export default function LearnScreen() {
         topInset={insets.top}
         actions={[
           {
+            icon: 'search-outline',
+            sfSymbol: 'magnifyingglass',
+            label: 'Search courses',
+            onPress: () => router.push('/(tabs)/search'),
+          },
+          {
             icon: 'bookmark-outline',
+            sfSymbol: 'bookmark',
             label: 'Saved courses',
             onPress: () => router.push('/(tabs)/my-learning'),
           },

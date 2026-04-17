@@ -78,13 +78,19 @@ export default function ChooseStartScreen() {
 
     await switchInterest(selectedSlug);
     await OnboardingStateService.markOnboardingSeen();
+    const returnTo = await AsyncStorage.getItem('post_onboarding_return_to');
     await Promise.all([
       AsyncStorage.removeItem('onboarding_org_slug'),
       AsyncStorage.removeItem('onboarding_interest_slug'),
       AsyncStorage.removeItem('onboarding_interest_order'),
+      AsyncStorage.removeItem('post_onboarding_return_to'),
     ]);
 
-    router.replace('/(tabs)/races');
+    if (returnTo) {
+      router.replace(returnTo as any);
+    } else {
+      router.replace('/(tabs)/races');
+    }
   }, [router, selectedSlug, switchInterest, isNavigating]);
 
   // If only one interest, skip choice and go straight
