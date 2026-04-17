@@ -36,7 +36,8 @@ export type SocialNotificationType =
   | 'org_invite_accepted'
   | 'org_invite_received'
   | 'blueprint_subscribed'
-  | 'step_suggested';
+  | 'step_suggested'
+  | 'step_reviewed';
 
 export interface SocialNotification {
   id: string;
@@ -95,6 +96,7 @@ const CANONICAL_NOTIFICATION_TYPES: ReadonlySet<SocialNotificationType> = new Se
   'step_collaborator_added',
   'blueprint_subscribed',
   'step_suggested',
+  'step_reviewed',
 ]);
 
 function normalizeMembershipDecisionType(
@@ -905,6 +907,66 @@ class NotificationServiceClass {
         interest_id: input.interestId || null,
       },
     });
+  }
+
+  /**
+   * Notify a mentee that their step was reviewed by the blueprint author.
+   * This triggers a cache invalidation on the mentee side so the feedback
+   * appears in real time.
+   */
+  async notifyStepReviewed(input: {
+    targetUserId: string;
+    actorId: string;
+    actorName: string;
+    stepId: string;
+    stepTitle: string;
+    reviewStatus: 'approved' | 'needs_revision';
+  }): Promise<string> {
+    const verb = input.reviewStatus === 'approved' ? 'approved' : 'requested changes on';
+    return this.createNotification(input.targetUserId, {
+      type: 'step_reviewed',
+      title: 'Step reviewed',
+      body: `${input.actorName} ${verb} "${input.stepTitle}"`,
+      actorId: input.actorId,
+      data: {
+        step_id: input.stepId,
+        step_title: input.stepTitle,
+        review_status: input.reviewStatus,
+      },
+    });
+  }
+
+  /**
+   * Get suggestions sent by a specific actor to a specific user.
+   * Used by the mentor dashboard to show suggestion history.
+   */
+  async getSentSuggestions(
+    actorId: string,
+    targetUserId: string,
+  ): Promise<Array<{
+    id: string;
+    stepTitle: string;
+    stepDescription: string | null;
+    isRead: boolean;
+    createdAt: string;
+  }>> {
+    const { data, error } = await supabase
+      .from('social_notifications')
+      .select('id, data, is_read, created_at')
+      .eq('type', 'step_suggested')
+      .eq('actor_id', actorId)
+      .eq('user_id', targetUserId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      stepTitle: row.data?.step_title || 'Untitled',
+      stepDescription: row.data?.step_description || null,
+      isRead: row.is_read,
+      createdAt: row.created_at,
+    }));
   }
 
   /**

@@ -30,6 +30,7 @@ import {
   Trash2,
   ChevronDown,
 } from 'lucide-react-native';
+import { useQueryClient } from '@tanstack/react-query';
 import { type SocialNotification } from '@/services/NotificationService';
 import { getInitials } from '@/components/account/accountStyles';
 import {
@@ -38,6 +39,8 @@ import {
   IOS_RADIUS,
 } from '@/lib/design-tokens-ios';
 import { triggerHaptic } from '@/lib/haptics';
+import { useAuth } from '@/providers/AuthProvider';
+import { adoptStep } from '@/services/TimelineStepService';
 
 // =============================================================================
 // TYPES
@@ -290,8 +293,12 @@ export function NotificationsList({
   ListHeaderComponent,
 }: NotificationsListProps) {
   const router = useRouter();
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
   const [togglingFollow, setTogglingFollow] = useState<string | null>(null);
+  const [adoptingStepNotifId, setAdoptingStepNotifId] = useState<string | null>(null);
+  const [adoptedStepNotifIds, setAdoptedStepNotifIds] = useState<Set<string>>(new Set());
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -317,6 +324,31 @@ export function NotificationsList({
       }
     },
     [onToggleFollow, togglingFollow]
+  );
+
+  const handleAdoptStep = useCallback(
+    async (notification: SocialNotification) => {
+      if (!user?.id || adoptingStepNotifId) return;
+      const sourceStepId = notification.data?.source_step_id as string | undefined;
+      const interestId = notification.data?.interest_id as string | undefined;
+      if (!sourceStepId) return;
+
+      setAdoptingStepNotifId(notification.id);
+      triggerHaptic('selection');
+
+      try {
+        await adoptStep(user.id, sourceStepId, interestId || '', null);
+        setAdoptedStepNotifIds((prev) => new Set(prev).add(notification.id));
+        triggerHaptic('notificationSuccess');
+        queryClient.invalidateQueries({ queryKey: ['timeline-steps'] });
+        if (!notification.isRead) onMarkRead(notification.id);
+      } catch {
+        triggerHaptic('notificationError');
+      } finally {
+        setAdoptingStepNotifId(null);
+      }
+    },
+    [user?.id, adoptingStepNotifId, queryClient, onMarkRead],
   );
 
   const handlePress = useCallback(
@@ -369,11 +401,18 @@ export function NotificationsList({
               : undefined
           }
           isTogglingFollow={isTogglingThis}
+          onAdoptStep={
+            item.type === 'step_suggested' && item.data?.source_step_id
+              ? () => handleAdoptStep(item)
+              : undefined
+          }
+          isAdoptingStep={adoptingStepNotifId === item.id}
+          isStepAdopted={adoptedStepNotifIds.has(item.id)}
           isLast={index === notifications.length - 1}
         />
       );
     },
-    [notifications.length, handlePress, onDelete, followingMap, togglingFollow, onToggleFollow, handleFollowBack]
+    [notifications.length, handlePress, onDelete, followingMap, togglingFollow, onToggleFollow, handleFollowBack, handleAdoptStep, adoptingStepNotifId, adoptedStepNotifIds]
   );
 
   const keyExtractor = useCallback((item: SocialNotification) => item.id, []);

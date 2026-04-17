@@ -404,6 +404,12 @@ export default function SocialNotificationsScreen() {
                 } as any);
               } else if (latest.type === 'org_invite_accepted' && latest.data?.organization_id) {
                 router.push('/organization/members' as any);
+              } else if (latest.type === 'step_suggested') {
+                // Suggestion handled via Adopt button or the Suggested Steps bar on the timeline
+                // Just mark as read — no navigation needed
+              } else if (latest.type === 'step_reviewed') {
+                // Review feedback visible on the step's Reflect tab
+                router.push('/(tabs)/races' as any);
               } else if (latest.regattaId) {
                 router.push(`/race/${latest.regattaId}`);
               }
@@ -457,6 +463,11 @@ export default function SocialNotificationsScreen() {
                 } as any);
               } else if (item.type === 'org_invite_accepted' && item.data?.organization_id) {
                 router.push('/organization/members' as any);
+              } else if (item.type === 'step_suggested') {
+                // Handled via Adopt button or Suggested Steps bar
+              } else if (item.type === 'step_reviewed') {
+                // Review feedback visible on the step's Reflect tab
+                router.push('/(tabs)/races' as any);
               } else if (item.regattaId) {
                 router.push(`/race/${item.regattaId}`);
               }

@@ -49,6 +49,9 @@ interface NotificationRowProps {
   isFollowingBack?: boolean;
   onToggleFollow?: () => void;
   isTogglingFollow?: boolean;
+  onAdoptStep?: () => void;
+  isAdoptingStep?: boolean;
+  isStepAdopted?: boolean;
   isLast?: boolean;
 }
 
@@ -84,6 +87,8 @@ function getNotificationIcon(type: SocialNotification['type']) {
       return <UserPlus {...iconProps} color="#FFFFFF" />;
     case 'step_suggested':
       return <Send {...iconProps} color="#FFFFFF" />;
+    case 'step_reviewed':
+      return <CheckCircle2 {...iconProps} color="#FFFFFF" />;
     default:
       return <Bell {...iconProps} color="#FFFFFF" />;
   }
@@ -113,6 +118,8 @@ function getIconBgColor(type: SocialNotification['type']): string {
       return '#6D28D9';
     case 'step_suggested':
       return IOS_COLORS.systemBlue;
+    case 'step_reviewed':
+      return IOS_COLORS.systemGreen;
     default:
       return IOS_COLORS.systemGray;
   }
@@ -161,6 +168,11 @@ function getActionText(notification: SocialNotification, hasActor: boolean): str
       const stepTitle = notification.data?.step_title;
       return stepTitle ? `suggested "${stepTitle}"` : 'suggested a step for you';
     }
+    case 'step_reviewed': {
+      const reviewTitle = notification.data?.step_title;
+      const verb = notification.data?.review_status === 'approved' ? 'approved' : 'requested changes on';
+      return reviewTitle ? `${verb} "${reviewTitle}"` : `${verb} your step`;
+    }
     default:
       return notification.body || notification.title;
   }
@@ -192,6 +204,9 @@ export function NotificationRow({
   isFollowingBack,
   onToggleFollow,
   isTogglingFollow,
+  onAdoptStep,
+  isAdoptingStep,
+  isStepAdopted,
   isLast,
 }: NotificationRowProps) {
   const swipeableRef = useRef<Swipeable>(null);
@@ -282,6 +297,38 @@ export function NotificationRow({
             <Text style={styles.separator}> · </Text>
             <Text style={styles.time}>{timeText}</Text>
           </Text>
+
+          {/* Adopt button for step_suggested notifications */}
+          {notification.type === 'step_suggested' && onAdoptStep && (
+            <Pressable
+              style={({ pressed }) => [
+                styles.followButton,
+                isStepAdopted && styles.followButtonFollowing,
+                pressed && styles.followButtonPressed,
+              ]}
+              onPress={(e) => {
+                e.stopPropagation();
+                if (!isStepAdopted) onAdoptStep();
+              }}
+              disabled={isAdoptingStep || isStepAdopted}
+            >
+              {isAdoptingStep ? (
+                <ActivityIndicator
+                  size="small"
+                  color={IOS_COLORS.systemBlue}
+                />
+              ) : (
+                <Text
+                  style={[
+                    styles.followButtonText,
+                    isStepAdopted && styles.followButtonTextFollowing,
+                  ]}
+                >
+                  {isStepAdopted ? 'Added' : 'Adopt'}
+                </Text>
+              )}
+            </Pressable>
+          )}
 
           {/* Follow button for follower notifications */}
           {isFollowerNotification && onToggleFollow && (

@@ -42,6 +42,15 @@ export function NotificationBell({
     return count.toString();
   };
 
+  // Build a hover tooltip / screen reader label that names what the count is.
+  // Without this, the red bubble looks like any generic number (users were
+  // confused whether it was notifications, upcoming races, or something else).
+  const tooltip = unreadCount === 0
+    ? 'Notifications'
+    : unreadCount === 1
+      ? '1 unread notification'
+      : `${formatBadge(unreadCount)} unread notifications`;
+
   return (
     <Pressable
       style={({ pressed }) => [
@@ -49,6 +58,11 @@ export function NotificationBell({
         pressed && styles.containerPressed,
       ]}
       onPress={handlePress}
+      accessibilityRole="button"
+      accessibilityLabel={tooltip}
+      accessibilityHint="Opens notifications and messages"
+      // @ts-expect-error — RN Web passes unknown DOM props through as attributes
+      title={tooltip}
     >
       <Bell size={size} color={color} />
       {unreadCount > 0 && (
