@@ -20,7 +20,6 @@ import { useRouter } from 'expo-router';
 import { Sparkles, X, CheckCircle2 } from 'lucide-react-native';
 
 import { CardRaceData } from '../../types';
-import { TileGrid } from '../TileGrid';
 import { useRaceAnalysisState } from '@/hooks/useRaceAnalysisState';
 import { useRaceAnalysisData } from '@/hooks/useRaceAnalysisData';
 import { useEquipmentFlow } from '@/hooks/useEquipmentFlow';
@@ -33,20 +32,12 @@ import { StructuredDebriefInterview } from '@/components/races/review/Structured
 import { NextRaceFocusSection } from '@/components/races/review/NextRaceFocusSection';
 import { GPSTrackTile } from '@/components/races/review/GPSTrackTile';
 import { RaceContentActions } from '@/components/races/RaceContentActions';
-import { RaceResultTile } from '@/components/races/review/RaceResultTile';
-import { DebriefTile } from '@/components/races/review/DebriefTile';
-import { AIAnalysisTile } from '@/components/races/review/AIAnalysisTile';
-import { EquipmentTile } from '@/components/races/review/EquipmentTile';
 import { EquipmentIssuesSheet } from '@/components/races/review/EquipmentIssuesSheet';
 import { RaceResultDetailSheet } from '@/components/races/review/RaceResultDetailSheet';
-import { NextRaceFocusTile } from '@/components/races/review/NextRaceFocusTile';
-import { ShareInsightsTile } from '@/components/races/review/ShareInsightsTile';
-import { PerformanceReviewTile } from '@/components/races/review/PerformanceReviewTile';
-import { LearningCaptureTile } from '@/components/races/review/LearningCaptureTile';
-import { CoachFeedbackTile } from '@/components/races/review/CoachFeedbackTile';
-import { RaceSummaryTile } from '@/components/races/review/RaceSummaryTile';
 import { EducationalChecklistSheet } from '@/components/races/review/EducationalChecklistSheet';
-import { CoachingSuggestionTile, CoachSelectionSheet } from '@/components/races/coaching';
+import { PrepChecklistSection, PrepChecklistItemConfig } from '@/components/races/prep/PrepChecklistSection';
+import type { ChecklistItemWithState } from '@/hooks/useRaceChecklist';
+import { CoachSelectionSheet } from '@/components/races/coaching';
 import { useSailorActiveCoaches } from '@/hooks/useSailorActiveCoaches';
 import { coachingService } from '@/services/CoachingService';
 import {
@@ -60,6 +51,7 @@ import {
   useActiveFocusIntent,
   useFocusIntentFromRace,
 } from '@/hooks/useFocusIntent';
+import { inferRaceCountFromTitle } from '@/lib/utils/raceTitle';
 
 // iOS System Colors
 const IOS_COLORS = {
@@ -132,6 +124,7 @@ export function AfterRaceContent({
   const {
     progress: debriefProgress,
     isComplete: debriefComplete,
+    isLoading: debriefLoading,
     refetch: refetchDebrief,
   } = useDebriefInterview({
     raceId: race.id,
@@ -313,14 +306,47 @@ export function AfterRaceContent({
     }
   }, [debriefComplete, hasResult, hasAIAnalysis, isGeneratingAnalysis, analysisData?.timerSessionId, triggerAnalysis, race.id]);
 
-  // Format result
+  // How many races the step covers. Prefer saved raceCount, but fall back to
+  // parsing the step title (e.g. "Moonraker Races 5 & 6" → 2) so the progress
+  // nudge works even before the sailor opens the result sheet for the first
+  // time. Kept in sync with inferRaceCountFromTitle in RaceResultDetailSheet.
+  const stepRaceCount = useMemo(() => {
+    if (analysisData?.raceCount && analysisData.raceCount > 1) {
+      return analysisData.raceCount;
+    }
+    return inferRaceCountFromTitle(race.name);
+  }, [analysisData?.raceCount, race.name]);
+
+  // How many of those races have a position recorded.
+  const recordedRaceCount = useMemo(() => {
+    const perRace = analysisData?.raceResults?.filter(
+      (r) => r.position != null && r.fleetSize != null,
+    ).length ?? 0;
+    if (perRace > 0) return perRace;
+    // Single-race fallback — the legacy selfReportedPosition/selfReportedFleetSize
+    // path used before raceResults existed.
+    if (analysisData?.selfReportedPosition && analysisData?.selfReportedFleetSize) {
+      return 1;
+    }
+    return 0;
+  }, [analysisData?.raceResults, analysisData?.selfReportedPosition, analysisData?.selfReportedFleetSize]);
+
+  // Log section is only "complete" when every race in the step has a result.
+  const allRaceResultsRecorded = recordedRaceCount >= stepRaceCount;
+
+  // Format result for the checklist row status text
   const resultText = useMemo(() => {
+    if (stepRaceCount > 1) {
+      // Multi-race day — always show progress so sailors know to come back
+      // for race 2/3 instead of thinking "done" after race 1.
+      return `${recordedRaceCount}/${stepRaceCount} recorded`;
+    }
     if (!hasResult) return null;
     if (analysisData?.selfReportedPosition && analysisData?.selfReportedFleetSize) {
       return `${analysisData.selfReportedPosition}${getOrdinalSuffix(analysisData.selfReportedPosition)} of ${analysisData.selfReportedFleetSize}`;
     }
     return 'Recorded';
-  }, [hasResult, analysisData]);
+  }, [hasResult, analysisData, stepRaceCount, recordedRaceCount]);
 
   // ==========================================================================
   // Educational checklist progress and toggles
@@ -348,15 +374,6 @@ export function AfterRaceContent({
     sectionId: LEARNING_CAPTURE_CONFIG.id,
     items: LEARNING_CAPTURE_CONFIG.items,
   });
-
-  // Compute next uncompleted item labels for tiles
-  const nextPerformanceItem = useMemo(() => {
-    return POST_RACE_REVIEW_CONFIG.items.find(item => !isPerformanceItemCompleted(item.id));
-  }, [isPerformanceItemCompleted]);
-
-  const nextLearningItem = useMemo(() => {
-    return LEARNING_CAPTURE_CONFIG.items.find(item => !isLearningItemCompleted(item.id));
-  }, [isLearningItemCompleted]);
 
   const maybeEmitChecklistCompletionSignatureInsight = useCallback(
     async (input: { sectionId: string; itemId: string; itemLabel: string; wasCompleted: boolean }) => {
@@ -426,7 +443,7 @@ export function AfterRaceContent({
   // RENDER
   // ==========================================================================
 
-  // Focus intent derived state for tile
+  // Focus intent derived state
   const hasPreviousFocus = !!activeIntent && activeIntent.status === 'active' && activeIntent.sourceRaceId !== race.id;
   const hasFocusSet = !!intentFromThisRace;
 
@@ -439,38 +456,114 @@ export function AfterRaceContent({
   const reviewSectionComplete = !!hasAIAnalysis;
   const focusSectionComplete = hasFocusSet;
 
+  // Helper: create a synthetic ChecklistItemWithState for PrepChecklistSection
+  const makeItem = useCallback(
+    (id: string, label: string, isCompleted: boolean): ChecklistItemWithState => ({
+      id,
+      label,
+      priority: 'high' as const,
+      raceTypes: ['fleet', 'distance', 'match', 'team'],
+      phase: 'after_race' as const,
+      category: 'review' as const,
+      isCompleted,
+    }),
+    []
+  );
+
+  // Review items can't be "toggled" — completion is driven by data entered via the
+  // sheet/modal. Route checkbox taps to the same handlers as the row tap so the
+  // circle opens the tool instead of sitting inert.
+  const handleLogToggle = useCallback((itemId: string) => {
+    if (itemId === 'record_result') setShowResultSheet(true);
+    if (itemId === 'equipment_issues') setShowEquipmentSheet(true);
+  }, []);
+
+  const handleDebriefToggle = useCallback((itemId: string) => {
+    if (itemId === 'structured_debrief') setShowInterviewModal(true);
+    if (itemId === 'performance_review') setShowPerformanceSheet(true);
+    if (itemId === 'learning_capture') setShowLearningSheet(true);
+  }, []);
+
+  const handleFocusToggle = useCallback((itemId: string) => {
+    if (itemId === 'set_focus') setShowFocusModal(true);
+    if (itemId === 'share_insights') setShowShareModal(true);
+  }, []);
+
+  const handleReviewToggle = useCallback(
+    (itemId: string) => {
+      if (itemId === 'ai_analysis') {
+        if (hasAIAnalysis && analysisData?.timerSessionId) {
+          router.push(`/(tabs)/race-session/${analysisData.timerSessionId}` as any);
+        } else if (canGenerateAI && !isGeneratingAnalysis) {
+          triggerAnalysis();
+        }
+      }
+      if (itemId === 'share_with_coach') {
+        if (hasCoach && activeCoaches.length === 1 && primaryCoach) {
+          coachingService.shareDebriefWithCoach({
+            coachId: primaryCoach.coachId,
+            raceId: race.id,
+            sailorId: userId || '',
+            raceName: race.name,
+          });
+        } else if (hasCoach && activeCoaches.length > 1) {
+          setShowCoachSheet(true);
+        } else {
+          router.push(`/coach/discover?boatClass=${encodeURIComponent(race.boatClass || '')}&source=review` as any);
+        }
+      }
+    },
+    [
+      hasAIAnalysis,
+      analysisData?.timerSessionId,
+      canGenerateAI,
+      isGeneratingAnalysis,
+      triggerAnalysis,
+      hasCoach,
+      activeCoaches,
+      primaryCoach,
+      race.id,
+      race.name,
+      race.boatClass,
+      userId,
+    ],
+  );
+
   return (
     <View style={styles.container}>
 
       {/* ================================================================ */}
       {/* SECTION 1: LOG YOUR RACE                                        */}
       {/* ================================================================ */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <View style={styles.sectionTitleRow}>
-            <Text style={styles.sectionTitle}>Log Your Race</Text>
-            {hasResult && (
-              <CheckCircle2 size={16} color={IOS_COLORS.green} />
-            )}
-          </View>
-          <Text style={styles.sectionSubtitle}>Record results and equipment status</Text>
-        </View>
-        <TileGrid>
-          <RaceResultTile
-            position={analysisData?.selfReportedPosition}
-            fleetSize={analysisData?.selfReportedFleetSize}
-            raceCount={analysisData?.raceCount}
-            userId={userId}
-            raceId={race.id}
-            onPress={() => setShowResultSheet(true)}
-          />
-          <EquipmentTile
-            issueCount={equipmentIssueCount}
-            issues={[...currentRaceIssues, ...carryoverIssues]}
-            hasPendingNote={false}
-            onPress={() => setShowEquipmentSheet(true)}
-          />
-        </TileGrid>
+      <PrepChecklistSection
+        title="Log Your Race"
+        subtitle="Record results and equipment status"
+        accentColor={IOS_COLORS.blue}
+        isComplete={allRaceResultsRecorded && !!hasResult}
+        onToggle={handleLogToggle}
+        onOpenTool={(item) => {
+          if (item.id === 'record_result') setShowResultSheet(true);
+          if (item.id === 'equipment_issues') setShowEquipmentSheet(true);
+        }}
+        items={[
+          {
+            item: makeItem('record_result', 'Record your result', !!hasResult),
+            statusText: resultText || undefined,
+            // Orange when partially filled (e.g. 1/2) to nudge the sailor to finish.
+            statusColor:
+              stepRaceCount > 1 && recordedRaceCount > 0 && recordedRaceCount < stepRaceCount
+                ? IOS_COLORS.orange
+                : IOS_COLORS.blue,
+            hasTool: true,
+          },
+          {
+            item: makeItem('equipment_issues', 'Record equipment issues', equipmentIssueCount > 0),
+            statusText: equipmentIssueCount > 0 ? `${equipmentIssueCount} issue${equipmentIssueCount !== 1 ? 's' : ''}` : undefined,
+            statusColor: IOS_COLORS.orange,
+            hasTool: true,
+          },
+        ]}
+      >
         {coachAnnotations.find(a => a.field === 'result') && (
           <Marginalia
             author="Coach"
@@ -479,52 +572,58 @@ export function AfterRaceContent({
             variant="compact"
           />
         )}
-      </View>
+      </PrepChecklistSection>
 
       {/* ================================================================ */}
       {/* SECTION 2: DEBRIEF                                              */}
       {/* ================================================================ */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <View style={styles.sectionTitleRow}>
-            <Text style={styles.sectionTitle}>Debrief</Text>
-            {debriefSectionComplete && (
-              <CheckCircle2 size={16} color={IOS_COLORS.green} />
-            )}
-          </View>
-          <Text style={styles.sectionSubtitle}>
-            {debriefComplete
+      <PrepChecklistSection
+        title="Debrief"
+        subtitle={
+          debriefLoading
+            ? 'Loading debrief…'
+            : debriefComplete
               ? 'Debrief complete'
-              : `Reflect on what happened — ${debriefProgress.answeredCount}/${debriefProgress.total} answered`}
-          </Text>
-        </View>
-        <TileGrid>
-          <DebriefTile
-            answeredCount={debriefProgress.answeredCount}
-            totalQuestions={debriefProgress.total}
-            isComplete={debriefComplete}
-            onPress={() => setShowInterviewModal(true)}
-          />
-          {/* Performance + Learning guide tiles (pre-debrief aids) */}
-          {!debriefComplete ? (
-            <PerformanceReviewTile
-              completedCount={performanceCompletedCount}
-              totalCount={performanceTotalCount}
-              isComplete={performanceCompletedCount === performanceTotalCount && performanceTotalCount > 0}
-              nextItemLabel={nextPerformanceItem?.label}
-              onPress={() => setShowPerformanceSheet(true)}
-            />
-          ) : (
-            <LearningCaptureTile
-              completedCount={learningCompletedCount}
-              totalCount={learningTotalCount}
-              isComplete={learningCompletedCount === learningTotalCount && learningTotalCount > 0}
-              nextItemLabel={nextLearningItem?.label}
-              onPress={() => setShowLearningSheet(true)}
-            />
-          )}
-        </TileGrid>
-        {/* GPS Track as debrief visual aid — tile self-manages visibility via internal DB lookup */}
+              : `Reflect on what happened — ${debriefProgress.answeredCount}/${debriefProgress.total} answered`
+        }
+        accentColor={IOS_COLORS.orange}
+        isComplete={debriefSectionComplete}
+        onToggle={handleDebriefToggle}
+        onOpenTool={(item) => {
+          if (item.id === 'structured_debrief') setShowInterviewModal(true);
+          if (item.id === 'performance_review') setShowPerformanceSheet(true);
+          if (item.id === 'learning_capture') setShowLearningSheet(true);
+        }}
+        items={[
+          {
+            item: makeItem('structured_debrief', 'Structured debrief', debriefComplete),
+            statusText: debriefLoading ? 'Loading…' : debriefComplete ? 'Complete' : `${debriefProgress.answeredCount}/${debriefProgress.total}`,
+            statusColor: debriefLoading ? IOS_COLORS.gray : debriefComplete ? IOS_COLORS.green : IOS_COLORS.orange,
+            hasTool: true,
+          },
+          {
+            item: makeItem(
+              'performance_review',
+              'Review performance',
+              performanceCompletedCount === performanceTotalCount && performanceTotalCount > 0,
+            ),
+            statusText: `${performanceCompletedCount}/${performanceTotalCount}`,
+            statusColor: IOS_COLORS.blue,
+            hasTool: true,
+          },
+          {
+            item: makeItem(
+              'learning_capture',
+              'Capture learnings',
+              learningCompletedCount === learningTotalCount && learningTotalCount > 0,
+            ),
+            statusText: `${learningCompletedCount}/${learningTotalCount}`,
+            statusColor: IOS_COLORS.purple,
+            hasTool: true,
+          },
+        ]}
+      >
+        {/* GPS Track as debrief visual aid */}
         {isExpanded && (
           <GPSTrackTile
             raceId={race.id}
@@ -540,162 +639,118 @@ export function AfterRaceContent({
             }}
           />
         )}
-      </View>
+      </PrepChecklistSection>
 
       {/* ================================================================ */}
       {/* SECTION 3: RACE REVIEW                                          */}
       {/* ================================================================ */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <View style={styles.sectionTitleRow}>
-            <Text style={styles.sectionTitle}>Race Review</Text>
-            {reviewSectionComplete && (
-              <CheckCircle2 size={16} color={IOS_COLORS.green} />
-            )}
-          </View>
-          <Text style={styles.sectionSubtitle}>
-            {hasAIAnalysis
-              ? 'AI insights and race summary'
-              : canGenerateAI
-                ? 'Generating AI analysis...'
-                : 'Complete debrief to unlock AI analysis'}
-          </Text>
-        </View>
-        {/* AI Analysis tile — full width when complete, small when locked */}
-        {hasAIAnalysis ? (
-          <AIAnalysisTile
-            hasAnalysis={true}
-            canGenerate={canGenerateAI}
-            isGenerating={false}
-            hasError={false}
-            insightText={analysisData?.focusNextRace}
-            strengthText={analysisData?.strengthIdentified}
-            isNew={isAIAnalysisNew}
-            onPress={() => {
-              if (analysisData?.timerSessionId) {
-                router.push(`/(tabs)/race-session/${analysisData.timerSessionId}` as any);
-              }
-            }}
-          />
-        ) : (
-          <TileGrid>
-            <AIAnalysisTile
-              hasAnalysis={false}
-              canGenerate={canGenerateAI}
-              isGenerating={isGeneratingAnalysis}
-              hasError={!!analysisError}
-              insightText={analysisData?.focusNextRace}
-              isNew={isAIAnalysisNew}
-              onPress={
-                analysisError
-                  ? triggerAnalysis
-                  : canGenerateAI && !isGeneratingAnalysis
-                    ? triggerAnalysis
-                    : () => {}
-              }
-            />
-          </TileGrid>
-        )}
-        {/* Race Summary tile */}
-        {isExpanded && (
-          <RaceSummaryTile
-            raceDate={race.date ?? ''}
-            resultText={resultText || undefined}
-            hasResult={!!hasResult}
-            wind={race.wind}
-            tide={race.tide}
-            keyLearning={analysisData?.keyLearning}
-            debriefComplete={debriefComplete}
-            hasAIAnalysis={!!hasAIAnalysis}
-            onPress={() => {
-              if (analysisData?.timerSessionId) {
-                router.push(`/(tabs)/race-session/${analysisData.timerSessionId}` as any);
-              }
-            }}
-          />
-        )}
+      <PrepChecklistSection
+        title="Race Review"
+        subtitle={
+          hasAIAnalysis
+            ? 'AI insights and race summary'
+            : canGenerateAI
+              ? 'Generating AI analysis...'
+              : 'Complete debrief to unlock AI analysis'
+        }
+        accentColor={IOS_COLORS.purple}
+        isComplete={reviewSectionComplete}
+        onToggle={handleReviewToggle}
+        onOpenTool={(item) => {
+          if (item.id === 'ai_analysis') {
+            if (hasAIAnalysis && analysisData?.timerSessionId) {
+              router.push(`/(tabs)/race-session/${analysisData.timerSessionId}` as any);
+            } else if (canGenerateAI && !isGeneratingAnalysis) {
+              triggerAnalysis();
+            }
+          }
+          if (item.id === 'share_with_coach') {
+            if (hasCoach && activeCoaches.length === 1 && primaryCoach) {
+              coachingService.shareDebriefWithCoach({
+                coachId: primaryCoach.coachId,
+                raceId: race.id,
+                sailorId: userId || '',
+                raceName: race.name,
+              });
+            } else if (hasCoach && activeCoaches.length > 1) {
+              setShowCoachSheet(true);
+            } else {
+              router.push(`/coach/discover?boatClass=${encodeURIComponent(race.boatClass || '')}&source=review` as any);
+            }
+          }
+        }}
+        items={[
+          {
+            item: makeItem('ai_analysis', 'AI race analysis', !!hasAIAnalysis),
+            statusText: isGeneratingAnalysis
+              ? 'Generating...'
+              : hasAIAnalysis
+                ? 'Ready'
+                : canGenerateAI
+                  ? 'Tap to generate'
+                  : 'Locked',
+            statusColor: hasAIAnalysis ? IOS_COLORS.green : isGeneratingAnalysis ? IOS_COLORS.orange : IOS_COLORS.gray,
+            hasTool: true,
+          },
+          ...(debriefComplete
+            ? [
+                {
+                  item: makeItem('share_with_coach', 'Share with coach', false),
+                  statusText: hasCoach
+                    ? primaryCoach?.displayName || 'Coach'
+                    : 'Find a coach',
+                  statusColor: IOS_COLORS.blue,
+                  hasTool: true,
+                },
+              ]
+            : []),
+        ]}
+      >
         {/* Coach Feedback */}
         {coachAnnotations.find(a => a.field === 'general') && (
-          <TileGrid>
-            <CoachFeedbackTile
-              hasFeedback={true}
-              isNew={!coachAnnotations.find(a => a.field === 'general')!.isRead}
-              feedbackPreview={coachAnnotations.find(a => a.field === 'general')!.comment}
-              onPress={() => {}}
-            />
-          </TileGrid>
+          <Marginalia
+            author="Coach"
+            comment={coachAnnotations.find(a => a.field === 'general')!.comment}
+            isNew={!coachAnnotations.find(a => a.field === 'general')!.isRead}
+            variant="compact"
+          />
         )}
-        {/* Coaching Suggestion - show when debrief is complete */}
-        {debriefComplete && (
-          <TileGrid>
-            <CoachingSuggestionTile
-              hasCoach={hasCoach}
-              primaryCoach={primaryCoach}
-              hasMultipleCoaches={activeCoaches.length > 1}
-              phase="review"
-              raceBoatClass={race.boatClass}
-              onPress={() => {
-                if (hasCoach && activeCoaches.length === 1 && primaryCoach) {
-                  // Single coach - share debrief directly
-                  coachingService.shareDebriefWithCoach({
-                    coachId: primaryCoach.coachId,
-                    raceId: race.id,
-                    sailorId: userId || '',
-                    raceName: race.name,
-                  });
-                } else if (hasCoach && activeCoaches.length > 1) {
-                  // Multiple coaches - show selection sheet
-                  setShowCoachSheet(true);
-                } else {
-                  // No coach - navigate to coach discovery
-                  router.push(`/coach/discover?boatClass=${encodeURIComponent(race.boatClass || '')}&source=review` as any);
-                }
-              }}
-              onChooseAnotherCoach={() => setShowCoachSheet(true)}
-            />
-          </TileGrid>
-        )}
-      </View>
+      </PrepChecklistSection>
 
       {/* ================================================================ */}
       {/* SECTION 4: NEXT RACE FOCUS                                      */}
       {/* ================================================================ */}
-      {isExpanded && (
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <View style={styles.sectionTitleRow}>
-              <Text style={styles.sectionTitle}>Next Race Focus</Text>
-              {focusSectionComplete && (
-                <CheckCircle2 size={16} color={IOS_COLORS.green} />
-              )}
-            </View>
-            <Text style={styles.sectionSubtitle}>
-              {hasFocusSet
-                ? 'Focus set — ready for next race'
-                : 'Set your intent for deliberate improvement'}
-            </Text>
-          </View>
-          <TileGrid>
-            <NextRaceFocusTile
-              hasFocusSet={hasFocusSet}
-              hasPreviousFocus={hasPreviousFocus}
-              hasEvaluated={false}
-              focusText={intentFromThisRace?.focusText}
-              aiSuggestedFocus={analysisData?.focusNextRace}
-              previousFocusText={activeIntent?.focusText}
-              onPress={() => setShowFocusModal(true)}
-            />
-            <ShareInsightsTile
-              hasPrepNotes={contentStatus.hasPrepNotes}
-              hasPostRaceNotes={contentStatus.hasPostRaceNotes}
-              keyLearning={analysisData?.keyLearning}
-              strengthIdentified={analysisData?.strengthIdentified}
-              debriefComplete={debriefComplete}
-              onPress={() => setShowShareModal(true)}
-            />
-          </TileGrid>
-        </View>
-      )}
+      <PrepChecklistSection
+        title="Next Race Focus"
+        subtitle={
+          hasFocusSet
+            ? 'Focus set — ready for next race'
+            : 'Set your intent for deliberate improvement'
+        }
+        accentColor={IOS_COLORS.green}
+        isComplete={focusSectionComplete}
+        onToggle={handleFocusToggle}
+        onOpenTool={(item) => {
+          if (item.id === 'set_focus') setShowFocusModal(true);
+          if (item.id === 'share_insights') setShowShareModal(true);
+        }}
+        items={[
+          {
+            item: makeItem('set_focus', 'Set next race focus', hasFocusSet),
+            statusText: intentFromThisRace?.focusText
+              ? intentFromThisRace.focusText.slice(0, 30) + (intentFromThisRace.focusText.length > 30 ? '...' : '')
+              : undefined,
+            statusColor: IOS_COLORS.green,
+            hasTool: true,
+          },
+          {
+            item: makeItem('share_insights', 'Share insights', contentStatus.hasPostRaceNotes),
+            statusText: contentStatus.hasPostRaceNotes ? 'Shared' : undefined,
+            statusColor: IOS_COLORS.blue,
+            hasTool: true,
+          },
+        ]}
+      />
 
       {/* Equipment Issues Sheet */}
       <EquipmentIssuesSheet
@@ -895,36 +950,7 @@ export function AfterRaceContent({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    gap: 24,
-  },
-  // Section grouping
-  section: {
-    gap: 12,
-  },
-  sectionHeader: {
-    gap: 2,
-    paddingBottom: 4,
-  },
-  sectionTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  sectionTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: IOS_COLORS.secondaryLabel,
-    letterSpacing: 0.3,
-    textTransform: 'uppercase',
-  },
-  sectionSubtitle: {
-    fontSize: 13,
-    color: IOS_COLORS.gray,
-    lineHeight: 18,
-  },
-  tileRow: {
-    flexDirection: 'row',
-    gap: 12,
+    gap: 20,
   },
 
   // Focus modal

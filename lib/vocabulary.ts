@@ -213,6 +213,40 @@ const REGEN_AG_VOCABULARY: VocabularyMap = {
   'Equipment': 'Tools & Inputs',
 };
 
+const LAC_CRAFT_VOCABULARY: VocabularyMap = {
+  'Learning Event': 'Activity',
+  'Plan Phase': 'Planning',
+  'Do Phase': 'Working',
+  'Review Phase': 'Review',
+  'Practice': 'Activity',
+  'Institution': 'Organization',
+  'Coach': 'Field Coordinator',
+  'Passport': 'Progress Record',
+  'Period': 'Season',
+  'Milestone': 'Achievement',
+  'Skill': 'Skill',
+  'Community': 'Self-Help Group',
+  'Equipment': 'Tools & Materials',
+  'Competency': 'Skill',
+  'Supervision': '',
+};
+
+const SELF_MASTERY_VOCABULARY: VocabularyMap = {
+  'Learning Event': 'Practice',
+  'Plan Phase': 'Planning',
+  'Do Phase': 'Doing',
+  'Review Phase': 'Reflect',
+  'Practice': 'Practice',
+  'Institution': 'Community',
+  'Coach': 'Coach',
+  'Passport': 'Journal',
+  'Period': 'Season',
+  'Milestone': 'Breakthrough',
+  'Skill': 'Skill',
+  'Community': 'Community',
+  'Equipment': 'Tools',
+};
+
 /** Map of interest slug → client-side fallback vocabulary */
 export const INTEREST_FALLBACK_VOCABULARIES: Record<string, VocabularyMap> = {
   'sail-racing': FALLBACK_VOCABULARY,
@@ -227,15 +261,34 @@ export const INTEREST_FALLBACK_VOCABULARIES: Record<string, VocabularyMap> = {
   'painting-printing': PAINTING_VOCABULARY,
   'lifelong-learning': LIFELONG_LEARNING_VOCABULARY,
   'regenerative-agriculture': REGEN_AG_VOCABULARY,
+  'self-mastery': SELF_MASTERY_VOCABULARY,
+  'lac-craft-business': LAC_CRAFT_VOCABULARY,
+};
+
+/** Generic fallback for interests without a specific vocabulary */
+const GENERIC_VOCABULARY: VocabularyMap = {
+  'Learning Event': 'Practice',
+  'Plan Phase': 'Planning',
+  'Do Phase': 'Doing',
+  'Review Phase': 'Review',
+  'Practice': 'Practice',
+  'Institution': 'Organization',
+  'Coach': 'Coach',
+  'Passport': 'Journal',
+  'Period': 'Season',
+  'Milestone': 'Milestone',
+  'Skill': 'Skill',
+  'Community': 'Community',
+  'Equipment': 'Equipment',
 };
 
 /**
  * Get the fallback vocabulary for a given interest slug.
- * Returns the sailing fallback for unknown interests.
+ * Returns generic vocabulary for unknown interests (not sailing-specific).
  */
 export function getFallbackVocabulary(interestSlug?: string | null): VocabularyMap {
-  if (!interestSlug) return FALLBACK_VOCABULARY;
-  return INTEREST_FALLBACK_VOCABULARIES[interestSlug] ?? FALLBACK_VOCABULARY;
+  if (!interestSlug) return GENERIC_VOCABULARY;
+  return INTEREST_FALLBACK_VOCABULARIES[interestSlug] ?? GENERIC_VOCABULARY;
 }
 
 // ---------------------------------------------------------------------------
