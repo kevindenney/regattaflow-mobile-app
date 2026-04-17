@@ -26,7 +26,7 @@ import type {
   PeerTimelineStep,
 } from '@/types/blueprint';
 import type { TimelineStepRecord } from '@/types/timeline-steps';
-import { createStep } from '@/services/TimelineStepService';
+import { createStep, adoptStep } from '@/services/TimelineStepService';
 import { resolveInterestId } from '@/services/TimelineStepService';
 
 const logger = createLogger('BlueprintService');
@@ -101,9 +101,103 @@ export async function deleteBlueprint(blueprintId: string): Promise<void> {
   }
 }
 
+/**
+ * Move a blueprint to a different interest. Requires curated steps
+ * (fallback mode is not supported for migration). Updates interest_id
+ * and records the previous interest for audit trail.
+ */
+export async function migrateBlueprint(
+  blueprintId: string,
+  newInterestId: string,
+): Promise<BlueprintRecord> {
+  // Verify blueprint has curated steps (migration without curation is unsafe)
+  const { data: curatedRows, error: curatedErr } = await supabase
+    .from('blueprint_steps')
+    .select('step_id')
+    .eq('blueprint_id', blueprintId)
+    .limit(1);
+
+  if (curatedErr) throw curatedErr;
+  if (!curatedRows || curatedRows.length === 0) {
+    throw new Error('Blueprint must have curated steps before moving to a different interest. Please curate your steps first.');
+  }
+
+  // Get current interest_id for audit trail
+  const current = await getBlueprintById(blueprintId);
+  if (!current) throw new Error('Blueprint not found');
+
+  if (current.interest_id === newInterestId) {
+    throw new Error('Blueprint is already in this interest');
+  }
+
+  const { data, error } = await supabase
+    .from('timeline_blueprints')
+    .update({
+      interest_id: newInterestId,
+      migrated_from_interest_id: current.interest_id,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', blueprintId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data as BlueprintRecord;
+}
+
 // ---------------------------------------------------------------------------
 // 2. Blueprint lookups
 // ---------------------------------------------------------------------------
+
+async function enrichBlueprintWithAuthor(
+  blueprint: BlueprintRecord,
+): Promise<BlueprintWithAuthor> {
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('full_name, email, avatar_url, bio')
+    .eq('id', blueprint.user_id)
+    .maybeSingle();
+
+  let authorName = (profile as any)?.full_name || (profile as any)?.email;
+
+  if (!authorName) {
+    const { data: userRow } = await supabase
+      .from('users')
+      .select('full_name, email')
+      .eq('id', blueprint.user_id)
+      .maybeSingle();
+    authorName = (userRow as any)?.full_name || (userRow as any)?.email;
+  }
+
+  const result: BlueprintWithAuthor = {
+    ...blueprint,
+    author_name: authorName || undefined,
+    author_avatar_emoji: undefined,
+    author_avatar_color: undefined,
+    author_bio: (profile as any)?.bio ?? undefined,
+  };
+
+  if (blueprint.organization_id) {
+    const { data: org } = await supabase
+      .from('organizations')
+      .select('name, slug')
+      .eq('id', blueprint.organization_id)
+      .maybeSingle();
+    result.organization_name = (org as any)?.name ?? undefined;
+    result.organization_slug = (org as any)?.slug ?? undefined;
+  }
+
+  if (blueprint.program_id) {
+    const { data: program } = await supabase
+      .from('programs')
+      .select('title')
+      .eq('id', blueprint.program_id)
+      .maybeSingle();
+    result.program_name = (program as any)?.title ?? undefined;
+  }
+
+  return result;
+}
 
 export async function getBlueprintBySlug(
   slug: string,
@@ -118,43 +212,7 @@ export async function getBlueprintBySlug(
     if (error) throw error;
     if (!data) return null;
 
-    // Fetch author profile
-    const blueprint = data as BlueprintRecord;
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('full_name, avatar_url')
-      .eq('id', blueprint.user_id)
-      .maybeSingle();
-
-    const result: BlueprintWithAuthor = {
-      ...blueprint,
-      author_name: (profile as any)?.full_name ?? undefined,
-      author_avatar_emoji: undefined,
-      author_avatar_color: undefined,
-    };
-
-    // Fetch org info if published under an organization
-    if (blueprint.organization_id) {
-      const { data: org } = await supabase
-        .from('organizations')
-        .select('name, slug')
-        .eq('id', blueprint.organization_id)
-        .maybeSingle();
-      result.organization_name = (org as any)?.name ?? undefined;
-      result.organization_slug = (org as any)?.slug ?? undefined;
-    }
-
-    // Fetch program name if linked to a program
-    if (blueprint.program_id) {
-      const { data: program } = await supabase
-        .from('programs')
-        .select('title')
-        .eq('id', blueprint.program_id)
-        .maybeSingle();
-      result.program_name = (program as any)?.title ?? undefined;
-    }
-
-    return result;
+    return enrichBlueprintWithAuthor(data as BlueprintRecord);
   } catch (err) {
     logger.error('Failed to get blueprint by slug', err);
     throw err;
@@ -175,6 +233,26 @@ export async function getBlueprintById(
     return (data as BlueprintRecord) ?? null;
   } catch (err) {
     logger.error('Failed to get blueprint by id', err);
+    throw err;
+  }
+}
+
+export async function getBlueprintWithAuthorById(
+  blueprintId: string,
+): Promise<BlueprintWithAuthor | null> {
+  try {
+    const { data, error } = await supabase
+      .from('timeline_blueprints')
+      .select('*')
+      .eq('id', blueprintId)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data) return null;
+
+    return enrichBlueprintWithAuthor(data as BlueprintRecord);
+  } catch (err) {
+    logger.error('Failed to get blueprint with author by id', err);
     throw err;
   }
 }
@@ -231,20 +309,9 @@ export async function getBlueprintSteps(
       );
     }
 
-    // Fallback: all non-private steps for author+interest (backward compat)
-    const blueprint = await getBlueprintById(blueprintId);
-    if (!blueprint) throw new Error('Blueprint not found');
-
-    const { data, error } = await supabase
-      .from('timeline_steps')
-      .select('*')
-      .eq('user_id', blueprint.user_id)
-      .eq('interest_id', blueprint.interest_id)
-      .neq('visibility', 'private')
-      .order('sort_order', { ascending: true });
-
-    if (error) throw error;
-    return (data as TimelineStepRecord[]) ?? [];
+    // No curated steps — return empty. Authors should curate explicitly.
+    logger.warn('Blueprint has no curated steps, returning empty', { blueprintId });
+    return [];
   } catch (err) {
     logger.error('Failed to get blueprint steps', err);
     throw err;
@@ -358,6 +425,49 @@ export async function setBlueprintSteps(
   }
 }
 
+/**
+ * Backfill existing non-private steps into blueprint_steps when auto-curate
+ * is first enabled. Only adds steps not already curated.
+ */
+export async function backfillAutoCurateSteps(
+  blueprintId: string,
+  userId: string,
+  interestId: string,
+): Promise<number> {
+  // Get existing curated step IDs
+  const { data: existing } = await supabase
+    .from('blueprint_steps')
+    .select('step_id')
+    .eq('blueprint_id', blueprintId);
+  const existingIds = new Set((existing ?? []).map((r: any) => r.step_id));
+
+  // Get author's non-private steps for this interest
+  const { data: steps } = await supabase
+    .from('timeline_steps')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('interest_id', interestId)
+    .neq('visibility', 'private')
+    .order('created_at', { ascending: true });
+
+  const toAdd = (steps ?? []).filter((s: any) => !existingIds.has(s.id));
+  if (toAdd.length === 0) return 0;
+
+  const maxSort = existing?.length ?? 0;
+  const rows = toAdd.map((s: any, i: number) => ({
+    blueprint_id: blueprintId,
+    step_id: s.id,
+    sort_order: maxSort + i,
+  }));
+
+  const { error } = await supabase.from('blueprint_steps').insert(rows);
+  if (error) {
+    logger.error('Failed to backfill auto-curate steps', error);
+    throw error;
+  }
+  return toAdd.length;
+}
+
 // ---------------------------------------------------------------------------
 // 4. Subscriptions
 // ---------------------------------------------------------------------------
@@ -409,6 +519,26 @@ export async function subscribe(
         .then(({ error: followErr }) => {
           if (followErr) logger.warn('Auto-follow failed (non-blocking)', followErr);
         });
+    }
+
+    // Auto-adopt the first curated step so the subscriber's timeline isn't empty.
+    // Remaining steps surface in the FOR YOU section as the user progresses.
+    try {
+      const steps = await getBlueprintSteps(blueprintId);
+      if (steps.length > 0) {
+        const firstStep = steps[0];
+        logger.debug('Auto-adopting first blueprint step', { stepId: firstStep.id, totalSteps: steps.length });
+        try {
+          const adopted = await adoptStep(subscriberId, firstStep.id, blueprint.interest_id, blueprintId);
+          // Record adopt action so ForYou doesn't re-suggest this step
+          await markStepAction(data.id, firstStep.id, 'adopted', adopted.id);
+        } catch (adoptErr) {
+          logger.warn('Auto-adopt first step failed (non-blocking)', { stepId: firstStep.id, error: adoptErr });
+        }
+      }
+    } catch (adoptErr) {
+      // Non-fatal: subscription succeeded even if auto-adopt fails
+      logger.error('Auto-adopt first blueprint step failed', adoptErr);
     }
 
     return data as BlueprintSubscriptionRecord;
@@ -928,6 +1058,81 @@ export async function getBlueprintSubscriberProgress(
 }
 
 // ---------------------------------------------------------------------------
+// 9b. Subscriber adopted step details (for creator mentoring dashboard)
+// ---------------------------------------------------------------------------
+
+export interface SubscriberAdoptedStep {
+  source_step_id: string;
+  adopted_step_id: string;
+  step: TimelineStepRecord;
+  sort_order: number;
+}
+
+export async function getSubscriberAdoptedSteps(
+  blueprintId: string,
+  subscriberId: string,
+): Promise<SubscriberAdoptedStep[]> {
+  try {
+    // Get the subscription for this subscriber + blueprint
+    const { data: sub, error: subErr } = await supabase
+      .from('blueprint_subscriptions')
+      .select('id')
+      .eq('blueprint_id', blueprintId)
+      .eq('subscriber_id', subscriberId)
+      .maybeSingle();
+
+    if (subErr) throw subErr;
+    if (!sub) return [];
+
+    // Get all adopted step actions for this subscription
+    const { data: actions, error: actErr } = await supabase
+      .from('blueprint_step_actions')
+      .select('source_step_id, adopted_step_id')
+      .eq('subscription_id', sub.id)
+      .eq('action', 'adopted')
+      .not('adopted_step_id', 'is', null);
+
+    if (actErr) throw actErr;
+    if (!actions || actions.length === 0) return [];
+
+    const adoptedIds = actions.map((a: any) => a.adopted_step_id).filter(Boolean);
+
+    // Fetch the full adopted step records (RLS grants blueprint author SELECT access)
+    const { data: steps, error: stepErr } = await supabase
+      .from('timeline_steps')
+      .select('*')
+      .in('id', adoptedIds);
+
+    if (stepErr) throw stepErr;
+
+    const stepMap = new Map((steps ?? []).map((s: any) => [s.id, s]));
+
+    // Get sort order from blueprint_steps to maintain curation order
+    const sourceIds = actions.map((a: any) => a.source_step_id);
+    const { data: bpSteps } = await supabase
+      .from('blueprint_steps')
+      .select('step_id, sort_order')
+      .eq('blueprint_id', blueprintId)
+      .in('step_id', sourceIds);
+
+    const sortMap = new Map((bpSteps ?? []).map((bs: any) => [bs.step_id, bs.sort_order]));
+
+    return actions
+      .filter((a: any) => stepMap.has(a.adopted_step_id))
+      .map((a: any) => ({
+        source_step_id: a.source_step_id,
+        adopted_step_id: a.adopted_step_id,
+        step: stepMap.get(a.adopted_step_id) as TimelineStepRecord,
+        sort_order: sortMap.get(a.source_step_id) ?? 999,
+      }))
+      .sort((a, b) => a.sort_order - b.sort_order);
+  } catch (err) {
+    logger.error('Failed to get subscriber adopted steps', err);
+    throw err;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // 10. Suggested next steps (for smart add sheet)
 // ---------------------------------------------------------------------------
 
@@ -1125,16 +1330,29 @@ export interface CurriculumStep {
   step_type?: string;
   module_ids?: string[];
   suggested_competency_ids?: string[];
+  /** Sub-steps for the "how" section of the plan */
+  sub_steps?: string[];
+  /** Reasoning for the "why" section of the plan */
+  reasoning?: string;
+  /** Estimated duration in days */
+  estimated_duration_days?: number;
 }
 
 export interface CreateBlueprintFromCurriculumInput {
   userId: string;
-  organizationId: string;
+  /** Optional — omit for personal (non-org) blueprints */
+  organizationId?: string | null;
   interestSlug: string;
+  /** Pass directly to skip slug→ID resolution (avoids RLS issues with private interests) */
+  interestId?: string;
   blueprintTitle: string;
   blueprintDescription?: string | null;
   steps: CurriculumStep[];
   accessLevel?: 'public' | 'org_members' | 'paid';
+  /** Inspiration source tracking */
+  inspirationSourceUrl?: string | null;
+  inspirationSourceText?: string | null;
+  inspirationSourceType?: 'url' | 'text' | 'description' | null;
 }
 
 /**
@@ -1149,16 +1367,25 @@ export async function createBlueprintFromCurriculum(
 ): Promise<{ blueprint: BlueprintRecord; steps: TimelineStepRecord[] }> {
   const {
     userId,
-    organizationId,
+    organizationId = null,
     interestSlug,
+    interestId: directInterestId,
     blueprintTitle,
     blueprintDescription,
     steps: curriculumSteps,
-    accessLevel = 'org_members',
+    accessLevel,
+    inspirationSourceUrl,
+    inspirationSourceText,
+    inspirationSourceType,
   } = input;
 
-  // 1. Resolve interest ID from slug
-  const interestId = await resolveInterestId(interestSlug);
+  // Derive defaults based on whether this is an org or personal blueprint
+  const isPersonal = !organizationId;
+  const effectiveAccessLevel = accessLevel ?? (isPersonal ? 'public' : 'org_members');
+  const stepVisibility = isPersonal ? 'followers' : 'organization';
+
+  // 1. Resolve interest ID — use direct ID if provided, otherwise look up by slug
+  const interestId = directInterestId ?? await resolveInterestId(interestSlug);
   if (!interestId) {
     throw new Error(`Could not resolve interest ID for slug "${interestSlug}"`);
   }
@@ -1166,21 +1393,39 @@ export async function createBlueprintFromCurriculum(
   // 2. Create timeline steps
   const createdSteps: TimelineStepRecord[] = [];
   for (const step of curriculumSteps) {
+    // Build plan metadata from extended fields
+    const planMetadata: Record<string, unknown> = {};
+    if (step.sub_steps?.length) {
+      planMetadata.how_sub_steps = step.sub_steps.map((text, i) => ({
+        id: `sub_${Date.now()}_${i}`,
+        text,
+        sort_order: i,
+        completed: false,
+      }));
+    }
+    if (step.reasoning) {
+      planMetadata.why_reasoning = step.reasoning;
+    }
+    if (step.estimated_duration_days) {
+      planMetadata.estimated_duration_days = step.estimated_duration_days;
+    }
+
     const created = await createStep({
       user_id: userId,
       interest_id: interestId,
-      organization_id: organizationId,
+      organization_id: organizationId ?? undefined,
       title: step.title,
       description: step.description ?? null,
-      source_type: 'template',
+      source_type: isPersonal ? 'blueprint' : 'template',
       category: step.step_type ?? 'general',
-      visibility: 'organization',
+      visibility: stepVisibility,
       metadata: {
         ...(step.module_ids?.length ? { module_ids: step.module_ids } : {}),
         ...(step.suggested_competency_ids?.length
           ? { suggested_competency_ids: step.suggested_competency_ids }
           : {}),
-        generated_from: 'ai_curriculum',
+        ...(Object.keys(planMetadata).length > 0 ? { plan: planMetadata } : {}),
+        generated_from: isPersonal ? 'ai_inspiration' : 'ai_curriculum',
       },
     });
     createdSteps.push(created);
@@ -1188,16 +1433,30 @@ export async function createBlueprintFromCurriculum(
 
   // 3. Create the blueprint
   const slug = generateBlueprintSlug(blueprintTitle, interestSlug);
-  const blueprint = await createBlueprint({
+  const blueprintInsert: CreateBlueprintInput = {
     user_id: userId,
     interest_id: interestId,
     slug,
     title: blueprintTitle,
     description: blueprintDescription ?? null,
-    is_published: true,
+    is_published: !isPersonal, // Personal blueprints start as drafts
     organization_id: organizationId,
-    access_level: accessLevel,
-  });
+    access_level: effectiveAccessLevel,
+  };
+
+  const blueprint = await createBlueprint(blueprintInsert);
+
+  // 3b. Set inspiration source columns if provided
+  if (inspirationSourceType) {
+    await supabase
+      .from('timeline_blueprints')
+      .update({
+        inspiration_source_url: inspirationSourceUrl ?? null,
+        inspiration_source_text: inspirationSourceText ?? null,
+        inspiration_source_type: inspirationSourceType,
+      })
+      .eq('id', blueprint.id);
+  }
 
   // 4. Link steps to blueprint
   await setBlueprintSteps(

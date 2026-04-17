@@ -1,6 +1,8 @@
 /**
- * Stripe Connect Service for Coach Onboarding and Management
+ * Stripe Connect Service for Creator Onboarding and Management
+ *
  * Handles Stripe Connect account creation, onboarding, and status checking
+ * for any user who sells blueprints (or coaches). Not tied to a specific persona.
  */
 
 import { supabase } from '@/services/supabase';
@@ -62,9 +64,9 @@ export interface PayoutHistoryItem {
 
 export class StripeConnectService {
   /**
-   * Check Stripe Connect account status for a coach
+   * Check Stripe Connect account status for a user
    */
-  static async getConnectStatus(coachId: string): Promise<StripeConnectStatus> {
+  static async getConnectStatus(userId: string): Promise<StripeConnectStatus> {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
@@ -73,7 +75,9 @@ export class StripeConnectService {
 
       const functionUrl = getSupabaseFunctionUrl('stripe-connect-status');
       const params = new URLSearchParams({
-        coach_id: coachId,
+        // Send both params so edge functions work during migration
+        coach_id: userId,
+        user_id: userId,
       });
 
       const response = await fetch(`${functionUrl}?${params.toString()}`, {
@@ -99,9 +103,9 @@ export class StripeConnectService {
   }
 
   /**
-   * Get current Stripe balance for a coach's connected account
+   * Get current Stripe balance for a user's connected account
    */
-  static async getBalance(coachId: string): Promise<{
+  static async getBalance(userId: string): Promise<{
     available: number; // amount in cents
     pending: number;   // amount in cents
     currency?: string;
@@ -114,7 +118,7 @@ export class StripeConnectService {
 
       const functionUrl = getSupabaseFunctionUrl('stripe-balance');
       const params = new URLSearchParams({
-        coachId,
+        coachId: userId,
         userId: session.user.id,
       });
 
@@ -128,7 +132,6 @@ export class StripeConnectService {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        // BUG 3: Propagate error so the UI can distinguish "no balance" from "unavailable"
         throw new Error(errorData?.error || 'Failed to fetch Stripe balance');
       }
 
@@ -145,10 +148,10 @@ export class StripeConnectService {
   }
 
   /**
-   * List recent transactions/transfers for a coach's connected account
+   * List recent transactions/transfers for a user's connected account
    */
   static async getTransactions(
-    coachId: string,
+    userId: string,
     opts?: { limit?: number }
   ): Promise<
     {
@@ -169,7 +172,7 @@ export class StripeConnectService {
 
       const functionUrl = getSupabaseFunctionUrl('stripe-transactions');
       const params = new URLSearchParams({
-        coachId,
+        coachId: userId,
         userId: session.user.id,
       });
       if (opts?.limit) params.set('limit', String(opts.limit));
@@ -197,10 +200,10 @@ export class StripeConnectService {
   }
 
   /**
-   * Start Stripe Connect onboarding for a coach
+   * Start Stripe Connect onboarding for a user
    */
   static async startOnboarding(
-    coachId: string,
+    userId: string,
     returnUrl?: string,
     refreshUrl?: string
   ): Promise<StripeOnboardingResult> {
@@ -219,7 +222,8 @@ export class StripeConnectService {
           'Authorization': `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
-          coach_id: coachId,
+          coach_id: userId,
+          user_id: userId,
           return_url: returnUrl,
           refresh_url: refreshUrl,
         }),
@@ -228,6 +232,7 @@ export class StripeConnectService {
       const data = await response.json();
 
       if (!response.ok) {
+        logger.error('Stripe onboarding failed:', data);
         return { success: false, error: data.error || 'Failed to start onboarding' };
       }
 
@@ -239,9 +244,9 @@ export class StripeConnectService {
   }
 
   /**
-   * Get Stripe Express dashboard login link for a coach
+   * Get Stripe Express dashboard login link
    */
-  static async getDashboardLink(coachId: string): Promise<StripeOnboardingResult> {
+  static async getDashboardLink(userId: string): Promise<StripeOnboardingResult> {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
@@ -257,7 +262,8 @@ export class StripeConnectService {
           'Authorization': `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
-          coach_id: coachId,
+          coach_id: userId,
+          user_id: userId,
         }),
       });
 
@@ -277,24 +283,25 @@ export class StripeConnectService {
   /**
    * Refresh Stripe Connect account status and update local database
    */
-  static async refreshAccountStatus(coachId: string): Promise<void> {
+  static async refreshAccountStatus(userId: string): Promise<void> {
     try {
-      const status = await this.getConnectStatus(coachId);
+      const status = await this.getConnectStatus(userId);
 
       if (status.connected && status.accountId) {
-        // Update local database with latest status
+        // Update creator_stripe_accounts table
         const { error } = await supabase
-          .from('coach_profiles')
-          .update({
-            stripe_details_submitted: status.detailsSubmitted,
-            stripe_charges_enabled: status.chargesEnabled,
-            stripe_payouts_enabled: status.payoutsEnabled,
+          .from('creator_stripe_accounts')
+          .upsert({
+            user_id: userId,
+            stripe_account_id: status.accountId,
+            charges_enabled: status.chargesEnabled ?? false,
+            payouts_enabled: status.payoutsEnabled ?? false,
+            onboarding_complete: status.detailsSubmitted ?? false,
             updated_at: new Date().toISOString(),
-          })
-          .eq('id', coachId);
+          }, { onConflict: 'user_id' });
 
         if (error) {
-          logger.error('Error updating coach Stripe status:', error);
+          logger.error('Error updating creator Stripe status:', error);
         }
       }
     } catch (error) {
@@ -303,11 +310,11 @@ export class StripeConnectService {
   }
 
   /**
-   * Check if coach is ready to receive payments
+   * Check if user is ready to receive payments
    */
-  static async isPaymentReady(coachId: string): Promise<boolean> {
+  static async isPaymentReady(userId: string): Promise<boolean> {
     try {
-      const status = await this.getConnectStatus(coachId);
+      const status = await this.getConnectStatus(userId);
       return status.connected &&
              status.detailsSubmitted === true &&
              status.chargesEnabled === true;
@@ -318,11 +325,11 @@ export class StripeConnectService {
   }
 
   /**
-   * Check if coach is ready to receive payouts
+   * Check if user is ready to receive payouts
    */
-  static async isPayoutReady(coachId: string): Promise<boolean> {
+  static async isPayoutReady(userId: string): Promise<boolean> {
     try {
-      const status = await this.getConnectStatus(coachId);
+      const status = await this.getConnectStatus(userId);
       return status.connected &&
              status.detailsSubmitted === true &&
              status.payoutsEnabled === true;
@@ -335,9 +342,9 @@ export class StripeConnectService {
   /**
    * Get requirements needed to complete Stripe onboarding
    */
-  static async getRequirements(coachId: string): Promise<string[]> {
+  static async getRequirements(userId: string): Promise<string[]> {
     try {
-      const status = await this.getConnectStatus(coachId);
+      const status = await this.getConnectStatus(userId);
       return status.requirements?.currently_due || [];
     } catch (error) {
       logger.error('Error getting requirements:', error);
@@ -346,9 +353,9 @@ export class StripeConnectService {
   }
 
   /**
-   * Request a payout of all available funds to the coach's bank account
+   * Request a payout of all available funds to the user's bank account
    */
-  static async requestPayout(coachId: string): Promise<PayoutResult> {
+  static async requestPayout(userId: string): Promise<PayoutResult> {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
@@ -363,7 +370,7 @@ export class StripeConnectService {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({ coach_id: coachId }),
+        body: JSON.stringify({ coach_id: userId, user_id: userId }),
       });
 
       const data = await response.json();
@@ -386,14 +393,14 @@ export class StripeConnectService {
   }
 
   /**
-   * Get the available balance (not pending) for a coach's Stripe account
+   * Get the available balance (not pending) for a user's Stripe account
    */
-  static async getAvailableBalance(coachId: string): Promise<{
+  static async getAvailableBalance(userId: string): Promise<{
     available: number;
     pending: number;
     currency: string;
   }> {
-    return this.getBalance(coachId).then(balance => ({
+    return this.getBalance(userId).then(balance => ({
       available: balance.available,
       pending: balance.pending,
       currency: balance.currency || 'usd',
@@ -401,9 +408,9 @@ export class StripeConnectService {
   }
 
   /**
-   * Get payout history for a coach via the stripe-transactions edge function
+   * Get payout history via the stripe-transactions edge function
    */
-  static async getPayoutHistory(coachId: string): Promise<PayoutHistoryItem[]> {
+  static async getPayoutHistory(userId: string): Promise<PayoutHistoryItem[]> {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
@@ -412,7 +419,7 @@ export class StripeConnectService {
 
       const functionUrl = getSupabaseFunctionUrl('stripe-transactions');
       const params = new URLSearchParams({
-        coachId,
+        coachId: userId,
         userId: session.user.id,
       });
 
