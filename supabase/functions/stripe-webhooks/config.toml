@@ -1,0 +1,6 @@
+# Stripe Webhooks Configuration
+# Disable JWT verification because this endpoint receives webhooks from Stripe,
+# not authenticated Supabase requests. The function itself validates the Stripe signature.
+
+[functions.stripe-webhooks]
+verify_jwt = false
