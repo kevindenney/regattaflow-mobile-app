@@ -90,6 +90,21 @@ export function WebAlertProvider({ children }: { children: React.ReactNode }) {
     dismiss();
   }, [dialog, dismiss]);
 
+  // Escape key dismisses dialog on web
+  useEffect(() => {
+    if (!dialog || Platform.OS !== 'web') return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        const cancelBtn = dialog.buttons.find((b) => b.style === 'cancel');
+        if (cancelBtn) handleButton(cancelBtn);
+        else if (dialog.prompt) handlePromptCancel();
+        else dismiss();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [dialog, handleButton, handlePromptCancel, dismiss]);
+
   // Don't render overlay on native
   if (Platform.OS !== 'web') return <>{children}</>;
 
@@ -130,6 +145,8 @@ export function WebAlertProvider({ children }: { children: React.ReactNode }) {
 
           {/* Dialog card */}
           <View
+            accessibilityRole="alert"
+            accessibilityLabel={dialog.title}
             style={{
               backgroundColor: '#fff',
               borderRadius: 16,
@@ -192,8 +209,8 @@ export function WebAlertProvider({ children }: { children: React.ReactNode }) {
             {/* Buttons */}
             <View
               style={{
-                flexDirection: 'row',
-                justifyContent: 'flex-end',
+                flexDirection: dialog.prompt || dialog.buttons.length <= 2 ? 'row' : 'column',
+                justifyContent: dialog.prompt || dialog.buttons.length <= 2 ? 'flex-end' : 'flex-start',
                 gap: 10,
               }}
             >
@@ -217,6 +234,7 @@ export function WebAlertProvider({ children }: { children: React.ReactNode }) {
                     text={btn.text}
                     style={btn.style}
                     onPress={() => handleButton(btn)}
+                    fullWidth={dialog.buttons.length > 2}
                   />
                 ))
               )}
@@ -234,10 +252,12 @@ function DialogBtn({
   text,
   style,
   onPress,
+  fullWidth,
 }: {
   text: string;
   style?: 'default' | 'cancel' | 'destructive';
   onPress: () => void;
+  fullWidth?: boolean;
 }) {
   const [hovered, setHovered] = useState(false);
 
@@ -266,7 +286,8 @@ function DialogBtn({
         borderWidth: isCancel ? 1 : 0,
         borderColor,
         minWidth: 72,
-        alignItems: 'center',
+        alignItems: fullWidth ? 'flex-start' : 'center',
+        ...(fullWidth ? { width: '100%' } : {}),
       }}
     >
       <Text
@@ -275,6 +296,7 @@ function DialogBtn({
           fontWeight: '500',
           color: textColor,
         }}
+        numberOfLines={fullWidth ? 2 : undefined}
       >
         {text}
       </Text>

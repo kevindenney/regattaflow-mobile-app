@@ -305,37 +305,44 @@ export function getScreenDimensions() {
 }
 
 /**
- * Calculate web-specific card width based on container width
- * Returns wider cards on larger screens for better use of space
- * Mobile-first: small screens use standard 86% ratio
+ * Portrait carousel card sizing (web)
+ * The zoomed-in carousel uses narrow-tall cards to match the zoomed-out
+ * MiniCard grid. Constants here bound calculateWebCardWidth so desktop
+ * cards don't stretch to landscape.
+ */
+export const MIN_PORTRAIT_CARD_WIDTH = 380;
+export const MAX_PORTRAIT_CARD_WIDTH = 440;
+
+/**
+ * Portrait carousel card height as ratio of window height.
+ * Separate from CARD_HEIGHT_RATIO (which drives native vertical stacking math)
+ * so we can keep the web carousel tall without touching shared layout.
+ */
+export const PORTRAIT_CARD_HEIGHT_RATIO = 0.85;
+
+/**
+ * Calculate web-specific card width based on container width.
  *
- * Tile-based sizing (155px tiles + 12px gaps + 32px card padding):
- * - 2 tiles: 322 + 32 = 354px minimum
- * - 3 tiles: 489 + 32 = 521px minimum
- * - 4 tiles: 656 + 32 = 688px minimum
+ * Portrait-capped: on tablet+ we clamp the width between MIN_ and
+ * MAX_PORTRAIT_CARD_WIDTH so the carousel card stays narrow-tall and the
+ * neighbors still peek from both sides. Mobile keeps the standard 86% ratio.
  */
 export function calculateWebCardWidth(containerWidth: number): number {
-  // Target ~30px peek of adjacent card (enough to hint, not enough to show clipped text)
-  const peekAndGap = 30 + HORIZONTAL_CARD_GAP; // peek + gap on each side
-
-  // Mobile: use standard ratio
+  // Mobile: use standard ratio (already narrow on phones)
   if (containerWidth < 600) {
     return Math.round(containerWidth * CARD_WIDTH_RATIO);
   }
-  // Small tablet / large phone
-  if (containerWidth < 800) {
-    return Math.max(521, containerWidth - peekAndGap * 2);
-  }
-  // Tablet
-  if (containerWidth < 1024) {
-    return Math.max(688, Math.min(800, containerWidth - peekAndGap * 2));
-  }
-  // Desktop: cap at 900px
-  if (containerWidth < 1440) {
-    return Math.max(688, Math.min(900, containerWidth - peekAndGap * 2));
-  }
-  // Large desktop: max 900px
-  return 900;
+
+  // Tablet+: clamp to the portrait band so cards never go landscape.
+  // If the container is too small to fit the floor plus side-peek, fall back
+  // to what fits (floor wins — side peek is nice-to-have, not required).
+  const desired = Math.min(
+    MAX_PORTRAIT_CARD_WIDTH,
+    Math.max(MIN_PORTRAIT_CARD_WIDTH, Math.round(containerWidth * 0.4))
+  );
+  // Leave at least a small margin so neighbors can peek; otherwise just fit.
+  const maxFit = containerWidth - 32;
+  return Math.min(desired, maxFit);
 }
 
 /**

@@ -16,6 +16,8 @@ interface ReflectProfileHeaderProps {
   profile: UserProfile;
   stats: ProfileStats;
   onEditProfile?: () => void;
+  /** Vocabulary lookup – when provided, stat labels adapt to the current interest */
+  vocab?: (key: string) => string;
 }
 
 function formatMemberSince(dateString: string | null): string {
@@ -41,7 +43,13 @@ export function ReflectProfileHeader({
   profile,
   stats,
   onEditProfile,
+  vocab,
 }: ReflectProfileHeaderProps) {
+  const isSailing = !vocab || vocab('Learning Event') === 'Race';
+  const eventLabel = vocab ? vocab('Learning Event') + 's' : 'Races';
+  const winsLabel = isSailing ? 'Wins' : 'Completed';
+  const podiumsLabel = isSailing ? 'Podiums' : 'Top Marks';
+  const timeLabel = vocab ? vocab('Do Phase') : 'On Water';
   const handleFollowersPress = () => {
     router.push(`/sailor/${profile.userId}/followers`);
   };
@@ -143,28 +151,28 @@ export function ReflectProfileHeader({
             <Ionicons name="flag" size={16} color={IOS_COLORS.systemBlue} />
           </View>
           <Text style={styles.statValue}>{stats.totalRaces}</Text>
-          <Text style={styles.statLabel}>Races</Text>
+          <Text style={styles.statLabel}>{eventLabel}</Text>
         </View>
         <View style={styles.statItem}>
           <View style={[styles.statIcon, { backgroundColor: IOS_COLORS.systemYellow + '15' }]}>
             <Ionicons name="trophy" size={16} color={IOS_COLORS.systemYellow} />
           </View>
           <Text style={styles.statValue}>{stats.totalWins}</Text>
-          <Text style={styles.statLabel}>Wins</Text>
+          <Text style={styles.statLabel}>{winsLabel}</Text>
         </View>
         <View style={styles.statItem}>
           <View style={[styles.statIcon, { backgroundColor: IOS_COLORS.systemOrange + '15' }]}>
             <Ionicons name="medal" size={16} color={IOS_COLORS.systemOrange} />
           </View>
           <Text style={styles.statValue}>{stats.totalPodiums}</Text>
-          <Text style={styles.statLabel}>Podiums</Text>
+          <Text style={styles.statLabel}>{podiumsLabel}</Text>
         </View>
         <View style={styles.statItem}>
           <View style={[styles.statIcon, { backgroundColor: IOS_COLORS.systemTeal + '15' }]}>
             <Ionicons name="time" size={16} color={IOS_COLORS.systemTeal} />
           </View>
           <Text style={styles.statValue}>{formatHours(stats.totalTimeOnWater)}</Text>
-          <Text style={styles.statLabel}>On Water</Text>
+          <Text style={styles.statLabel}>{timeLabel}</Text>
         </View>
       </View>
 

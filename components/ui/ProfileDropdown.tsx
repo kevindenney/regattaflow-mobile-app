@@ -102,8 +102,12 @@ export function ProfileDropdown({
     <View style={s.container}>
       <AnimatedPressable
         style={[
-          !isLoggedIn ? s.signUpBtn : s.avatar,
-          !isLoggedIn ? (isDark ? s.signUpBtnDark : s.signUpBtnLight) : avatarDynamic,
+          !isLoggedIn ? (Platform.OS !== 'web' ? s.avatar : s.signUpBtn) : s.avatar,
+          !isLoggedIn
+            ? (Platform.OS !== 'web'
+                ? [avatarDynamic, isDark ? s.avatarDark : s.avatarGuestLight]
+                : (isDark ? s.signUpBtnDark : s.signUpBtnLight))
+            : avatarDynamic,
           isLoggedIn && (isDark ? s.avatarDark : s.avatarLight),
           showAvatarImage && s.avatarWithImage,
           animStyle,
@@ -122,7 +126,11 @@ export function ProfileDropdown({
         }}
       >
         {!isLoggedIn ? (
-          <Text style={[s.signUpText, isDark && s.signUpTextDark]}>Sign Up / Sign In</Text>
+          Platform.OS !== 'web' ? (
+            <Ionicons name="person-add-outline" size={size * 0.55} color={isDark ? '#1A1A1A' : '#FFFFFF'} />
+          ) : (
+            <Text style={[s.signUpText, isDark && s.signUpTextDark]}>Sign Up / Sign In</Text>
+          )
         ) : showAvatarImage ? (
           <Image
             source={{ uri: safeAvatarUrl! }}
@@ -145,57 +153,89 @@ export function ProfileDropdown({
       {open && (
         <Pressable style={s.backdrop} onPress={handleClose}>
           <Pressable
-            style={[s.dropdown, { top: size + 8 }]}
+            style={[s.dropdown, { top: size + 8 }, !isLoggedIn && s.dropdownGuest]}
             onPress={(e) => e.stopPropagation?.()}
           >
             {isLoggedIn ? (
               <>
-                <DropdownItem
-                  icon="home-outline"
-                  label="Home"
-                  onPress={() => navigate('/?view=landing')}
-                />
-                <DropdownItem
-                  icon="grid-outline"
-                  label="Dashboard"
-                  onPress={() => {
-                    setOpen(false);
-                    const dest = getDashboardRoute(userProfile?.user_type ?? null);
-                    router.push(dest as any);
-                  }}
-                />
-                <DropdownItem
-                  icon="person-outline"
-                  label="My Profile"
-                  onPress={() => navigate(`/person/${user!.id}`)}
-                />
-                <DropdownItem
-                  icon="settings-outline"
-                  label="Settings"
-                  onPress={() => navigate('/account')}
-                />
-                <View style={s.divider} />
-                <DropdownItem
-                  icon="log-out-outline"
-                  label="Sign Out"
-                  onPress={handleSignOut}
-                  destructive
-                />
+                <View style={s.profileHeader}>
+                  <View style={s.profileHeaderAvatar}>
+                    {showAvatarImage ? (
+                      <Image
+                        source={{ uri: safeAvatarUrl! }}
+                        style={s.profileHeaderAvatarImage}
+                      />
+                    ) : (
+                      <Text style={s.profileHeaderAvatarText}>{initials}</Text>
+                    )}
+                  </View>
+                  <View style={s.profileHeaderText}>
+                    <Text style={s.profileHeaderName} numberOfLines={1}>
+                      {userProfile?.full_name || userProfile?.display_name || 'Your account'}
+                    </Text>
+                    {!!user?.email && (
+                      <Text style={s.profileHeaderEmail} numberOfLines={1}>
+                        {user.email}
+                      </Text>
+                    )}
+                  </View>
+                </View>
+                <View style={s.headerDivider} />
+
+                <View style={s.menuSection}>
+                  <DropdownItem
+                    icon="home-outline"
+                    label="Home"
+                    onPress={() => navigate('/?view=landing')}
+                  />
+                  <View style={s.itemDivider} />
+                  <DropdownItem
+                    icon="grid-outline"
+                    label="Dashboard"
+                    onPress={() => {
+                      setOpen(false);
+                      const dest = getDashboardRoute(userProfile?.user_type ?? null);
+                      router.push(dest as any);
+                    }}
+                  />
+                  <View style={s.itemDivider} />
+                  <DropdownItem
+                    icon="person-outline"
+                    label="My Profile"
+                    onPress={() => navigate(`/person/${user!.id}`)}
+                  />
+                  <View style={s.itemDivider} />
+                  <DropdownItem
+                    icon="layers-outline"
+                    label="Creator Dashboard"
+                    onPress={() => navigate('/creator')}
+                  />
+                  <View style={s.itemDivider} />
+                  <DropdownItem
+                    icon="settings-outline"
+                    label="Settings"
+                    onPress={() => navigate('/account')}
+                  />
+                </View>
+
+                <View style={s.headerDivider} />
+                <View style={s.menuSection}>
+                  <DropdownItem
+                    icon="log-out-outline"
+                    label="Sign Out"
+                    onPress={handleSignOut}
+                    destructive
+                  />
+                </View>
               </>
             ) : (
-              <>
-                <DropdownItem
-                  icon="log-in-outline"
-                  label="Log In"
-                  onPress={() =>
-                    navigate(
-                      `/(auth)/login?returnTo=${encodeURIComponent(pathname)}`,
-                    )
-                  }
-                />
-                <DropdownItem
-                  icon="person-add-outline"
-                  label="Sign Up"
+              <View style={s.guestMenu}>
+                <Text style={s.guestHeading}>Save your progress</Text>
+                <Text style={s.guestSubtext}>
+                  Create a free account to keep your work safe and pick up where you left off on any device.
+                </Text>
+                <Pressable
+                  style={s.guestPrimaryBtn}
                   onPress={() =>
                     navigate(
                       currentInterestSlug
@@ -203,8 +243,23 @@ export function ProfileDropdown({
                         : '/(auth)/signup',
                     )
                   }
-                />
-              </>
+                >
+                  <Ionicons name="person-add-outline" size={16} color="#FFFFFF" />
+                  <Text style={s.guestPrimaryBtnText}>Create Account</Text>
+                </Pressable>
+                <Pressable
+                  style={s.guestSecondaryBtn}
+                  onPress={() =>
+                    navigate(
+                      `/(auth)/login?returnTo=${encodeURIComponent(pathname)}`,
+                    )
+                  }
+                >
+                  <Text style={s.guestSecondaryBtnText}>
+                    Already have an account? <Text style={s.guestSecondaryBtnLink}>Log In</Text>
+                  </Text>
+                </Pressable>
+              </View>
             )}
           </Pressable>
         </Pressable>
@@ -230,20 +285,25 @@ function DropdownItem({
 }) {
   return (
     <Pressable
-      style={({ hovered }: any) => [
-        s.menuItem,
-        hovered && s.menuItemHover,
-      ]}
       onPress={onPress}
+      style={({ hovered, pressed }: any) => [
+        s.menuItemPressable,
+        (hovered || pressed) && s.menuItemHover,
+      ]}
     >
-      <Ionicons
-        name={icon as any}
-        size={16}
-        color={destructive ? '#EF4444' : '#374151'}
-      />
-      <Text style={[s.menuText, destructive && s.menuTextDestructive]}>
-        {label}
-      </Text>
+      <View style={s.menuItemRow}>
+        <Text
+          style={[s.menuText, destructive && s.menuTextDestructive]}
+          numberOfLines={1}
+        >
+          {label}
+        </Text>
+        <Ionicons
+          name={icon as any}
+          size={19}
+          color={destructive ? IOS_COLORS.systemRed : IOS_COLORS.label}
+        />
+      </View>
     </Pressable>
   );
 }
@@ -290,6 +350,9 @@ const s = StyleSheet.create({
   avatarLight: {
     backgroundColor: IOS_COLORS.systemBlue,
   },
+  avatarGuestLight: {
+    backgroundColor: IOS_COLORS.systemGray3,
+  },
   avatarDark: {
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     borderWidth: 2,
@@ -327,43 +390,167 @@ const s = StyleSheet.create({
     position: 'absolute',
     right: 0,
     backgroundColor: '#FFFFFF',
-    borderRadius: 10,
-    paddingVertical: 6,
-    minWidth: 190,
+    borderRadius: 16,
+    paddingVertical: 0,
+    minWidth: 260,
+    overflow: 'hidden',
     zIndex: 1000,
     ...Platform.select({
       web: {
-        boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+        boxShadow: '0 12px 32px rgba(0,0,0,0.18), 0 2px 6px rgba(0,0,0,0.06)',
       } as any,
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.18,
+        shadowRadius: 24,
+      },
+      android: {
+        elevation: 12,
+      },
     }),
   },
 
-  // Menu items
-  menuItem: {
+  dropdownGuest: {
+    minWidth: 260,
+    paddingVertical: 0,
+  },
+
+  // Profile header (logged-in)
+  profileHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingVertical: 10,
+    gap: 12,
     paddingHorizontal: 16,
+    paddingVertical: 16,
+    backgroundColor: IOS_COLORS.secondarySystemBackground,
+  },
+  profileHeaderAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: IOS_COLORS.systemBlue,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  profileHeaderAvatarImage: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+  },
+  profileHeaderAvatarText: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  profileHeaderText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  profileHeaderName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+  },
+  profileHeaderEmail: {
+    fontSize: 12,
+    fontWeight: '400',
+    color: IOS_COLORS.secondaryLabel,
+    marginTop: 2,
+  },
+
+  headerDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: IOS_COLORS.separator,
+  },
+
+  itemDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: IOS_COLORS.separator,
+    marginLeft: 16,
+  },
+
+  menuSection: {
+    paddingVertical: 0,
+  },
+
+  // Menu items (iOS UIMenu style: label left, icon right)
+  menuItemPressable: {
     ...Platform.select({ web: { cursor: 'pointer' } as any }),
   },
+  menuItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 13,
+    paddingHorizontal: 16,
+  },
   menuItemHover: {
-    backgroundColor: '#F3F4F6',
+    backgroundColor: IOS_COLORS.tertiarySystemFill,
   },
   menuText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#374151',
+    fontSize: 15,
+    fontWeight: '400',
+    color: IOS_COLORS.label,
+    flex: 1,
+    marginRight: 12,
   },
   menuTextDestructive: {
-    color: '#EF4444',
+    color: IOS_COLORS.systemRed,
+    fontWeight: '500',
   },
 
   divider: {
-    height: 1,
-    backgroundColor: '#E5E7EB',
-    marginVertical: 4,
-    marginHorizontal: 12,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: IOS_COLORS.separator,
+  },
+
+  // Guest auth menu
+  guestMenu: {
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 12,
+  },
+  guestHeading: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  guestSubtext: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#6B7280',
+    marginBottom: 14,
+  },
+  guestPrimaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: IOS_COLORS.systemBlue,
+    paddingVertical: 12,
+    borderRadius: 10,
+    marginBottom: 10,
+  },
+  guestPrimaryBtnText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  guestSecondaryBtn: {
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  guestSecondaryBtnText: {
+    fontSize: 13,
+    color: '#6B7280',
+  },
+  guestSecondaryBtnLink: {
+    color: IOS_COLORS.systemBlue,
+    fontWeight: '600',
   },
 });
 
