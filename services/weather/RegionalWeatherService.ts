@@ -16,6 +16,16 @@ import type {
 import type { AdvancedWeatherConditions } from '@/lib/types/advanced-map';
 import { createLogger } from '@/lib/utils/logger';
 import { OpenMeteoService } from './OpenMeteoService';
+import { HKTidalCurrentService } from './HKTidalCurrentService';
+
+/**
+ * Check if a coordinate pair falls inside Hong Kong sailing waters. Kept as a
+ * private helper so the regional enrichment step can decide whether to overlay
+ * HKTidalCurrentService predictions onto a forecast array.
+ */
+function isHongKongWaters(lat: number, lng: number): boolean {
+  return lat >= 22.0 && lat <= 22.6 && lng >= 113.8 && lng <= 114.5;
+}
 
 // Weather forecast data types
 export interface WeatherForecast {
@@ -244,10 +254,27 @@ export class RegionalWeatherService {
   }
 
   /**
-   * Get weather forecast for a specific venue
+   * Get weather forecast for a specific venue.
+   *
+   * When `options.anchorTime` is supplied, the forecast grid is centered on
+   * that timestamp (with `pastHours` of history) instead of on "now". This
+   * lets callers render the forecast for a race that is currently happening
+   * or has already started — without that, we used to sample from now forward
+   * and silently miss the race window.
    */
-  async getVenueWeather(venue: SailingVenue, hoursAhead: number = 72): Promise<WeatherData | null> {
-    const cacheKey = `${venue.id}-${hoursAhead}`;
+  async getVenueWeather(
+    venue: SailingVenue,
+    hoursAhead: number = 72,
+    options?: { anchorTime?: Date; pastHours?: number },
+  ): Promise<WeatherData | null> {
+    const anchorTime = options?.anchorTime;
+    const pastHours = Math.max(0, Math.floor(options?.pastHours ?? 0));
+    // Include the anchor hour in the cache key so two different race windows
+    // for the same venue don't clobber each other.
+    const anchorKey = anchorTime
+      ? `a${Math.floor(anchorTime.getTime() / (60 * 60 * 1000))}`
+      : 'now';
+    const cacheKey = `${venue.id}-${hoursAhead}-${pastHours}-${anchorKey}`;
 
     // Check cache
     const cached = this.cache.get(cacheKey);
@@ -261,7 +288,13 @@ export class RegionalWeatherService {
       const models = this.selectWeatherModels(venue);
 
       // Aggregate weather data from multiple sources
-      const weatherData = await this.aggregateWeatherData(venue, models, hoursAhead);
+      const weatherData = await this.aggregateWeatherData(
+        venue,
+        models,
+        hoursAhead,
+        anchorTime,
+        pastHours,
+      );
 
       // Cache the result
       this.cache.set(cacheKey, weatherData);
@@ -316,31 +349,60 @@ export class RegionalWeatherService {
   private async aggregateWeatherData(
     venue: SailingVenue,
     models: RegionalWeatherModel[],
-    hoursAhead: number
+    hoursAhead: number,
+    anchorTime?: Date,
+    pastHours: number = 0,
   ): Promise<WeatherData> {
     const forecasts: WeatherForecast[] = [];
     const alerts: WeatherAlert[] = [];
     let marineConditions: MarineConditions = { seaState: 0 };
 
-    // PRIMARY: Load OpenMeteo forecasts first (FREE, always available)
-    const openMeteoForecasts = await this.loadOpenMeteoForecasts(venue, hoursAhead);
+    // PRIMARY: Load OpenMeteo forecasts first (FREE, always available).
+    // When an anchor is supplied we also request `pastHours` of historical
+    // forecast values so the race window is covered even if the race has
+    // already started.
+    const openMeteoForecasts = await this.loadOpenMeteoForecasts(venue, hoursAhead, pastHours);
 
-    // Generate forecast points (every 3 hours)
-    const now = new Date();
-    for (let hour = 0; hour <= hoursAhead; hour += 3) {
-      const timestamp = new Date(now.getTime() + hour * 60 * 60 * 1000);
-
-      // Try OpenMeteo first (primary)
-      const openMeteoMatch = this.findClosestOpenMeteoForecast(openMeteoForecasts, timestamp);
-      if (openMeteoMatch) {
-        forecasts.push(this.transformOpenMeteoToWeatherForecast(openMeteoMatch, timestamp));
-        continue;
+    // Generate forecast points. When an anchor is provided we sample hourly
+    // around the anchor (anchor - pastHours → anchor + hoursAhead); otherwise
+    // we keep the legacy "now + every 3 hours" behavior for other callers.
+    if (anchorTime) {
+      const startMs = anchorTime.getTime() - pastHours * 60 * 60 * 1000;
+      const totalHours = pastHours + hoursAhead;
+      for (let hour = 0; hour <= totalHours; hour += 1) {
+        const timestamp = new Date(startMs + hour * 60 * 60 * 1000);
+        const openMeteoMatch = this.findClosestOpenMeteoForecast(openMeteoForecasts, timestamp);
+        if (openMeteoMatch) {
+          forecasts.push(this.transformOpenMeteoToWeatherForecast(openMeteoMatch, timestamp));
+          continue;
+        }
+        const fallbackForecast = await this.generateVenueSpecificForecast(venue, timestamp, models[0]);
+        forecasts.push(fallbackForecast);
       }
+    } else {
+      const now = new Date();
+      for (let hour = 0; hour <= hoursAhead; hour += 3) {
+        const timestamp = new Date(now.getTime() + hour * 60 * 60 * 1000);
 
-      // Fallback to venue-specific generation
-      const fallbackForecast = await this.generateVenueSpecificForecast(venue, timestamp, models[0]);
-      forecasts.push(fallbackForecast);
+        const openMeteoMatch = this.findClosestOpenMeteoForecast(openMeteoForecasts, timestamp);
+        if (openMeteoMatch) {
+          forecasts.push(this.transformOpenMeteoToWeatherForecast(openMeteoMatch, timestamp));
+          continue;
+        }
+
+        const fallbackForecast = await this.generateVenueSpecificForecast(venue, timestamp, models[0]);
+        forecasts.push(fallbackForecast);
+      }
     }
+
+    // Apply regional enrichments (e.g. HK tidal currents). OpenMeteo doesn't
+    // provide tidal currents at all, so for regions where we have a better
+    // data source we overlay it onto every forecast entry. Every consumer of
+    // RegionalWeatherService (race creation, forecast-check modal, race cards,
+    // etc.) picks this up automatically — previously only RaceWeatherService
+    // applied the enrichment, which left the forecast-check modal showing
+    // wave height mislabeled as "current".
+    this.enrichForecastsWithRegionalData(venue, forecasts);
 
     // Generate marine conditions
     marineConditions = this.generateMarineConditions(venue, forecasts[0]);
@@ -365,6 +427,36 @@ export class RegionalWeatherService {
       },
       localObservations
     };
+  }
+
+  /**
+   * Apply regional enrichments to a forecast array in-place. Today this only
+   * overlays HK tidal current predictions for venues in Hong Kong waters, but
+   * the shape is designed to hold additional regional overlays (NOAA Tides &
+   * Currents for US waters, SHOM for French waters, etc.).
+   *
+   * Synchronous because HKTidalCurrentService.getCurrentAtTime is a pure
+   * calculation — no I/O.
+   */
+  private enrichForecastsWithRegionalData(
+    venue: SailingVenue,
+    forecasts: WeatherForecast[],
+  ): void {
+    const location = this.resolveVenueLocation(venue);
+    if (!location) return;
+
+    const { latitude: lat, longitude: lng } = location;
+
+    if (isHongKongWaters(lat, lng)) {
+      for (const forecast of forecasts) {
+        const ts = forecast.timestamp instanceof Date
+          ? forecast.timestamp
+          : new Date(forecast.timestamp);
+        const prediction = HKTidalCurrentService.getCurrentAtTime(lat, lng, ts);
+        forecast.currentSpeed = prediction.speed;
+        forecast.currentDirection = prediction.direction;
+      }
+    }
   }
 
   /**
@@ -501,18 +593,24 @@ export class RegionalWeatherService {
   /**
    * Load OpenMeteo forecasts (PRIMARY - FREE, always available)
    */
-  private async loadOpenMeteoForecasts(venue: SailingVenue, hoursAhead: number): Promise<AdvancedWeatherConditions[]> {
+  private async loadOpenMeteoForecasts(
+    venue: SailingVenue,
+    hoursAhead: number,
+    pastHours: number = 0,
+  ): Promise<AdvancedWeatherConditions[]> {
     const location = this.resolveVenueLocation(venue);
     if (!location) {
       return [];
     }
 
     const hours = Math.min(Math.max(hoursAhead, 6), 240);
+    const past = Math.min(Math.max(pastHours, 0), 240);
 
     try {
       return await this.openMeteoService.getMarineWeather(
         { latitude: location.latitude, longitude: location.longitude },
-        hours
+        hours,
+        past,
       );
     } catch (error: any) {
       this.logger.warn('OpenMeteo forecast fetch failed:', error);
@@ -619,7 +717,10 @@ export class RegionalWeatherService {
 
     // Get current speed from tide data (ocean currents)
     const currentSpeedKnots = weather.tide?.speed ?? 0;
-    const currentDirection = weather.tide?.direction ?? weather.waves?.direction ?? 0;
+    // Tide direction is TOWARD (oceanographic convention). Wave direction is FROM (WMO convention).
+    // If falling back to wave direction, add 180° to convert FROM → TOWARD.
+    const currentDirection = weather.tide?.direction
+      ?? (weather.waves?.direction != null ? (weather.waves.direction + 180) % 360 : 0);
 
     return {
       timestamp: weather.timestamp ?? new Date(),

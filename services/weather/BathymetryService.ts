@@ -14,6 +14,7 @@ import type { GeoLocation } from '@/lib/types/map';
 
 // Supabase Edge Function URL for bathymetry proxy (avoids CORS)
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://qavekrwdbsobecwrfxwu.supabase.co';
+const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 const BATHYMETRY_PROXY_URL = `${SUPABASE_URL}/functions/v1/bathymetry-proxy`;
 
 // Cache duration - bathymetry doesn't change
@@ -65,7 +66,14 @@ export class BathymetryService {
         {
           locations: [{ lat: location.latitude, lng: location.longitude }]
         },
-        { timeout: 15000 }
+        {
+          timeout: 15000,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+            'apikey': SUPABASE_ANON_KEY,
+          },
+        }
       );
 
       const result = response.data;
@@ -154,7 +162,14 @@ export class BathymetryService {
         {
           locations: uncachedLocations.map(loc => ({ lat: loc.lat, lng: loc.lng }))
         },
-        { timeout: 30000 } // Longer timeout for batch requests
+        {
+          timeout: 30000, // Longer timeout for batch requests
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+            'apikey': SUPABASE_ANON_KEY,
+          },
+        }
       );
 
       const data = response.data;

@@ -12,7 +12,6 @@ import { regionalWeatherService } from './weather/RegionalWeatherService';
 import type { SailingVenue } from '@/lib/types/global-venues';
 import type { WeatherData } from './weather/RegionalWeatherService';
 import { createLogger } from '@/lib/utils/logger';
-import { HKTidalCurrentService } from './weather/HKTidalCurrentService';
 
 export interface RaceWeatherMetadata {
   wind: {
@@ -96,47 +95,17 @@ export class RaceWeatherService {
         ? this.combineDateWithTimeZone(raceDate, options.warningSignalTime, venue.timeZone || 'UTC') ?? new Date(raceDate)
         : new Date(raceDate);
 
-      // Fetch base weather data
+      // Fetch base weather data — regional enrichment (e.g. HK tidal currents)
+      // is now applied inside RegionalWeatherService, so all callers automatically
+      // get enriched forecasts without any duplicated per-caller enhancement.
       const weatherMetadata = await this.fetchWeatherForRace(venue, targetDate.toISOString());
-      
-      // For Hong Kong waters, enhance with HK Hydrographic Office tidal current data
-      if (weatherMetadata && this.isHongKongWaters(lat, lng)) {
-        try {
-          const currentSummary = await HKTidalCurrentService.getRaceCurrentSummary(
-            lat,
-            lng,
-            targetDate,
-            120 // Assume 2 hour race duration
-          );
-          
-          weatherMetadata.tidalCurrent = {
-            speed: currentSummary.atStart.speed,
-            direction: currentSummary.atStart.direction,
-            state: currentSummary.atStart.state,
-            summary: currentSummary.summary,
-            strategicNotes: currentSummary.strategicNotes,
-            officialDataUrl: currentSummary.officialDataUrl,
-          };
-          
-          logger.debug('[RaceWeatherService] Added HK tidal current data:', weatherMetadata.tidalCurrent);
-        } catch (currentError) {
-          logger.debug('[RaceWeatherService] Could not fetch HK tidal current:', currentError);
-        }
-      }
-      
+
       return weatherMetadata;
 
     } catch (error: unknown) {
       logger.warn('[RaceWeatherService.fetchWeatherByCoordinates] Failed', { error, lat, lng, raceDate });
       return null;
     }
-  }
-
-  /**
-   * Check if coordinates are in Hong Kong waters
-   */
-  private static isHongKongWaters(lat: number, lng: number): boolean {
-    return lat >= 22.0 && lat <= 22.6 && lng >= 113.8 && lng <= 114.5;
   }
 
   /**
@@ -319,6 +288,22 @@ export class RaceWeatherService {
         provider: weatherData.sources.primary,
         confidence: avgConfidence,
       };
+
+      // Populate tidalCurrent from enriched forecasts (RegionalWeatherService
+      // applies regional enrichment such as HKTidalCurrentService for HK waters).
+      if (avgCurrentSpeed > 0) {
+        const currentState: 'flood' | 'ebb' | 'slack' =
+          avgCurrentSpeed <= 0.3
+            ? 'slack'
+            : (avgCurrentDirection >= 0 && avgCurrentDirection <= 135)
+              ? 'flood'
+              : 'ebb';
+        weatherMetadata.tidalCurrent = {
+          speed: Math.round(avgCurrentSpeed * 10) / 10,
+          direction: Math.round(avgCurrentDirection),
+          state: currentState,
+        };
+      }
 
       return weatherMetadata;
 
