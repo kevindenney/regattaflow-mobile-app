@@ -40,6 +40,7 @@ const modalStyle = tva({
       sm: '',
       md: '',
       lg: '',
+      xl: '',
       full: '',
     },
   },
@@ -57,6 +58,7 @@ const modalContentStyle = tva({
       sm: 'w-[70%] max-w-[420px]',
       md: 'w-[80%] max-w-[510px]',
       lg: 'w-[90%] max-w-[640px]',
+      xl: 'w-[95%] max-w-[720px]',
       full: 'w-full',
     },
   },
@@ -122,7 +124,7 @@ const ModalBackdrop = React.forwardRef<
         opacity: 0,
       }}
       animate={{
-        opacity: 0.5,
+        opacity: 0.7,
       }}
       exit={{
         opacity: 0,

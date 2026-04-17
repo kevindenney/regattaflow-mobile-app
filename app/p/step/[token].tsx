@@ -19,7 +19,7 @@ import {
 } from 'react-native';
 import { Text } from '@/components/ui/text';
 import { Ionicons } from '@expo/vector-icons';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/services/supabase';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -75,15 +75,8 @@ const getApiBase = () => {
 
 const API_BASE = getApiBase();
 
-// Direct Supabase client for fallback fetching (uses anon key, public data only)
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = supabaseUrl ? createClient(supabaseUrl, supabaseAnonKey) : null;
-
 /** Fetch step data directly from Supabase (fallback when API isn't available) */
 async function fetchStepFromSupabase(shareToken: string): Promise<StepData | null> {
-  if (!supabase) return null;
-
   const { data: step, error } = await supabase
     .from('timeline_steps')
     .select('*')
