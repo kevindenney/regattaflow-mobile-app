@@ -21,6 +21,7 @@ import {
   StyleSheet,
   Platform,
   ActivityIndicator,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path, Circle, Line, Rect, G, Defs, LinearGradient, Stop } from 'react-native-svg';
@@ -483,6 +484,7 @@ export function FirstBeatStrategyWizard({
   const [step, setStep] = useState<WizardStep>('loading');
   const [commitmentLevel, setCommitmentLevel] = useState<CommitmentLevel>('medium');
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
+  const [userNotes, setUserNotes] = useState('');
   const [beatPlan, setBeatPlan] = useState<string | null>(null);
 
   // Determine initial step once forecast loads
@@ -849,11 +851,15 @@ Switch strategy if you observe:
       };
       strategyData['upwind.laylineApproach'] = commitmentDescriptions[commitmentLevel];
 
+      if (userNotes.trim()) {
+        strategyData['upwind.userNotes'] = userNotes.trim();
+      }
+
       onStrategyCapture(strategyData);
     }
 
     onComplete();
-  }, [onStrategyCapture, onComplete, tackRecommendation, favoredSide, commitmentLevel]);
+  }, [onStrategyCapture, onComplete, tackRecommendation, favoredSide, commitmentLevel, userNotes]);
 
   // Render loading state
   const renderLoading = () => (
@@ -1222,6 +1228,32 @@ Switch strategy if you observe:
           </Pressable>
         </View>
       )}
+
+      {/* User Notes */}
+      <View style={styles.notesSection}>
+        <Text style={styles.notesLabel}>Your Notes</Text>
+        <Text style={styles.notesSubLabel}>
+          Record your reasoning or observations to review after racing
+        </Text>
+        <TextInput
+          style={styles.notesInput}
+          value={userNotes}
+          onChangeText={setUserNotes}
+          placeholder="e.g., Left side looked better but fleet went right, need to verify..."
+          placeholderTextColor={IOS_COLORS.tertiaryLabel}
+          multiline
+          numberOfLines={3}
+          textAlignVertical="top"
+        />
+      </View>
+
+      {/* Tip */}
+      <View style={styles.reviewTipCard}>
+        <Sparkles size={16} color={IOS_COLORS.purple} />
+        <Text style={styles.reviewTipText}>
+          After the race, review how your first beat strategy played out. Your notes improve future recommendations.
+        </Text>
+      </View>
     </ScrollView>
   );
 
@@ -1954,5 +1986,46 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: IOS_COLORS.secondaryBackground,
+  },
+  notesSection: {
+    marginTop: 20,
+    marginBottom: 16,
+    paddingHorizontal: 16,
+  },
+  notesLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+    marginBottom: 2,
+  },
+  notesSubLabel: {
+    fontSize: 13,
+    color: IOS_COLORS.secondaryLabel,
+    marginBottom: 10,
+  },
+  notesInput: {
+    backgroundColor: IOS_COLORS.secondaryBackground,
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 15,
+    color: IOS_COLORS.label,
+    minHeight: 80,
+    textAlignVertical: 'top',
+  },
+  reviewTipCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    padding: 14,
+    backgroundColor: `${IOS_COLORS.purple}08`,
+    borderRadius: 12,
+    marginHorizontal: 16,
+    marginBottom: 24,
+  },
+  reviewTipText: {
+    flex: 1,
+    fontSize: 13,
+    color: IOS_COLORS.secondaryLabel,
+    lineHeight: 18,
   },
 });

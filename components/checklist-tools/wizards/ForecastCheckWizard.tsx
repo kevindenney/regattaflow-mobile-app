@@ -19,6 +19,7 @@ import {
   StyleSheet,
   Platform,
   ActivityIndicator,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -155,6 +156,7 @@ export function ForecastCheckWizard({
   const [captureComplete, setCaptureComplete] = useState(false);
   // Track whether we've completed the initial load attempt (for smoother UX)
   const [hasAttemptedLoad, setHasAttemptedLoad] = useState(false);
+  const [userNotes, setUserNotes] = useState('');
 
   // Track when initial loading completes (with brief delay for smoother UX)
   useEffect(() => {
@@ -453,11 +455,25 @@ export function ForecastCheckWizard({
     // Calculate min/max ranges
     const windMin = Math.min(...windSpeeds);
     const windMax = Math.max(...windSpeeds);
-    const tideMin = Math.min(...tideSpeeds.filter((v) => v > 0));
-    const tideMax = Math.max(...tideSpeeds);
+    const tideNonZero = tideSpeeds.filter((v) => v > 0);
+    const tideMin = tideNonZero.length > 0 ? Math.min(...tideNonZero) : 0;
+    const tideMax = tideSpeeds.length > 0 ? Math.max(...tideSpeeds) : 0;
     const waveMin = waveSpeeds.length > 0 ? Math.min(...waveSpeeds.filter((v) => v > 0)) : 0;
     const waveMax = waveSpeeds.length > 0 ? Math.max(...waveSpeeds) : 0;
     const hasWaveData = waveSpeeds.length > 0 && waveMax > 0;
+
+    // `tideForecast` represents one of: current speed (kts), wave height (m),
+    // tidal height (m), or nothing. The label/unit must match the metric —
+    // see useRaceWeatherForecast.tideMetric.
+    const tideMetric = currentForecast.tideMetric || 'none';
+    const tideRowLabel =
+      tideMetric === 'current'
+        ? 'Current'
+        : tideMetric === 'wave'
+          ? 'Waves'
+          : 'Tide';
+    const tideRowUnit = tideMetric === 'current' ? 'kts' : 'm';
+    const hasTideRowData = tideMetric !== 'none' && tideMax > 0;
 
     // Determine tide flow state
     const tideState = getTideState(
@@ -770,24 +786,26 @@ export function ForecastCheckWizard({
             </View>
           </View>
 
-          {/* Current/Tide Summary Row */}
-          <View style={rcStyles.summaryRow}>
-            <Text style={rcStyles.summaryLabel}>Current</Text>
-            <View style={rcStyles.sparklineContainer}>
-              <InlineSparkline data={tideSpeeds} color={IOS_COLORS.green} />
+          {/* Current / Tide / Wave Summary Row */}
+          {hasTideRowData && (
+            <View style={rcStyles.summaryRow}>
+              <Text style={rcStyles.summaryLabel}>{tideRowLabel}</Text>
+              <View style={rcStyles.sparklineContainer}>
+                <InlineSparkline data={tideSpeeds} color={IOS_COLORS.green} />
+              </View>
+              <View style={rcStyles.rangeContainer}>
+                <Text style={rcStyles.rangeValue}>
+                  {tideMin.toFixed(1)}–{tideMax.toFixed(1)}
+                </Text>
+                <Text style={rcStyles.rangeUnit}>{tideRowUnit}</Text>
+              </View>
+              <View style={rcStyles.directionContainer}>
+                <Text style={rcStyles.tideStateText}>
+                  {tideState.charAt(0).toUpperCase() + tideState.slice(1)}
+                </Text>
+              </View>
             </View>
-            <View style={rcStyles.rangeContainer}>
-              <Text style={rcStyles.rangeValue}>
-                {tideMin.toFixed(1)}–{tideMax.toFixed(1)}
-              </Text>
-              <Text style={rcStyles.rangeUnit}>m</Text>
-            </View>
-            <View style={rcStyles.directionContainer}>
-              <Text style={rcStyles.tideStateText}>
-                {tideState.charAt(0).toUpperCase() + tideState.slice(1)}
-              </Text>
-            </View>
-          </View>
+          )}
 
           {/* Waves Summary Row */}
           {hasWaveData && (
@@ -855,7 +873,9 @@ export function ForecastCheckWizard({
             <Text style={[rcStyles.eventTableHeaderCell, rcStyles.timeCol]}>TIME</Text>
             <Text style={[rcStyles.eventTableHeaderCell, rcStyles.eventCol]}>EVENT</Text>
             <Text style={[rcStyles.eventTableHeaderCell, rcStyles.windCol]}>WIND</Text>
-            <Text style={[rcStyles.eventTableHeaderCell, rcStyles.tideCol]}>TIDE</Text>
+            <Text style={[rcStyles.eventTableHeaderCell, rcStyles.tideCol]}>
+              {tideMetric === 'current' ? 'CURR' : tideMetric === 'wave' ? 'WAVE' : 'TIDE'}
+            </Text>
             {hasWaveData && (
               <Text style={[rcStyles.eventTableHeaderCell, rcStyles.waveCol]}>WAVE</Text>
             )}
@@ -1317,12 +1337,30 @@ export function ForecastCheckWizard({
         </View>
       </View>
 
+      {/* User Notes */}
+      <View style={styles.notesSection}>
+        <Text style={styles.notesLabel}>Your Notes</Text>
+        <Text style={styles.notesSubLabel}>
+          Record your reasoning or observations to review after racing
+        </Text>
+        <TextInput
+          style={styles.notesInput}
+          value={userNotes}
+          onChangeText={setUserNotes}
+          placeholder="e.g., Wind looks lighter than yesterday's forecast, may need bigger sails..."
+          placeholderTextColor={IOS_COLORS.tertiaryLabel}
+          multiline
+          numberOfLines={3}
+          textAlignVertical="top"
+        />
+      </View>
+
       {/* Tip */}
       <View style={styles.tipCard}>
         <Sparkles size={16} color={IOS_COLORS.purple} />
         <Text style={styles.tipText}>
-          Check back daily as race day approaches. AI will analyze how the
-          forecast evolves and suggest tactical adjustments.
+          Check back daily as race day approaches. Your notes help track how your
+          thinking evolves alongside the forecast.
         </Text>
       </View>
     </ScrollView>
@@ -1409,7 +1447,7 @@ export function ForecastCheckWizard({
 
   return (
     <View style={styles.container}>
-      <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <SafeAreaView style={styles.safeArea} edges={[]}>
         {/* Header */}
         <View style={styles.header}>
         <Pressable
@@ -1462,7 +1500,7 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     flex: 1,
-    backgroundColor: IOS_COLORS.background,
+    backgroundColor: IOS_COLORS.secondaryBackground,
   },
   header: {
     flexDirection: 'row',
@@ -1470,10 +1508,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    minHeight: 56,
+    minHeight: 52,
     backgroundColor: IOS_COLORS.secondaryBackground,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: IOS_COLORS.separator,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
   },
   closeButton: {
     padding: 4,
@@ -1881,6 +1921,30 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: IOS_COLORS.label,
   },
+  notesSection: {
+    marginTop: 20,
+    marginBottom: 16,
+  },
+  notesLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+    marginBottom: 2,
+  },
+  notesSubLabel: {
+    fontSize: 13,
+    color: IOS_COLORS.secondaryLabel,
+    marginBottom: 10,
+  },
+  notesInput: {
+    backgroundColor: IOS_COLORS.secondaryBackground,
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 15,
+    color: IOS_COLORS.label,
+    minHeight: 80,
+    textAlignVertical: 'top',
+  },
   tipCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -2006,10 +2070,10 @@ const rcStyles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     color: IOS_COLORS.gray,
-    width: 40,
+    width: 52,
   },
   sparklineContainer: {
-    width: 80,
+    width: 72,
   },
   rangeContainer: {
     flexDirection: 'row',

@@ -21,6 +21,7 @@ import {
   StyleSheet,
   Platform,
   ActivityIndicator,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -127,6 +128,7 @@ export function StartPlannerWizard({
   const [backupPosition, setBackupPosition] = useState<StartPosition | null>(null);
   const [aggressionLevel, setAggressionLevel] = useState<'conservative' | 'moderate' | 'aggressive'>('moderate');
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
+  const [userNotes, setUserNotes] = useState('');
   const [startPlan, setStartPlan] = useState<string | null>(null);
 
   // Manual bias input - user must observe and record bias on the water
@@ -449,11 +451,15 @@ Moderate competition expected. Stay alert but execute your plan.
       };
       strategyData['start.timingApproach'] = timingApproaches[aggressionLevel];
 
+      if (userNotes.trim()) {
+        strategyData['start.userNotes'] = userNotes.trim();
+      }
+
       onStrategyCapture(strategyData);
     }
 
     onComplete();
-  }, [onStrategyCapture, onComplete, observedBias, selectedPosition, aggressionLevel]);
+  }, [onStrategyCapture, onComplete, observedBias, selectedPosition, aggressionLevel, userNotes]);
 
   // Render loading state
   const renderLoading = () => (
@@ -792,7 +798,7 @@ Moderate competition expected. Stay alert but execute your plan.
         <Text style={styles.cardTitle}>Strategic Insights</Text>
         {fleetPrediction.recommendations.map((rec, index) => (
           <View key={index} style={styles.tipItem}>
-            <Text style={styles.tipBullet}>\u2022</Text>
+            <Text style={styles.tipBullet}>•</Text>
             <Text style={styles.tipText}>{rec}</Text>
           </View>
         ))}
@@ -869,19 +875,19 @@ Moderate competition expected. Stay alert but execute your plan.
         <View style={styles.tipsCard}>
           <Text style={styles.cardTitle}>General Escape Principles</Text>
           <View style={styles.tipItem}>
-            <Text style={styles.tipBullet}>\u2022</Text>
+            <Text style={styles.tipBullet}>•</Text>
             <Text style={styles.tipText}>
               Bail early if position is compromised - don't fight a losing battle
             </Text>
           </View>
           <View style={styles.tipItem}>
-            <Text style={styles.tipBullet}>\u2022</Text>
+            <Text style={styles.tipBullet}>•</Text>
             <Text style={styles.tipText}>
               Speed is your friend - accelerate away from bad air
             </Text>
           </View>
           <View style={styles.tipItem}>
-            <Text style={styles.tipBullet}>\u2022</Text>
+            <Text style={styles.tipBullet}>•</Text>
             <Text style={styles.tipText}>
               Keep your head out of the boat - watch for gaps
             </Text>
@@ -936,6 +942,32 @@ Moderate competition expected. Stay alert but execute your plan.
           </Pressable>
         </View>
       )}
+
+      {/* User Notes */}
+      <View style={styles.notesSection}>
+        <Text style={styles.notesLabel}>Your Notes</Text>
+        <Text style={styles.notesSubLabel}>
+          Record your reasoning or observations to review after racing
+        </Text>
+        <TextInput
+          style={styles.notesInput}
+          value={userNotes}
+          onChangeText={setUserNotes}
+          placeholder="e.g., Boat end looked favored in practice but pin filled in..."
+          placeholderTextColor={IOS_COLORS.tertiaryLabel}
+          multiline
+          numberOfLines={3}
+          textAlignVertical="top"
+        />
+      </View>
+
+      {/* Tip */}
+      <View style={styles.reviewTipCard}>
+        <Sparkles size={16} color={IOS_COLORS.purple} />
+        <Text style={styles.reviewTipText}>
+          After the race, review how your start plan worked. Your notes improve future recommendations.
+        </Text>
+      </View>
     </ScrollView>
   );
 
@@ -1077,7 +1109,7 @@ const styles = StyleSheet.create({
   },
   progressBar: {
     height: '100%',
-    backgroundColor: IOS_COLORS.pink,
+    backgroundColor: IOS_COLORS.blue,
   },
   stepIndicator: {
     flexDirection: 'row',
@@ -1791,6 +1823,47 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 13,
     color: IOS_COLORS.orange,
+    lineHeight: 18,
+  },
+  notesSection: {
+    marginTop: 20,
+    marginBottom: 16,
+    paddingHorizontal: 16,
+  },
+  notesLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+    marginBottom: 2,
+  },
+  notesSubLabel: {
+    fontSize: 13,
+    color: IOS_COLORS.secondaryLabel,
+    marginBottom: 10,
+  },
+  notesInput: {
+    backgroundColor: IOS_COLORS.secondaryBackground,
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 15,
+    color: IOS_COLORS.label,
+    minHeight: 80,
+    textAlignVertical: 'top',
+  },
+  reviewTipCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    padding: 14,
+    backgroundColor: `${IOS_COLORS.purple}08`,
+    borderRadius: 12,
+    marginHorizontal: 16,
+    marginBottom: 24,
+  },
+  reviewTipText: {
+    flex: 1,
+    fontSize: 13,
+    color: IOS_COLORS.secondaryLabel,
     lineHeight: 18,
   },
 });

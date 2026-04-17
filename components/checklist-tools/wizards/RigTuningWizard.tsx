@@ -34,7 +34,6 @@ import {
   TextInput,
   View
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { TinySparkline } from '@/components/shared/charts';
 import { getSettingLearning } from '@/data/rig-setting-learning';
@@ -340,7 +339,7 @@ export function RigTuningWizard({
   // Loading state (only show if we're fetching class-specific data)
   if (loading && hasClassInfo) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <View style={styles.container}>
         <View style={styles.header}>
           <Pressable style={styles.closeButton} onPress={onCancel}>
             <X size={24} color={IOS_COLORS.gray} />
@@ -352,7 +351,7 @@ export function RigTuningWizard({
           <ActivityIndicator size="large" color={IOS_COLORS.blue} />
           <Text style={styles.loadingText}>Loading tuning guide...</Text>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
@@ -360,7 +359,7 @@ export function RigTuningWizard({
   // Instead, we fall back to GENERIC_TUNING_GUIDANCE above
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <View style={styles.container}>
       <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -561,7 +560,7 @@ export function RigTuningWizard({
           </Pressable>
         </View>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 }
 
