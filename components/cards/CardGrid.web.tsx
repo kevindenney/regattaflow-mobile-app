@@ -93,6 +93,8 @@ function CardGridComponent({
   topInset,
   refetchTrigger,
   nowBarWeather,
+  expandedRaceId,
+  onToggleRaceExpand,
 }: CardGridWebProps & { nextRaceIndex?: number | null; topInset?: number }) {
   // Refs for scroll container
   const horizontalScrollRef = useRef<ScrollView>(null);
@@ -393,8 +395,9 @@ function CardGridComponent({
             race,
             'race_summary',
             isActive,
-            false, // isExpanded - web grid doesn't support expand/collapse
-            () => {}, // onToggleExpand - no-op for web grid
+            // Collapsed by default; only the explicitly expanded race renders full.
+            expandedRaceId ? race.id === expandedRaceId : false,
+            () => onToggleRaceExpand?.(race.id),
             canManage,
             handleEdit,
             handleDelete,

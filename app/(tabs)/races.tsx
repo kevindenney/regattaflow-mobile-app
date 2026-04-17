@@ -3895,6 +3895,13 @@ export default function RacesScreen() {
               onDismissSample={isViewingOtherTimeline ? undefined : handleDismissSampleRace}
               refetchTrigger={refetchTrigger}
               nowBarWeather={nowBarWeather}
+              // Slice C: collapsed-by-default expansion. The carousel treats
+              // the currently selected card as the expanded one; tapping it
+              // collapses back to the compact header-only variant.
+              expandedRaceId={selectedRaceId}
+              onToggleRaceExpand={(raceId) => {
+                setSelectedRaceId((prev) => (prev === raceId ? null : raceId));
+              }}
             />
           )}
         </View>

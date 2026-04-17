@@ -367,6 +367,14 @@ export interface CardGridProps {
     /** Where the weather data comes from: venue name or "Current location" */
     locationLabel?: string;
   } | null;
+  /**
+   * ID of the race whose card should render in its expanded (full) variant.
+   * All other cards render the collapsed variant. When null/undefined, all
+   * cards render collapsed.
+   */
+  expandedRaceId?: string | null;
+  /** Toggle expansion for a given race: expand if collapsed, collapse if already expanded. */
+  onToggleRaceExpand?: (raceId: string) => void;
 }
 
 /**

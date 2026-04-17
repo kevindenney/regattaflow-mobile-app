@@ -112,6 +112,8 @@ function CardGridComponent({
   onContentScroll,
   refetchTrigger,
   nowBarWeather,
+  expandedRaceId,
+  onToggleRaceExpand,
 }: CardGridNativeProps) {
   // Track actual container dimensions
   const [containerSize, setContainerSize] = useState<{ width: number; height: number } | null>(null);
@@ -393,8 +395,9 @@ function CardGridComponent({
                 race,
                 'race_summary',
                 isActive,
-                false, // isExpanded - native grid doesn't support expand/collapse
-                () => {}, // onToggleExpand - no-op for native
+                // Collapsed by default; only the explicitly expanded race renders full.
+                expandedRaceId ? race.id === expandedRaceId : false,
+                () => onToggleRaceExpand?.(race.id),
                 canManage,
                 handleEdit,
                 handleDelete,
