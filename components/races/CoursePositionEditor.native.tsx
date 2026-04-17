@@ -34,7 +34,6 @@ import {
   Target,
   X,
   Anchor,
-  Flag,
   Wind,
   Minus,
   Plus,
@@ -50,11 +49,14 @@ import {
   COURSE_TEMPLATES,
 } from '@/services/CoursePositioningService';
 import { triggerHaptic } from '@/lib/haptics';
+import { WindOverlay } from '@/components/race-detail/map/WindOverlay';
+import { CurrentOverlay } from '@/components/race-detail/map/CurrentOverlay';
 
 // Safely import react-native-maps
 let MapView: any = null;
 let Marker: any = null;
 let Polyline: any = null;
+let Polygon: any = null;
 let PROVIDER_GOOGLE: any = null;
 let mapsAvailable = false;
 
@@ -66,6 +68,7 @@ try {
     Marker = maps.Marker;
     Polyline = maps.Polyline;
     PROVIDER_GOOGLE = maps.PROVIDER_GOOGLE;
+    Polygon = maps.Polygon;
     mapsAvailable = true;
   }
 } catch (_e) {
@@ -119,6 +122,156 @@ const WIND_PRESETS: { label: string; degrees: number }[] = [
 // Leg length options
 const LEG_LENGTH_OPTIONS = [0.25, 0.35, 0.5, 0.75, 1.0, 1.5];
 
+/** Format degrees as 16-point compass bearing (e.g. "NE", "SSW") */
+const formatCompassDirection = (degrees: number): string => {
+  const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+  return dirs[Math.round(degrees / 22.5) % 16];
+};
+
+/** Offset a lat/lng coordinate by a compass bearing and distance (meters) */
+function offsetCoordinate(lat: number, lng: number, bearingDeg: number, distanceM: number) {
+  const R = 6371000;
+  const bearing = (bearingDeg * Math.PI) / 180;
+  const lat1 = (lat * Math.PI) / 180;
+  const lng1 = (lng * Math.PI) / 180;
+  const d = distanceM / R;
+  const lat2 = Math.asin(
+    Math.sin(lat1) * Math.cos(d) + Math.cos(lat1) * Math.sin(d) * Math.cos(bearing)
+  );
+  const lng2 = lng1 + Math.atan2(
+    Math.sin(bearing) * Math.sin(d) * Math.cos(lat1),
+    Math.cos(d) - Math.sin(lat1) * Math.sin(lat2)
+  );
+  return { latitude: (lat2 * 180) / Math.PI, longitude: (lng2 * 180) / Math.PI };
+}
+
+/** Flat-earth bearing from one coordinate to another (degrees, 0=N clockwise) */
+function flatBearing(
+  from: { latitude: number; longitude: number },
+  to: { latitude: number; longitude: number }
+): number {
+  const toRad = Math.PI / 180;
+  const dlng = (to.longitude - from.longitude) * Math.cos(from.latitude * toRad);
+  const dlat = to.latitude - from.latitude;
+  return ((Math.atan2(dlng, dlat) * 180) / Math.PI + 360) % 360;
+}
+
+/** Find intersection of two rays defined by point + bearing. Returns null if parallel or behind. */
+function rayIntersection(
+  p1: { latitude: number; longitude: number }, b1: number,
+  p2: { latitude: number; longitude: number }, b2: number
+): { latitude: number; longitude: number } | null {
+  const toRad = Math.PI / 180;
+  const cosLat = Math.cos(p1.latitude * toRad);
+  const dx1 = Math.sin(b1 * toRad), dy1 = Math.cos(b1 * toRad);
+  const dx2 = Math.sin(b2 * toRad), dy2 = Math.cos(b2 * toRad);
+  const det = dx1 * dy2 - dy1 * dx2;
+  if (Math.abs(det) < 1e-10) return null;
+  const ex = (p2.longitude - p1.longitude) * cosLat;
+  const ey = p2.latitude - p1.latitude;
+  const t1 = (ex * dy2 - ey * dx2) / det;
+  if (t1 < 0) return null;
+  return {
+    latitude: p1.latitude + t1 * dy1,
+    longitude: p1.longitude + t1 * dx1 / cosLat,
+  };
+}
+
+/** Haversine distance between two coordinates in meters */
+function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/** Interpolate between two coordinates at fraction t (0=A, 1=B) */
+function lerpCoord(
+  a: { latitude: number; longitude: number },
+  b: { latitude: number; longitude: number },
+  t: number
+) {
+  return {
+    latitude: a.latitude + (b.latitude - a.latitude) * t,
+    longitude: a.longitude + (b.longitude - a.longitude) * t,
+  };
+}
+
+/**
+ * Generate upwind/downwind sailing strategy based on wind, current, and depth.
+ * Uses sailing conventions: wind direction = FROM, current direction = TO.
+ * Port tack = wind over port side, boat heads RIGHT of upwind course.
+ * Starboard tack = wind over starboard side, boat heads LEFT of upwind course.
+ */
+function generateStrategy(
+  windDir: number,
+  windSpeed: number | undefined,
+  currentDir: number | undefined,
+  currentSpd: number | undefined,
+  mode: 'upwind' | 'downwind'
+): string[] {
+  const lines: string[] = [];
+  const ws = windSpeed ?? 0;
+  const hasCurrent = currentDir !== undefined && currentSpd !== undefined && currentSpd > 0.05;
+
+  if (mode === 'upwind') {
+    if (hasCurrent) {
+      const rel = ((currentDir! - windDir) % 360 + 360) % 360;
+      const currentPushesRight = rel > 0 && rel < 180;
+      // Favored side is UPSTREAM — opposite to current push direction
+      const favoredSide = currentPushesRight ? 'LEFT' : 'RIGHT';
+      const startEnd = currentPushesRight ? 'boat end' : 'pin end';
+      const startTack = currentPushesRight ? 'starboard' : 'port';
+      const extendLayline = currentPushesRight ? 'Port LL' : 'Stbd LL';
+      const currentCompass = formatCompassDirection(currentDir!);
+      lines.push(`Play the ${favoredSide} side — upstream into ${currentSpd!.toFixed(1)}kt ${currentCompass} current`);
+      lines.push(`Start at ${startEnd}, ${startTack} tack toward ${extendLayline}`);
+      lines.push(`Extend into Upper 1/3 before tacking — avoid overstanding`);
+      if (ws > 0 && ws < 10 && currentSpd! > 0.3) {
+        lines.push(`Current is ${Math.round((currentSpd! / ws) * 100)}% of wind — big factor in light air`);
+      }
+    } else {
+      lines.push('No significant current — sail the lifted tack, play the shifts');
+      lines.push('Work the Middle 1/3, keep options open both sides');
+    }
+    if (ws < 8) {
+      lines.push('Light air: stay in pressure bands, avoid shore shadows');
+    } else if (ws < 15) {
+      lines.push('Moderate breeze: sail the shifts, stay in Middle 1/3');
+    } else {
+      lines.push('Strong breeze: favor flatter water, minimize tacks');
+    }
+  } else {
+    if (hasCurrent) {
+      const rel = ((currentDir! - windDir) % 360 + 360) % 360;
+      const currentPushesRightDownwind = rel > 180;
+      const favoredSide = currentPushesRightDownwind ? 'LEFT' : 'RIGHT';
+      const startGybe = currentPushesRightDownwind ? 'starboard' : 'port';
+      const currentCompass = formatCompassDirection(currentDir!);
+      lines.push(`Play the ${favoredSide} side — sail upstream into ${currentSpd!.toFixed(1)}kt ${currentCompass} current`);
+      lines.push(`Round on ${startGybe} gybe, work toward the ${favoredSide} side`);
+      lines.push(`Set up in Bottom 1/3 for gate approach`);
+      if (ws > 0 && ws < 10 && currentSpd! > 0.3) {
+        lines.push('Light air: current carry is critical — stay in the flow');
+      }
+    } else {
+      lines.push('No significant current — sail deep in lulls, heat up in puffs');
+      lines.push('Work the Middle 1/3, gybe on the shifts');
+    }
+    if (ws < 8) {
+      lines.push('Light air: higher angles for VMG, soak in puffs');
+    } else if (ws < 15) {
+      lines.push('Moderate breeze: gybe on the shifts, stay in pressure');
+    } else {
+      lines.push('Strong breeze: ride waves, minimize gybes');
+    }
+  }
+  return lines;
+}
+
 /** Forecast data point for sparklines */
 export interface ForecastDataPoint {
   time: string;
@@ -151,11 +304,11 @@ export function CoursePositionEditor({
   initialCourseType = 'windward_leeward',
   initialLocation,
   initialWindDirection = 180,
-  initialWindSpeed: _initialWindSpeed,
+  initialWindSpeed,
   initialLegLength,
   existingCourse,
-  currentDirection: _currentDirection,
-  currentSpeed: _currentSpeed,
+  currentDirection,
+  currentSpeed,
   numberOfBoats,
   boatLengthM,
   onSave,
@@ -188,6 +341,24 @@ export function CoursePositionEditor({
   const [isPlacingStartLine, setIsPlacingStartLine] = useState(!initialLocation && !existingCourse);
   const [hasChanges, setHasChanges] = useState(false);
   const [showControls, setShowControls] = useState(true);
+  const [mapRegion, setMapRegion] = useState<{ latitude: number; longitude: number; latitudeDelta: number; longitudeDelta: number } | null>(null);
+  const [strategyMode, setStrategyMode] = useState<'upwind' | 'downwind'>('upwind');
+
+  // ── Zoom-dependent scaling ──
+  // When zoomed out (large latitudeDelta), shrink marks and labels to reduce clutter.
+  const zoomScale = useMemo(() => {
+    if (!mapRegion) return 1;
+    const baseDelta = 0.008;
+    const ratio = baseDelta / mapRegion.latitudeDelta;
+    return Math.max(0.55, Math.min(1.0, ratio));
+  }, [mapRegion?.latitudeDelta]);
+
+  const markerTransform = useMemo(
+    () => ({ transform: [{ scale: zoomScale }] as any }),
+    [zoomScale],
+  );
+
+  const showDetailLabels = zoomScale > 0.65;
 
   // Calculate course positions when parameters change
   const calculateCourse = useCallback(() => {
@@ -356,6 +527,23 @@ export function CoursePositionEditor({
     triggerHaptic('impactMedium');
   }, []);
 
+  // Center map on course
+  const handleCenterOnCourse = useCallback(() => {
+    if (!mapRef.current || marks.length === 0) return;
+    const allCoords = marks.map(m => ({ latitude: m.latitude, longitude: m.longitude }));
+    if (startLine) {
+      allCoords.push(
+        { latitude: startLine.pin.lat, longitude: startLine.pin.lng },
+        { latitude: startLine.committee.lat, longitude: startLine.committee.lng },
+      );
+    }
+    mapRef.current.fitToCoordinates(allCoords, {
+      edgePadding: { top: 60, right: 40, bottom: 60, left: 40 },
+      animated: true,
+    });
+    triggerHaptic('selectionChanged');
+  }, [marks, startLine]);
+
   // Save course
   const handleSave = async () => {
     if (!startLineCenter || !startLine || marks.length === 0) {
@@ -439,6 +627,176 @@ export function CoursePositionEditor({
     ];
   }, [startLine]);
 
+  // Course overlay: full race box (diamond) with laylines, start line inside
+  const courseOverlay = useMemo(() => {
+    if (marks.length === 0) return null;
+    const windwardMark = marks.find((m) => m.type === 'windward');
+    // Leeward position: leeward mark, or midpoint of gate marks, or start line midpoint
+    const leewardMark = marks.find((m) => m.type === 'leeward');
+    const gateMarks = marks.filter((m) => m.type === 'gate');
+    const leewardPos = leewardMark
+      ? { latitude: leewardMark.latitude, longitude: leewardMark.longitude }
+      : gateMarks.length >= 2
+        ? { latitude: (gateMarks[0].latitude + gateMarks[1].latitude) / 2,
+            longitude: (gateMarks[0].longitude + gateMarks[1].longitude) / 2 }
+        : gateMarks.length === 1
+          ? { latitude: gateMarks[0].latitude, longitude: gateMarks[0].longitude }
+          : startLine
+            ? { latitude: (startLine.pin.lat + startLine.committee.lat) / 2,
+                longitude: (startLine.pin.lng + startLine.committee.lng) / 2 }
+            : null;
+    if (!windwardMark || !leewardPos) return null;
+
+    const W = { latitude: windwardMark.latitude, longitude: windwardMark.longitude };
+    const L = leewardPos;
+    const M = lerpCoord(L, W, 0.5);
+
+    const legDistanceM = haversineDistance(W.latitude, W.longitude, L.latitude, L.longitude);
+    const laylineAngle = 45;
+    const halfWidth = (legDistanceM / 2) * Math.tan((laylineAngle * Math.PI) / 180);
+
+    const rightBearing = (windDirection + 90) % 360;
+    const leftBearing = (windDirection - 90 + 360) % 360;
+    const downwindBearing = (windDirection + 180) % 360;
+
+    // Diamond corners at widest point (midpoint between W and L)
+    // These may be replaced by start-box/layline intersections when a start line exists
+    let portCorner = offsetCoordinate(M.latitude, M.longitude, rightBearing, halfWidth);
+    let stbdCorner = offsetCoordinate(M.latitude, M.longitude, leftBearing, halfWidth);
+
+    // ── Third dividers (1/3 and 2/3 from L to W) ──
+    const oneThird = lerpCoord(L, W, 1 / 3);
+    const twoThirds = lerpCoord(L, W, 2 / 3);
+    // Diamond width at each third (linear taper: 0 at ends, max at middle)
+    const oneThirdHW = halfWidth * (2 / 3);   // 1/3 from L in bottom half
+    const twoThirdsHW = halfWidth * (2 / 3);  // 2/3 from L in top half
+    const oneThirdLeft = offsetCoordinate(oneThird.latitude, oneThird.longitude, leftBearing, oneThirdHW);
+    const oneThirdRight = offsetCoordinate(oneThird.latitude, oneThird.longitude, rightBearing, oneThirdHW);
+    const twoThirdsLeft = offsetCoordinate(twoThirds.latitude, twoThirds.longitude, leftBearing, twoThirdsHW);
+    const twoThirdsRight = offsetCoordinate(twoThirds.latitude, twoThirds.longitude, rightBearing, twoThirdsHW);
+
+    // Third labels
+    const bottomThirdLabel = lerpCoord(L, W, 1 / 6);
+    const middleThirdLabel = lerpCoord(L, W, 1 / 2);
+    const upperThirdLabel = lerpCoord(L, W, 5 / 6);
+
+    // ── Favored side ──
+    const hasCurrent = currentDirection !== undefined && currentSpeed !== undefined && currentSpeed > 0.05;
+    let favoredSide: 'left' | 'right' | null = null;
+    if (hasCurrent) {
+      const rel = ((currentDirection! - windDirection) % 360 + 360) % 360;
+      favoredSide = (rel > 0 && rel < 180) ? 'left' : 'right';
+    }
+
+    // Side labels (offset into each half at midpoint height)
+    const sideOffset = halfWidth * 0.5;
+    const leftLabel = offsetCoordinate(M.latitude, M.longitude, leftBearing, sideOffset);
+    const rightLabel = offsetCoordinate(M.latitude, M.longitude, rightBearing, sideOffset);
+
+    // Layline labels (upper laylines) — recomputed after corners may change
+    let portLLLabel = lerpCoord(W, portCorner, 0.5);
+    let stbdLLLabel = lerpCoord(W, stbdCorner, 0.5);
+
+    // ── Start line: flatten diamond bottom to P & C, add start box ──
+    let P = L; // default bottom to leeward mark
+    let C = L;
+    let startMid = L;
+    let startBox = null;
+    let startLabels = null;
+
+    if (startLine) {
+      P = { latitude: startLine.pin.lat, longitude: startLine.pin.lng };
+      C = { latitude: startLine.committee.lat, longitude: startLine.committee.lng };
+      startMid = lerpCoord(P, C, 0.5);
+
+      // Start box: parallelogram extending downwind from start line
+      // Short sides angled 45° to the start line, toward committee end
+      const boxDepth = legDistanceM * 0.15;
+
+      // Bearing from P toward C along the start line
+      const dLat = C.latitude - P.latitude;
+      const dLng = (C.longitude - P.longitude) * Math.cos((P.latitude * Math.PI) / 180);
+      const lineBearingPtoC = ((Math.atan2(dLng, dLat) * 180) / Math.PI + 360) % 360;
+
+      // 45° to the start line, angling downwind + toward committee end
+      // Pick whichever of ±45° from the line has a downwind component
+      const candidateA = (lineBearingPtoC - 45 + 360) % 360;
+      const candidateB = (lineBearingPtoC + 45) % 360;
+      const diffA = Math.abs(((candidateA - downwindBearing + 540) % 360) - 180);
+      const diffB = Math.abs(((candidateB - downwindBearing + 540) % 360) - 180);
+      const shortSideBearing = diffA < diffB ? candidateA : candidateB;
+
+      const pinDown = offsetCoordinate(P.latitude, P.longitude, shortSideBearing, boxDepth);
+      const committeeDown = offsetCoordinate(C.latitude, C.longitude, shortSideBearing, boxDepth);
+      const startOneThird = lerpCoord(P, C, 1 / 3);
+      const startTwoThirds = lerpCoord(P, C, 2 / 3);
+      const oneThirdDown = offsetCoordinate(startOneThird.latitude, startOneThird.longitude, shortSideBearing, boxDepth);
+      const twoThirdsDown = offsetCoordinate(startTwoThirds.latitude, startTwoThirds.longitude, shortSideBearing, boxDepth);
+
+      // Labels offset along the short-side bearing
+      const labelDownOffset = boxDepth * 0.5;
+      const pinEndLabel = offsetCoordinate(
+        lerpCoord(P, startOneThird, 0.5).latitude,
+        lerpCoord(P, startOneThird, 0.5).longitude,
+        shortSideBearing, labelDownOffset
+      );
+      const startMidLabel = offsetCoordinate(startMid.latitude, startMid.longitude, shortSideBearing, labelDownOffset);
+      const boatEndLabel = offsetCoordinate(
+        lerpCoord(startTwoThirds, C, 0.5).latitude,
+        lerpCoord(startTwoThirds, C, 0.5).longitude,
+        shortSideBearing, labelDownOffset
+      );
+
+      startBox = {
+        outline: [P, C, committeeDown, pinDown],
+        dividers: [
+          [startOneThird, oneThirdDown],
+          [startTwoThirds, twoThirdsDown],
+        ],
+      };
+      startLabels = { pinEnd: pinEndLabel, middle: startMidLabel, boatEnd: boatEndLabel };
+
+      // Extend lower laylines from P and C into the course to meet upper laylines from W
+      // Laylines are 45° to the WIND (not to the start line)
+      // P is on left/stbd side → layline goes upwind + left (windDir - 45°)
+      // C is on right/port side → layline goes upwind + right (windDir + 45°)
+      const laylineBearingFromP = (windDirection - 45 + 360) % 360;
+      const laylineBearingFromC = (windDirection + 45) % 360;
+      const bearingWtoPort = flatBearing(W, portCorner);
+      const bearingWtoStbd = flatBearing(W, stbdCorner);
+
+      // P (stbd/left side) → extend to meet stbd upper layline (W→stbdCorner)
+      const newStbd = rayIntersection(P, laylineBearingFromP, W, bearingWtoStbd);
+      // C (port/right side) → extend to meet port upper layline (W→portCorner)
+      const newPort = rayIntersection(C, laylineBearingFromC, W, bearingWtoPort);
+
+      if (newStbd) stbdCorner = newStbd;
+      if (newPort) portCorner = newPort;
+
+      // Recompute layline labels with the new corner positions
+      portLLLabel = lerpCoord(W, portCorner, 0.5);
+      stbdLLLabel = lerpCoord(W, stbdCorner, 0.5);
+    }
+
+    return {
+      W, L, M, P, C, startMid, portCorner, stbdCorner,
+      // Pentagon: W → portCorner → C → P → stbdCorner (flat base at start line)
+      leftPoly: [W, stbdCorner, P, startMid],
+      rightPoly: [W, portCorner, C, startMid],
+      thirdDividers: [
+        [oneThirdLeft, oneThirdRight],
+        [twoThirdsLeft, twoThirdsRight],
+      ],
+      thirdLabels: { bottom: bottomThirdLabel, middle: middleThirdLabel, upper: upperThirdLabel },
+      favoredSide,
+      leftLabel,
+      rightLabel,
+      laylineLabels: { port: portLLLabel, stbd: stbdLLLabel },
+      startBox,
+      startLabels,
+    };
+  }, [marks, windDirection, currentDirection, currentSpeed, startLine]);
+
   // Fallback when maps not available
   if (!mapsAvailable || !MapView) {
     return (
@@ -509,6 +867,7 @@ export function CoursePositionEditor({
             style={styles.map}
             initialRegion={initialRegion}
             onPress={handleMapPress}
+            onRegionChangeComplete={(region: any) => setMapRegion(region)}
             provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
             showsUserLocation
             showsMyLocationButton={false}
@@ -536,7 +895,7 @@ export function CoursePositionEditor({
                 onDragEnd={(e: any) => handleMarkDrag(mark.id, e.nativeEvent.coordinate)}
                 anchor={{ x: 0.5, y: 0.5 }}
               >
-                <View style={styles.markContainer}>
+                <View style={[styles.markContainer, markerTransform]}>
                   <View
                     style={[
                       styles.markCircle,
@@ -550,6 +909,146 @@ export function CoursePositionEditor({
               </Marker>
             ))}
 
+            {/* Wind Direction Arrows */}
+            {mapRegion && initialWindSpeed != null && (
+              <WindOverlay
+                conditions={{ speed: initialWindSpeed, direction: windDirection }}
+                region={mapRegion}
+              />
+            )}
+
+            {/* Current Flow Arrows */}
+            {mapRegion && currentDirection != null && currentSpeed != null && currentSpeed > 0.05 && (
+              <CurrentOverlay
+                conditions={{
+                  speed: currentSpeed,
+                  direction: currentDirection,
+                  strength: currentSpeed > 1 ? 'strong' : currentSpeed > 0.3 ? 'moderate' : 'slack',
+                }}
+                region={mapRegion}
+              />
+            )}
+
+            {/* ═══ Course Box: full diamond with laylines ═══ */}
+            {courseOverlay && Polygon && (
+              <>
+                {/* ── Race area: left/right halves ── */}
+                <Polygon
+                  coordinates={courseOverlay.leftPoly}
+                  fillColor={courseOverlay.favoredSide === 'left' ? 'rgba(34, 197, 94, 0.13)' : 'rgba(148, 163, 184, 0.06)'}
+                  strokeColor="transparent"
+                />
+                <Polygon
+                  coordinates={courseOverlay.rightPoly}
+                  fillColor={courseOverlay.favoredSide === 'right' ? 'rgba(34, 197, 94, 0.13)' : 'rgba(148, 163, 184, 0.06)'}
+                  strokeColor="transparent"
+                />
+
+                {/* ── Laylines (dashed yellow diamond outline) ── */}
+                <Polyline coordinates={[courseOverlay.W, courseOverlay.portCorner]} strokeColor={`rgba(234, 179, 8, ${zoomScale < 0.8 ? 0.4 : 0.8})`} strokeWidth={zoomScale < 0.8 ? 1 : 1.5} lineDashPattern={[8, 5]} />
+                <Polyline coordinates={[courseOverlay.C, courseOverlay.portCorner]} strokeColor={`rgba(234, 179, 8, ${zoomScale < 0.8 ? 0.4 : 0.8})`} strokeWidth={zoomScale < 0.8 ? 1 : 1.5} lineDashPattern={[8, 5]} />
+                <Polyline coordinates={[courseOverlay.W, courseOverlay.stbdCorner]} strokeColor={`rgba(234, 179, 8, ${zoomScale < 0.8 ? 0.4 : 0.8})`} strokeWidth={zoomScale < 0.8 ? 1 : 1.5} lineDashPattern={[8, 5]} />
+                <Polyline coordinates={[courseOverlay.P, courseOverlay.stbdCorner]} strokeColor={`rgba(234, 179, 8, ${zoomScale < 0.8 ? 0.4 : 0.8})`} strokeWidth={zoomScale < 0.8 ? 1 : 1.5} lineDashPattern={[8, 5]} />
+
+                {/* ── Rhumbline: W to start line midpoint (or leeward mark) ── */}
+                <Polyline
+                  coordinates={[courseOverlay.W, courseOverlay.startMid]}
+                  strokeColor="rgba(255, 255, 255, 0.5)"
+                  strokeWidth={1.5}
+                  lineDashPattern={[8, 4]}
+                />
+
+                {/* ── Third divider lines ── */}
+                {courseOverlay.thirdDividers.map((coords, i) => (
+                  <Polyline key={`third-${i}`} coordinates={coords} strokeColor="rgba(148, 163, 184, 0.35)" strokeWidth={1} lineDashPattern={[4, 4]} />
+                ))}
+
+                {/* ── Third zone labels — hidden when zoomed out ── */}
+                {showDetailLabels && (
+                  <>
+                    <Marker coordinate={courseOverlay.thirdLabels.bottom} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}>
+                      <View style={[courseOverlayStyles.thirdPill, markerTransform]}><Text style={courseOverlayStyles.thirdText}>Bottom 1/3</Text></View>
+                    </Marker>
+                    <Marker coordinate={courseOverlay.thirdLabels.middle} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}>
+                      <View style={[courseOverlayStyles.thirdPill, markerTransform]}><Text style={courseOverlayStyles.thirdText}>Middle 1/3</Text></View>
+                    </Marker>
+                    <Marker coordinate={courseOverlay.thirdLabels.upper} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}>
+                      <View style={[courseOverlayStyles.thirdPill, markerTransform]}><Text style={courseOverlayStyles.thirdText}>Upper 1/3</Text></View>
+                    </Marker>
+                  </>
+                )}
+
+                {/* ── Rhumbline label — hidden when zoomed out ── */}
+                {showDetailLabels && (
+                  <Marker coordinate={lerpCoord(courseOverlay.startMid, courseOverlay.W, 0.35)} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}>
+                    <View style={[courseOverlayStyles.rhumblinePill, markerTransform]}><Text style={courseOverlayStyles.rhumblineText}>Rhumbline</Text></View>
+                  </Marker>
+                )}
+
+                {/* ── LEFT / RIGHT side labels ── */}
+                <Marker coordinate={courseOverlay.leftLabel} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}>
+                  <View style={[courseOverlayStyles.sidePill, courseOverlay.favoredSide === 'left' && courseOverlayStyles.sidePillFavored, markerTransform]}>
+                    <Text style={[courseOverlayStyles.sideText, courseOverlay.favoredSide === 'left' && courseOverlayStyles.sideTextFavored]}>LEFT</Text>
+                  </View>
+                </Marker>
+                <Marker coordinate={courseOverlay.rightLabel} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}>
+                  <View style={[courseOverlayStyles.sidePill, courseOverlay.favoredSide === 'right' && courseOverlayStyles.sidePillFavored, markerTransform]}>
+                    <Text style={[courseOverlayStyles.sideText, courseOverlay.favoredSide === 'right' && courseOverlayStyles.sideTextFavored]}>RIGHT</Text>
+                  </View>
+                </Marker>
+
+                {/* ── Layline labels — hidden when zoomed out ── */}
+                {showDetailLabels && (
+                  <>
+                    <Marker coordinate={courseOverlay.laylineLabels.port} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}>
+                      <View style={[courseOverlayStyles.laylinePill, markerTransform]}><Text style={courseOverlayStyles.laylineText}>Stbd LL</Text></View>
+                    </Marker>
+                    <Marker coordinate={courseOverlay.laylineLabels.stbd} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}>
+                      <View style={[courseOverlayStyles.laylinePill, markerTransform]}><Text style={courseOverlayStyles.laylineText}>Port LL</Text></View>
+                    </Marker>
+                  </>
+                )}
+
+                {/* ── Start box (rectangle extending downwind from start line) ── */}
+                {courseOverlay.startBox && (
+                  <>
+                    <Polyline
+                      coordinates={[...courseOverlay.startBox.outline, courseOverlay.startBox.outline[0]]}
+                      strokeColor={`rgba(249, 115, 22, ${zoomScale < 0.8 ? 0.35 : 0.6})`}
+                      strokeWidth={zoomScale < 0.8 ? 1 : 1.5}
+                      lineDashPattern={[6, 4]}
+                    />
+                    {courseOverlay.startBox.dividers.map((coords, i) => (
+                      <Polyline
+                        key={`start-div-${i}`}
+                        coordinates={coords}
+                        strokeColor="rgba(249, 115, 22, 0.35)"
+                        strokeWidth={1}
+                        lineDashPattern={[4, 4]}
+                      />
+                    ))}
+                  </>
+                )}
+
+                {/* ── Start line labels (if available) ── */}
+                {courseOverlay.startLabels && (
+                  <>
+                    <Marker coordinate={courseOverlay.startLabels.pinEnd} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}>
+                      <View style={[courseOverlayStyles.startPill, markerTransform]}><Text style={courseOverlayStyles.startText}>Pin End</Text></View>
+                    </Marker>
+                    {showDetailLabels && (
+                      <Marker coordinate={courseOverlay.startLabels.middle} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}>
+                        <View style={[courseOverlayStyles.startPill, markerTransform]}><Text style={courseOverlayStyles.startText}>Middle</Text></View>
+                      </Marker>
+                    )}
+                    <Marker coordinate={courseOverlay.startLabels.boatEnd} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}>
+                      <View style={[courseOverlayStyles.startPill, markerTransform]}><Text style={courseOverlayStyles.startText}>Boat End</Text></View>
+                    </Marker>
+                  </>
+                )}
+              </>
+            )}
+
             {/* Start Line Endpoints */}
             {startLine && (
               <>
@@ -557,7 +1056,7 @@ export function CoursePositionEditor({
                   coordinate={{ latitude: startLine.pin.lat, longitude: startLine.pin.lng }}
                   anchor={{ x: 0.5, y: 0.5 }}
                 >
-                  <View style={[styles.startLineEndpoint, { backgroundColor: '#f97316' }]}>
+                  <View style={[styles.startLineEndpoint, { backgroundColor: '#f97316' }, markerTransform]}>
                     <Text style={styles.startLineLabel}>P</Text>
                   </View>
                 </Marker>
@@ -565,13 +1064,40 @@ export function CoursePositionEditor({
                   coordinate={{ latitude: startLine.committee.lat, longitude: startLine.committee.lng }}
                   anchor={{ x: 0.5, y: 0.5 }}
                 >
-                  <View style={[styles.startLineEndpoint, { backgroundColor: '#3b82f6' }]}>
+                  <View style={[styles.startLineEndpoint, { backgroundColor: '#3b82f6' }, markerTransform]}>
                     <Text style={styles.startLineLabel}>C</Text>
                   </View>
                 </Marker>
               </>
             )}
           </MapView>
+
+          {/* Wind Indicator — top left */}
+          {startLineCenter && !isPlacingStartLine && initialWindSpeed != null && (
+            <View style={overlayStyles.windBadge}>
+              <Wind size={12} color="#6366f1" />
+              <Text style={overlayStyles.badgeText}>
+                Wind {initialWindSpeed}kt {formatCompassDirection(windDirection)}
+              </Text>
+            </View>
+          )}
+
+          {/* Current Indicator — top right */}
+          {startLineCenter && !isPlacingStartLine && currentSpeed != null && currentSpeed > 0.05 && currentDirection != null && (
+            <View style={overlayStyles.currentBadge}>
+              <Anchor size={12} color="#06b6d4" />
+              <Text style={overlayStyles.badgeText}>
+                Current {currentSpeed.toFixed(1)}kt {formatCompassDirection(currentDirection)}
+              </Text>
+            </View>
+          )}
+
+          {/* Recenter Button — top right below current badge */}
+          {startLineCenter && !isPlacingStartLine && marks.length > 0 && (
+            <Pressable style={overlayStyles.recenterBtn} onPress={handleCenterOnCourse}>
+              <Target size={18} color="#007AFF" />
+            </Pressable>
+          )}
 
           {/* Placement Instructions */}
           {isPlacingStartLine && (
@@ -581,32 +1107,48 @@ export function CoursePositionEditor({
             </View>
           )}
 
-          {/* Course Info Badge */}
-          {startLineCenter && !isPlacingStartLine && (
-            <View style={styles.courseInfoBadge}>
-              <View style={styles.courseInfoItem}>
-                <Wind size={14} color="#6366f1" />
-                <Text style={styles.courseInfoText}>{windDirection}°</Text>
-              </View>
-              <View style={styles.courseInfoItem}>
-                <Anchor size={14} color="#22c55e" />
-                <Text style={styles.courseInfoText}>{legLengthNm}nm</Text>
-              </View>
-              <View style={styles.courseInfoItem}>
-                <Flag size={14} color="#f97316" />
-                <Text style={styles.courseInfoText}>{marks.length} marks</Text>
-              </View>
-            </View>
-          )}
-
           {/* Toggle Controls Button */}
           <Pressable
             style={styles.toggleControlsButton}
             onPress={() => setShowControls(!showControls)}
           >
-            {showControls ? <ChevronDown size={24} color="#64748b" /> : <ChevronUp size={24} color="#64748b" />}
+            {showControls ? <ChevronDown size={20} color="#64748b" /> : <ChevronUp size={20} color="#64748b" />}
+            <Text style={styles.toggleControlsLabel}>{showControls ? 'Map' : 'Settings'}</Text>
           </Pressable>
         </View>
+
+        {/* Strategy Section — segmented toggle, one leg at a time */}
+        {startLineCenter && !isPlacingStartLine && (
+          <View style={strategyStyles.container}>
+            {/* Segmented Control */}
+            <View style={strategyStyles.segmentRow}>
+              <Pressable
+                style={[strategyStyles.segmentBtn, strategyMode === 'upwind' && strategyStyles.segmentBtnActiveUpwind]}
+                onPress={() => setStrategyMode('upwind')}
+              >
+                <Text style={[strategyStyles.segmentText, strategyMode === 'upwind' && strategyStyles.segmentTextActiveUpwind]}>
+                  {'\u2191'} Upwind
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[strategyStyles.segmentBtn, strategyMode === 'downwind' && strategyStyles.segmentBtnActiveDownwind]}
+                onPress={() => setStrategyMode('downwind')}
+              >
+                <Text style={[strategyStyles.segmentText, strategyMode === 'downwind' && strategyStyles.segmentTextActiveDownwind]}>
+                  {'\u2193'} Downwind
+                </Text>
+              </Pressable>
+            </View>
+            {/* Strategy Content */}
+            <View style={strategyStyles.contentCard}>
+              {generateStrategy(windDirection, initialWindSpeed, currentDirection, currentSpeed, strategyMode).map((line, i) => (
+                <Text key={i} style={i === 0 ? strategyStyles.primaryBullet : strategyStyles.bulletText}>
+                  {i === 0 ? '' : '\u2022 '}{line}
+                </Text>
+              ))}
+            </View>
+          </View>
+        )}
 
         {/* Controls Panel */}
         {showControls && (
@@ -669,26 +1211,28 @@ export function CoursePositionEditor({
                     onPress={() => handleWindDirectionChange((windDirection - 10 + 360) % 360)}
                     style={styles.adjustButton}
                   >
-                    <RotateCcw size={16} color="#64748b" />
+                    <Text style={styles.adjustLabel}>-10°</Text>
                   </Pressable>
                   <Pressable
                     onPress={() => handleWindDirectionChange((windDirection - 1 + 360) % 360)}
                     style={styles.adjustButton}
                   >
-                    <Minus size={16} color="#64748b" />
+                    <Text style={styles.adjustLabel}>-1°</Text>
                   </Pressable>
-                  <View style={styles.adjustSpacer} />
+                  <View style={styles.adjustSpacer}>
+                    <Text style={styles.adjustDegrees}>{windDirection}°</Text>
+                  </View>
                   <Pressable
                     onPress={() => handleWindDirectionChange((windDirection + 1) % 360)}
                     style={styles.adjustButton}
                   >
-                    <Plus size={16} color="#64748b" />
+                    <Text style={styles.adjustLabel}>+1°</Text>
                   </Pressable>
                   <Pressable
                     onPress={() => handleWindDirectionChange((windDirection + 10) % 360)}
                     style={styles.adjustButton}
                   >
-                    <ChevronUp size={16} color="#64748b" />
+                    <Text style={styles.adjustLabel}>+10°</Text>
                   </Pressable>
                 </View>
               </View>
@@ -740,6 +1284,194 @@ export function CoursePositionEditor({
     </Modal>
   );
 }
+
+const courseOverlayStyles = StyleSheet.create({
+  sidePill: {
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.3)',
+  },
+  sidePillFavored: {
+    backgroundColor: 'rgba(22, 101, 52, 0.85)',
+    borderColor: 'rgba(34, 197, 94, 0.6)',
+  },
+  sideText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#94a3b8',
+    letterSpacing: 1.5,
+  },
+  sideTextFavored: {
+    color: '#86efac',
+  },
+  laylinePill: {
+    backgroundColor: 'rgba(234, 179, 8, 0.2)',
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(234, 179, 8, 0.4)',
+  },
+  laylineText: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: '#eab308',
+  },
+  thirdPill: {
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  thirdText: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: 'rgba(203, 213, 225, 0.8)',
+    letterSpacing: 0.5,
+  },
+  rhumblinePill: {
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 3,
+  },
+  rhumblineText: {
+    fontSize: 8,
+    fontWeight: '500',
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontStyle: 'italic',
+  },
+  startPill: {
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(34, 197, 94, 0.3)',
+  },
+  startText: {
+    fontSize: 8,
+    fontWeight: '600',
+    color: '#86efac',
+  },
+});
+
+const overlayStyles = StyleSheet.create({
+  windBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  currentBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  badgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#1e293b',
+  },
+  recenterBtn: {
+    position: 'absolute',
+    top: 40,
+    right: 8,
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+});
+
+const strategyStyles = StyleSheet.create({
+  container: {
+    backgroundColor: '#0f172a',
+    paddingHorizontal: 10,
+    paddingTop: 8,
+    paddingBottom: 6,
+  },
+  segmentRow: {
+    flexDirection: 'row',
+    gap: 4,
+    marginBottom: 6,
+  },
+  segmentBtn: {
+    flex: 1,
+    paddingVertical: 6,
+    borderRadius: 6,
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  segmentBtnActiveUpwind: {
+    backgroundColor: 'rgba(34, 197, 94, 0.15)',
+  },
+  segmentBtnActiveDownwind: {
+    backgroundColor: 'rgba(59, 130, 246, 0.15)',
+  },
+  segmentText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  segmentTextActiveUpwind: {
+    color: '#22c55e',
+  },
+  segmentTextActiveDownwind: {
+    color: '#3b82f6',
+  },
+  contentCard: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  primaryBullet: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#f0fdf4',
+    lineHeight: 18,
+    marginBottom: 4,
+  },
+  bulletText: {
+    fontSize: 12,
+    color: '#94a3b8',
+    lineHeight: 17,
+    marginTop: 2,
+  },
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -823,47 +1555,27 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#c2410c',
   },
-  courseInfoBadge: {
-    position: 'absolute',
-    bottom: 16,
-    left: 16,
-    flexDirection: 'row',
-    gap: 12,
-    backgroundColor: 'rgba(255,255,255,0.95)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  courseInfoItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  courseInfoText: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: COLORS.label,
-  },
   toggleControlsButton: {
     position: 'absolute',
     bottom: 16,
     right: 16,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.95)',
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.95)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+  },
+  toggleControlsLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748b',
   },
   markContainer: {
     alignItems: 'center',
@@ -919,7 +1631,7 @@ const styles = StyleSheet.create({
   },
   controlSection: {
     paddingHorizontal: 16,
-    marginBottom: 16,
+    marginBottom: 12,
   },
   controlHeader: {
     flexDirection: 'row',
@@ -1005,8 +1717,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  adjustLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  adjustDegrees: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#6366f1',
+    textAlign: 'center',
+  },
   adjustSpacer: {
     flex: 1,
+    alignItems: 'center',
   },
   lengthButton: {
     paddingHorizontal: 10,

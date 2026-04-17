@@ -72,6 +72,7 @@ const MARK_COLORS: Record<string, string> = {
 
 const WEB_MAP_STYLE = {
   version: 8,
+  glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
   sources: {
     'raster-tiles': {
       type: 'raster',
@@ -93,6 +94,183 @@ const WEB_MAP_STYLE = {
     },
   ],
 } as const;
+
+/** Offset a lat/lng coordinate by a compass bearing and distance (meters) */
+function offsetCoordinate(lat: number, lng: number, bearingDeg: number, distanceM: number) {
+  const R = 6371000;
+  const bearing = (bearingDeg * Math.PI) / 180;
+  const lat1 = (lat * Math.PI) / 180;
+  const lng1 = (lng * Math.PI) / 180;
+  const d = distanceM / R;
+  const lat2 = Math.asin(
+    Math.sin(lat1) * Math.cos(d) + Math.cos(lat1) * Math.sin(d) * Math.cos(bearing)
+  );
+  const lng2 = lng1 + Math.atan2(
+    Math.sin(bearing) * Math.sin(d) * Math.cos(lat1),
+    Math.cos(d) - Math.sin(lat1) * Math.sin(lat2)
+  );
+  return { latitude: (lat2 * 180) / Math.PI, longitude: (lng2 * 180) / Math.PI };
+}
+
+/** Flat-earth bearing from one coordinate to another (degrees, 0=N clockwise) */
+function flatBearing(
+  from: { latitude: number; longitude: number },
+  to: { latitude: number; longitude: number }
+): number {
+  const toRad = Math.PI / 180;
+  const dlng = (to.longitude - from.longitude) * Math.cos(from.latitude * toRad);
+  const dlat = to.latitude - from.latitude;
+  return ((Math.atan2(dlng, dlat) * 180) / Math.PI + 360) % 360;
+}
+
+/** Find intersection of two rays defined by point + bearing. Returns null if parallel or behind. */
+function rayIntersection(
+  p1: { latitude: number; longitude: number }, b1: number,
+  p2: { latitude: number; longitude: number }, b2: number
+): { latitude: number; longitude: number } | null {
+  const toRad = Math.PI / 180;
+  const cosLat = Math.cos(p1.latitude * toRad);
+  const dx1 = Math.sin(b1 * toRad), dy1 = Math.cos(b1 * toRad);
+  const dx2 = Math.sin(b2 * toRad), dy2 = Math.cos(b2 * toRad);
+  const det = dx1 * dy2 - dy1 * dx2;
+  if (Math.abs(det) < 1e-10) return null;
+  const ex = (p2.longitude - p1.longitude) * cosLat;
+  const ey = p2.latitude - p1.latitude;
+  const t1 = (ex * dy2 - ey * dx2) / det;
+  if (t1 < 0) return null;
+  return {
+    latitude: p1.latitude + t1 * dy1,
+    longitude: p1.longitude + t1 * dx1 / cosLat,
+  };
+}
+
+/** Haversine distance between two coordinates in meters */
+function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/** Interpolate between two coordinates at fraction t (0=A, 1=B) */
+function lerpCoord(
+  a: { latitude: number; longitude: number },
+  b: { latitude: number; longitude: number },
+  t: number
+) {
+  return {
+    latitude: a.latitude + (b.latitude - a.latitude) * t,
+    longitude: a.longitude + (b.longitude - a.longitude) * t,
+  };
+}
+
+/** Format degrees as 16-point compass bearing (e.g. "NE", "SSW") */
+const formatCompassDirection = (degrees: number): string => {
+  const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+  return dirs[Math.round(degrees / 22.5) % 16];
+};
+
+/**
+ * Generate upwind/downwind sailing strategy based on wind, current, and depth.
+ * Uses sailing conventions: wind direction = FROM, current direction = TO.
+ * Port tack = wind over port side, boat heads RIGHT of upwind course.
+ * Starboard tack = wind over starboard side, boat heads LEFT of upwind course.
+ */
+function generateStrategy(
+  windDir: number,
+  windSpeed: number | undefined,
+  currentDir: number | undefined,
+  currentSpd: number | undefined,
+  mode: 'upwind' | 'downwind'
+): string[] {
+  const lines: string[] = [];
+  const ws = windSpeed ?? 0;
+  const hasCurrent = currentDir !== undefined && currentSpd !== undefined && currentSpd > 0.05;
+
+  // Compute compass labels for sides of the course (looking upwind toward wind source)
+  // Right side (looking upwind) = 90° clockwise from wind direction
+  // Left side (looking upwind) = 90° counter-clockwise from wind direction
+  const rightSideDir = (windDir + 90) % 360;
+  const leftSideDir = (windDir - 90 + 360) % 360;
+  const rightSideLabel = formatCompassDirection(rightSideDir);
+  const leftSideLabel = formatCompassDirection(leftSideDir);
+
+  if (mode === 'upwind') {
+    if (hasCurrent) {
+      const rel = ((currentDir! - windDir) % 360 + 360) % 360;
+      // rel 0-180 = current pushes toward the right side (looking upwind)
+      const currentPushesRight = rel > 0 && rel < 180;
+      // Favored side is UPSTREAM — opposite to current push direction.
+      // Sail into the current first to avoid overstanding the downstream layline.
+      const favoredSide = currentPushesRight ? 'left' : 'right';
+      // Start on the tack that takes you upstream (toward current source)
+      const startTack = currentPushesRight ? 'starboard' : 'port';
+      const extendLayline = currentPushesRight ? 'port' : 'starboard';
+      const currentCompass = formatCompassDirection(currentDir!);
+
+      lines.push(`Favored side: play the ${favoredSide} — sail upstream into current (${currentSpd!.toFixed(1)}kt ${currentCompass}), avoid overstanding`);
+      lines.push(`Start on ${startTack} tack, extend toward the ${extendLayline} layline`);
+
+      if (ws > 0 && ws < 10 && currentSpd! > 0.3) {
+        lines.push(`Current is ${Math.round((currentSpd! / ws) * 100)}% of wind speed — big factor in light air`);
+      }
+    } else {
+      lines.push('No significant current — sail the lifted tack, play the shifts');
+    }
+
+    if (ws < 8) {
+      lines.push('Light air: stay in pressure, avoid shore shadows');
+    } else if (ws < 15) {
+      lines.push('Moderate breeze: sail the shifts, keep options open');
+    } else {
+      lines.push('Strong breeze: favor flatter water, minimize tacks');
+    }
+
+    if (hasCurrent) {
+      lines.push('Deeper water = more current; use shallows to reduce adverse flow');
+    }
+  } else {
+    // Downwind: use the SAME "looking upwind" convention as upwind so sailors think
+    // about a single fixed physical side of the course, not a flipped mirror image.
+    // Port gybe and port tack both head to the right-looking-upwind side;
+    // starboard gybe and starboard tack both head to the left-looking-upwind side.
+    if (hasCurrent) {
+      const rel = ((currentDir! - windDir) % 360 + 360) % 360;
+      const currentPushesRight = rel > 0 && rel < 180;
+      // Upstream = opposite of where current pushes (same side as upwind leg)
+      const favoredSide = currentPushesRight ? 'left' : 'right';
+      // Gybe that takes you toward the favored (upstream) side — same convention as tack
+      const startGybe = currentPushesRight ? 'starboard' : 'port';
+      const currentCompass = formatCompassDirection(currentDir!);
+
+      lines.push(`Favored side: play the ${favoredSide} (same side as upwind) — sail upstream into current (${currentSpd!.toFixed(1)}kt ${currentCompass}), avoid overstanding`);
+      lines.push(`Start on ${startGybe} gybe toward the upstream side`);
+
+      if (ws > 0 && ws < 10 && currentSpd! > 0.3) {
+        lines.push('Light air: current carry is critical — stay in the flow');
+      }
+    } else {
+      lines.push('No significant current — sail deep in lulls, heat up in puffs');
+    }
+
+    if (ws < 8) {
+      lines.push('Light air: higher angles for VMG, soak in puffs');
+    } else if (ws < 15) {
+      lines.push('Moderate breeze: gybe on the shifts, stay in pressure');
+    } else {
+      lines.push('Strong breeze: ride waves, minimize gybes');
+    }
+
+    if (hasCurrent) {
+      lines.push('Deeper water = more current; use shallows to reduce adverse flow');
+    }
+  }
+
+  return lines;
+}
 
 /** Forecast data point for sparklines */
 export interface ForecastDataPoint {
@@ -659,15 +837,15 @@ function ConditionsDisplay({
 
   return (
     <View style={conditionsStyles.container}>
-      {/* Wind Section */}
+      {/* Wind Direction — editable */}
       <View style={conditionsStyles.section}>
-        <View style={conditionsStyles.labelRow}>
+        <View style={conditionsStyles.sectionHeader}>
           <Navigation2
             size={14}
             color="#22c55e"
             style={{ transform: [{ rotate: `${windDirection}deg` }] }}
           />
-          <Text style={conditionsStyles.label}>Wind</Text>
+          <Text style={conditionsStyles.sectionTitle}>Wind Direction</Text>
           {windSpeed !== undefined && (
             <Text style={[conditionsStyles.speedBadge, { backgroundColor: '#22c55e15', color: '#22c55e' }]}>{Math.round(windSpeed)} kts</Text>
           )}
@@ -676,8 +854,9 @@ function ConditionsDisplay({
           <TouchableOpacity
             style={conditionsStyles.adjustButton}
             onPress={() => adjustDirection(-5)}
+            accessibilityLabel="Rotate wind 5 degrees counterclockwise"
           >
-            <Text style={conditionsStyles.adjustText}>-5°</Text>
+            <Text style={conditionsStyles.adjustText}>← 5°</Text>
           </TouchableOpacity>
           <View style={conditionsStyles.inputContainer}>
             <TextInput
@@ -693,8 +872,9 @@ function ConditionsDisplay({
           <TouchableOpacity
             style={conditionsStyles.adjustButton}
             onPress={() => adjustDirection(5)}
+            accessibilityLabel="Rotate wind 5 degrees clockwise"
           >
-            <Text style={conditionsStyles.adjustText}>+5°</Text>
+            <Text style={conditionsStyles.adjustText}>5° →</Text>
           </TouchableOpacity>
         </View>
         {windForecastValues.length > 2 && (
@@ -705,11 +885,11 @@ function ConditionsDisplay({
         )}
       </View>
 
-      {/* Current Section - Always show, with placeholder if no data */}
-      <View style={conditionsStyles.section}>
-        <View style={conditionsStyles.labelRow}>
+      {/* Current — read-only from forecast */}
+      <View style={[conditionsStyles.section, conditionsStyles.currentSection]}>
+        <View style={conditionsStyles.sectionHeader}>
           <Waves size={14} color="#0EA5E9" />
-          <Text style={conditionsStyles.label}>Current</Text>
+          <Text style={conditionsStyles.sectionTitle}>Current</Text>
           {currentSpeed !== undefined && (
             <Text style={[conditionsStyles.speedBadge, { backgroundColor: '#0EA5E915', color: '#0EA5E9' }]}>
               {currentSpeed.toFixed(1)} kts
@@ -718,13 +898,13 @@ function ConditionsDisplay({
         </View>
         <View style={conditionsStyles.currentValueRow}>
           {currentDirection !== undefined ? (
-            <View style={[conditionsStyles.currentValue, { backgroundColor: '#0EA5E910' }]}>
+            <View style={conditionsStyles.currentValue}>
               <Navigation2
                 size={12}
                 color="#0EA5E9"
                 style={{ transform: [{ rotate: `${currentDirection}deg` }] }}
               />
-              <Text style={[conditionsStyles.currentText, { color: '#0EA5E9' }]}>
+              <Text style={conditionsStyles.currentText}>
                 {Math.round(currentDirection)}° {currentCardinal}
               </Text>
             </View>
@@ -747,20 +927,27 @@ function ConditionsDisplay({
 
 const conditionsStyles = StyleSheet.create({
   container: {
-    gap: 12,
+    gap: 14,
   },
   section: {
     gap: 6,
   },
-  labelRow: {
+  currentSection: {
+    borderTopWidth: 1,
+    borderTopColor: COLORS.gray5,
+    paddingTop: 10,
+  },
+  sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  label: {
-    fontSize: 13,
-    fontWeight: '500',
+  sectionTitle: {
+    fontSize: 12,
+    fontWeight: '600',
     color: COLORS.secondaryLabel,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
     flex: 1,
   },
   speedBadge: {
@@ -778,7 +965,7 @@ const conditionsStyles = StyleSheet.create({
     gap: 6,
   },
   adjustButton: {
-    width: 40,
+    width: 44,
     height: 32,
     borderRadius: 6,
     backgroundColor: COLORS.gray6,
@@ -1001,8 +1188,9 @@ export function CoursePositionEditor({
   const [courseType, setCourseType] = useState<CourseType>(
     existingCourse?.courseType || initialCourseType
   );
+  // Prefer live forecast wind over saved course wind so the course auto-orients to current conditions
   const [windDirection, setWindDirection] = useState(
-    existingCourse?.windDirection || initialWindDirection
+    initialWindDirection ?? existingCourse?.windDirection ?? 225
   );
   const [legLength, setLegLength] = useState(
     existingCourse?.legLengthNm ||
@@ -1021,7 +1209,15 @@ export function CoursePositionEditor({
   );
 
   // Start line length state - derived from fleet size
-  const [numberOfBoats, setNumberOfBoats] = useState(initialNumberOfBoats);
+  // Back-calculate numberOfBoats from saved startLineLengthM if reopening an existing course
+  const [numberOfBoats, setNumberOfBoats] = useState(() => {
+    if (existingCourse?.startLineLengthM && initialNumberOfBoats === 20) {
+      // Default wasn't explicitly set — back-calculate from saved line length
+      // Formula: lineLength = boats * LOA * 1.5 → boats = lineLength / (LOA * 1.5)
+      return Math.round(existingCourse.startLineLengthM / (initialBoatLengthM * 1.5));
+    }
+    return initialNumberOfBoats;
+  });
   const [boatLengthM, setBoatLengthM] = useState(initialBoatLengthM);
   const [startLineLengthM, setStartLineLengthM] = useState(
     existingCourse?.startLineLengthM ||
@@ -1034,7 +1230,6 @@ export function CoursePositionEditor({
     if (
       initialWindDirection != null &&
       initialWindDirection !== prevInitialWindRef.current &&
-      !existingCourse?.windDirection &&
       !hasManualAdjustments
     ) {
       prevInitialWindRef.current = initialWindDirection;
@@ -1145,18 +1340,29 @@ export function CoursePositionEditor({
 
   // Initialize course on first render or when wind direction changes from forecast
   const prevWindRef = useRef(windDirection);
+  const hasReorientedRef = useRef(false);
   useEffect(() => {
     if (!visible || !initialLocation) return;
 
-    // Calculate if no marks yet, or if wind direction changed (forecast arrived)
     if (marks.length === 0) {
+      // No marks yet — calculate fresh
+      calculateCourse();
+    } else if (
+      // Re-orient existing course to forecast wind on first open
+      !hasReorientedRef.current &&
+      existingCourse?.windDirection != null &&
+      initialWindDirection != null &&
+      Math.abs(existingCourse.windDirection - initialWindDirection) > 2
+    ) {
+      hasReorientedRef.current = true;
       calculateCourse();
     } else if (windDirection !== prevWindRef.current && !hasManualAdjustments) {
+      // Wind direction changed interactively or from delayed forecast
       prevWindRef.current = windDirection;
       calculateCourse();
     }
     prevWindRef.current = windDirection;
-  }, [visible, initialLocation, calculateCourse, marks.length, windDirection, hasManualAdjustments]);
+  }, [visible, initialLocation, calculateCourse, marks.length, windDirection, hasManualAdjustments, existingCourse?.windDirection, initialWindDirection]);
 
   // Handle course type change
   const handleCourseTypeChange = useCallback(
@@ -1321,6 +1527,138 @@ export function CoursePositionEditor({
     onSave,
   ]);
 
+  // Course overlay: full race box (diamond) with laylines, start line inside
+  const courseOverlay = useMemo(() => {
+    if (marks.length === 0) return null;
+    const windwardMark = marks.find((m) => m.type === 'windward');
+    const leewardMark = marks.find((m) => m.type === 'leeward');
+    const gateMarks = marks.filter((m) => m.type === 'gate');
+    const leewardPos = leewardMark
+      ? { latitude: leewardMark.latitude, longitude: leewardMark.longitude }
+      : gateMarks.length >= 2
+        ? { latitude: (gateMarks[0].latitude + gateMarks[1].latitude) / 2,
+            longitude: (gateMarks[0].longitude + gateMarks[1].longitude) / 2 }
+        : gateMarks.length === 1
+          ? { latitude: gateMarks[0].latitude, longitude: gateMarks[0].longitude }
+          : startLine
+            ? { latitude: (startLine.pin.lat + startLine.committee.lat) / 2,
+                longitude: (startLine.pin.lng + startLine.committee.lng) / 2 }
+            : null;
+    if (!windwardMark || !leewardPos) return null;
+
+    const W = { latitude: windwardMark.latitude, longitude: windwardMark.longitude };
+    const L = leewardPos;
+    const M = lerpCoord(L, W, 0.5);
+
+    const legDistanceM = haversineDistance(W.latitude, W.longitude, L.latitude, L.longitude);
+    const laylineAngle = 45;
+    const halfWidth = (legDistanceM / 2) * Math.tan((laylineAngle * Math.PI) / 180);
+
+    const rightBearing = (windDirection + 90) % 360;
+    const leftBearing = (windDirection - 90 + 360) % 360;
+    const downwindBearing = (windDirection + 180) % 360;
+
+    let portCorner = offsetCoordinate(M.latitude, M.longitude, rightBearing, halfWidth);
+    let stbdCorner = offsetCoordinate(M.latitude, M.longitude, leftBearing, halfWidth);
+
+    // ── Third dividers (1/3 and 2/3 from L to W) ──
+    const oneThird = lerpCoord(L, W, 1 / 3);
+    const twoThirds = lerpCoord(L, W, 2 / 3);
+    const oneThirdHW = halfWidth * (2 / 3);
+    const twoThirdsHW = halfWidth * (2 / 3);
+    const oneThirdLeft = offsetCoordinate(oneThird.latitude, oneThird.longitude, leftBearing, oneThirdHW);
+    const oneThirdRight = offsetCoordinate(oneThird.latitude, oneThird.longitude, rightBearing, oneThirdHW);
+    const twoThirdsLeft = offsetCoordinate(twoThirds.latitude, twoThirds.longitude, leftBearing, twoThirdsHW);
+    const twoThirdsRight = offsetCoordinate(twoThirds.latitude, twoThirds.longitude, rightBearing, twoThirdsHW);
+
+    // Third zone label positions (along the rhumbline)
+    const bottomThirdLabel = lerpCoord(L, W, 1 / 6);
+    const middleThirdLabel = lerpCoord(L, W, 1 / 2);
+    const upperThirdLabel = lerpCoord(L, W, 5 / 6);
+
+    // ── Favored side ──
+    const hasCurrent = currentDirection !== undefined && currentSpeed !== undefined && currentSpeed > 0.05;
+    let favoredSide: 'left' | 'right' | null = null;
+    if (hasCurrent) {
+      const rel = ((currentDirection! - windDirection) % 360 + 360) % 360;
+      favoredSide = (rel > 0 && rel < 180) ? 'left' : 'right';
+    }
+
+    // Side label positions (offset into each half at midpoint height)
+    const sideOffset = halfWidth * 0.5;
+    const leftLabel = offsetCoordinate(M.latitude, M.longitude, leftBearing, sideOffset);
+    const rightLabel = offsetCoordinate(M.latitude, M.longitude, rightBearing, sideOffset);
+
+    // ── Start line: flatten diamond bottom to P & C, add start box ──
+    let P = L;
+    let C = L;
+    let startMid = L;
+    let startBox: {
+      outline: { latitude: number; longitude: number }[];
+      dividers: [{ latitude: number; longitude: number }, { latitude: number; longitude: number }][];
+    } | null = null;
+
+    if (startLine) {
+      P = { latitude: startLine.pin.lat, longitude: startLine.pin.lng };
+      C = { latitude: startLine.committee.lat, longitude: startLine.committee.lng };
+      startMid = lerpCoord(P, C, 0.5);
+
+      const boxDepth = legDistanceM * 0.15;
+
+      const dLat = C.latitude - P.latitude;
+      const dLng = (C.longitude - P.longitude) * Math.cos((P.latitude * Math.PI) / 180);
+      const lineBearingPtoC = ((Math.atan2(dLng, dLat) * 180) / Math.PI + 360) % 360;
+
+      const candidateA = (lineBearingPtoC - 45 + 360) % 360;
+      const candidateB = (lineBearingPtoC + 45) % 360;
+      const diffA = Math.abs(((candidateA - downwindBearing + 540) % 360) - 180);
+      const diffB = Math.abs(((candidateB - downwindBearing + 540) % 360) - 180);
+      const shortSideBearing = diffA < diffB ? candidateA : candidateB;
+
+      const pinDown = offsetCoordinate(P.latitude, P.longitude, shortSideBearing, boxDepth);
+      const committeeDown = offsetCoordinate(C.latitude, C.longitude, shortSideBearing, boxDepth);
+      const startOneThird = lerpCoord(P, C, 1 / 3);
+      const startTwoThirds = lerpCoord(P, C, 2 / 3);
+      const oneThirdDown = offsetCoordinate(startOneThird.latitude, startOneThird.longitude, shortSideBearing, boxDepth);
+      const twoThirdsDown = offsetCoordinate(startTwoThirds.latitude, startTwoThirds.longitude, shortSideBearing, boxDepth);
+
+      startBox = {
+        outline: [P, C, committeeDown, pinDown],
+        dividers: [
+          [startOneThird, oneThirdDown],
+          [startTwoThirds, twoThirdsDown],
+        ],
+      };
+
+      // Extend lower laylines from P and C into the course to meet upper laylines from W
+      const laylineBearingFromP = (windDirection - 45 + 360) % 360;
+      const laylineBearingFromC = (windDirection + 45) % 360;
+      const bearingWtoPort = flatBearing(W, portCorner);
+      const bearingWtoStbd = flatBearing(W, stbdCorner);
+
+      const newStbd = rayIntersection(P, laylineBearingFromP, W, bearingWtoStbd);
+      const newPort = rayIntersection(C, laylineBearingFromC, W, bearingWtoPort);
+
+      if (newStbd) stbdCorner = newStbd;
+      if (newPort) portCorner = newPort;
+    }
+
+    return {
+      W, L, M, P, C, startMid, portCorner, stbdCorner,
+      leftPoly: [W, stbdCorner, P, startMid],
+      rightPoly: [W, portCorner, C, startMid],
+      thirdDividers: [
+        [oneThirdLeft, oneThirdRight],
+        [twoThirdsLeft, twoThirdsRight],
+      ] as [{ latitude: number; longitude: number }, { latitude: number; longitude: number }][],
+      thirdLabels: { bottom: bottomThirdLabel, middle: middleThirdLabel, upper: upperThirdLabel },
+      favoredSide,
+      leftLabel,
+      rightLabel,
+      startBox,
+    };
+  }, [marks, windDirection, currentDirection, currentSpeed, startLine]);
+
   // Initialize web map
   useEffect(() => {
     if (!isWeb || !visible || !mapContainerRef.current || !initialLocation) return;
@@ -1416,6 +1754,317 @@ export function CoursePositionEditor({
       // Clear existing markers
       markersRef.current.forEach((marker) => marker.remove());
       markersRef.current.clear();
+
+      // Helper to cleanly remove a layer+source pair
+      const removeLayerAndSource = (layerId: string, sourceId: string) => {
+        if (map.getLayer(layerId)) map.removeLayer(layerId);
+        if (map.getSource(sourceId)) map.removeSource(sourceId);
+      };
+
+      // ── Course overlay: race box, laylines, rhumbline, third dividers, start box ──
+      // Remove previous overlay layers (order matters: layers before sources)
+      removeLayerAndSource('race-left-fill', 'race-left');
+      removeLayerAndSource('race-right-fill', 'race-right');
+      removeLayerAndSource('race-left-outline', 'race-left-outline-src');
+      removeLayerAndSource('race-right-outline', 'race-right-outline-src');
+      removeLayerAndSource('rhumbline-layer', 'rhumbline');
+      removeLayerAndSource('third-dividers-layer', 'third-dividers');
+      removeLayerAndSource('laylines-layer', 'laylines');
+      removeLayerAndSource('start-box-outline-layer', 'start-box-outline');
+      removeLayerAndSource('start-box-dividers-layer', 'start-box-dividers');
+
+      if (courseOverlay) {
+        const coordPairs = (pts: { latitude: number; longitude: number }[]): [number, number][] =>
+          pts.map((p) => [p.longitude, p.latitude]);
+
+        const {
+          W, L, portCorner, stbdCorner, P, C, startMid,
+          leftPoly, rightPoly, thirdDividers, thirdLabels,
+          favoredSide, leftLabel, rightLabel, startBox,
+        } = courseOverlay;
+
+        // Fill polygons (left/right halves of race box). Favored side gets a tint.
+        const leftFavored = favoredSide === 'left';
+        const rightFavored = favoredSide === 'right';
+
+        map.addSource('race-left', {
+          type: 'geojson',
+          data: {
+            type: 'Feature',
+            properties: {},
+            geometry: {
+              type: 'Polygon',
+              coordinates: [[...coordPairs(leftPoly), [leftPoly[0].longitude, leftPoly[0].latitude]]],
+            },
+          },
+        });
+        map.addLayer({
+          id: 'race-left-fill',
+          type: 'fill',
+          source: 'race-left',
+          paint: {
+            'fill-color': leftFavored ? '#34C759' : '#3b82f6',
+            'fill-opacity': leftFavored ? 0.18 : 0.06,
+          },
+        });
+
+        map.addSource('race-right', {
+          type: 'geojson',
+          data: {
+            type: 'Feature',
+            properties: {},
+            geometry: {
+              type: 'Polygon',
+              coordinates: [[...coordPairs(rightPoly), [rightPoly[0].longitude, rightPoly[0].latitude]]],
+            },
+          },
+        });
+        map.addLayer({
+          id: 'race-right-fill',
+          type: 'fill',
+          source: 'race-right',
+          paint: {
+            'fill-color': rightFavored ? '#34C759' : '#3b82f6',
+            'fill-opacity': rightFavored ? 0.18 : 0.06,
+          },
+        });
+
+        // Rhumbline (center line from L/startMid to W)
+        const rhumbFrom = startLine ? startMid : L;
+        map.addSource('rhumbline', {
+          type: 'geojson',
+          data: {
+            type: 'Feature',
+            properties: {},
+            geometry: {
+              type: 'LineString',
+              coordinates: [
+                [rhumbFrom.longitude, rhumbFrom.latitude],
+                [W.longitude, W.latitude],
+              ],
+            },
+          },
+        });
+        map.addLayer({
+          id: 'rhumbline-layer',
+          type: 'line',
+          source: 'rhumbline',
+          paint: {
+            'line-color': '#64748b',
+            'line-width': 1.5,
+            'line-dasharray': [2, 3],
+            'line-opacity': 0.7,
+          },
+        });
+
+        // Third dividers (horizontal lines at 1/3 and 2/3 up the course)
+        map.addSource('third-dividers', {
+          type: 'geojson',
+          data: {
+            type: 'FeatureCollection',
+            features: thirdDividers.map((seg) => ({
+              type: 'Feature',
+              properties: {},
+              geometry: {
+                type: 'LineString',
+                coordinates: [
+                  [seg[0].longitude, seg[0].latitude],
+                  [seg[1].longitude, seg[1].latitude],
+                ],
+              },
+            })),
+          },
+        });
+        map.addLayer({
+          id: 'third-dividers-layer',
+          type: 'line',
+          source: 'third-dividers',
+          paint: {
+            'line-color': '#94a3b8',
+            'line-width': 1,
+            'line-dasharray': [1, 3],
+            'line-opacity': 0.6,
+          },
+        });
+
+        // Laylines: W → portCorner and W → stbdCorner, and (if start line exists)
+        // P → stbdCorner (left layline) and C → portCorner (right layline)
+        const laylineFeatures: any[] = [
+          {
+            type: 'Feature',
+            properties: {},
+            geometry: {
+              type: 'LineString',
+              coordinates: [
+                [W.longitude, W.latitude],
+                [portCorner.longitude, portCorner.latitude],
+              ],
+            },
+          },
+          {
+            type: 'Feature',
+            properties: {},
+            geometry: {
+              type: 'LineString',
+              coordinates: [
+                [W.longitude, W.latitude],
+                [stbdCorner.longitude, stbdCorner.latitude],
+              ],
+            },
+          },
+        ];
+        if (startLine) {
+          laylineFeatures.push({
+            type: 'Feature',
+            properties: {},
+            geometry: {
+              type: 'LineString',
+              coordinates: [
+                [P.longitude, P.latitude],
+                [stbdCorner.longitude, stbdCorner.latitude],
+              ],
+            },
+          });
+          laylineFeatures.push({
+            type: 'Feature',
+            properties: {},
+            geometry: {
+              type: 'LineString',
+              coordinates: [
+                [C.longitude, C.latitude],
+                [portCorner.longitude, portCorner.latitude],
+              ],
+            },
+          });
+        }
+        map.addSource('laylines', {
+          type: 'geojson',
+          data: { type: 'FeatureCollection', features: laylineFeatures },
+        });
+        map.addLayer({
+          id: 'laylines-layer',
+          type: 'line',
+          source: 'laylines',
+          paint: {
+            'line-color': '#475569',
+            'line-width': 2,
+            'line-dasharray': [4, 3],
+            'line-opacity': 0.75,
+          },
+        });
+
+        // Start box (parallelogram extending downwind from start line)
+        if (startBox) {
+          const outlineCoords: [number, number][] = [
+            ...coordPairs(startBox.outline),
+            [startBox.outline[0].longitude, startBox.outline[0].latitude],
+          ];
+          map.addSource('start-box-outline', {
+            type: 'geojson',
+            data: {
+              type: 'Feature',
+              properties: {},
+              geometry: { type: 'LineString', coordinates: outlineCoords },
+            },
+          });
+          map.addLayer({
+            id: 'start-box-outline-layer',
+            type: 'line',
+            source: 'start-box-outline',
+            paint: {
+              'line-color': COLORS.green,
+              'line-width': 2,
+              'line-dasharray': [3, 3],
+              'line-opacity': 0.8,
+            },
+          });
+
+          map.addSource('start-box-dividers', {
+            type: 'geojson',
+            data: {
+              type: 'FeatureCollection',
+              features: startBox.dividers.map((seg) => ({
+                type: 'Feature',
+                properties: {},
+                geometry: {
+                  type: 'LineString',
+                  coordinates: [
+                    [seg[0].longitude, seg[0].latitude],
+                    [seg[1].longitude, seg[1].latitude],
+                  ],
+                },
+              })),
+            },
+          });
+          map.addLayer({
+            id: 'start-box-dividers-layer',
+            type: 'line',
+            source: 'start-box-dividers',
+            paint: {
+              'line-color': COLORS.green,
+              'line-width': 1,
+              'line-dasharray': [1, 3],
+              'line-opacity': 0.6,
+            },
+          });
+        }
+
+        // ── DOM label markers (LEFT/RIGHT side + Bottom/Middle/Upper 1/3) ──
+        const makeLabel = (
+          text: string,
+          opts: { favored?: boolean; variant?: 'side' | 'third' } = {},
+        ) => {
+          const el = document.createElement('div');
+          const isSide = opts.variant !== 'third';
+          const isFavored = !!opts.favored;
+          el.style.cssText = `
+            padding: ${isSide ? '4px 10px' : '3px 8px'};
+            background: ${isFavored ? 'rgba(52, 199, 89, 0.92)' : 'rgba(15, 23, 42, 0.75)'};
+            border: 1px solid ${isFavored ? 'rgba(52, 199, 89, 1)' : 'rgba(148, 163, 184, 0.5)'};
+            border-radius: 999px;
+            color: ${isFavored ? '#ffffff' : '#e2e8f0'};
+            font-size: ${isSide ? 11 : 9}px;
+            font-weight: ${isSide ? 700 : 600};
+            letter-spacing: ${isSide ? 0.8 : 0.4}px;
+            text-transform: uppercase;
+            white-space: nowrap;
+            pointer-events: none;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+          `;
+          el.textContent = text;
+          return el;
+        };
+
+        const leftSideEl = makeLabel('Left', { favored: favoredSide === 'left', variant: 'side' });
+        const leftSideMarker = new Marker({ element: leftSideEl })
+          .setLngLat([leftLabel.longitude, leftLabel.latitude])
+          .addTo(map);
+        markersRef.current.set('label-left', leftSideMarker);
+
+        const rightSideEl = makeLabel('Right', { favored: favoredSide === 'right', variant: 'side' });
+        const rightSideMarker = new Marker({ element: rightSideEl })
+          .setLngLat([rightLabel.longitude, rightLabel.latitude])
+          .addTo(map);
+        markersRef.current.set('label-right', rightSideMarker);
+
+        const bottomEl = makeLabel('Bottom 1/3', { variant: 'third' });
+        const bottomMarker = new Marker({ element: bottomEl })
+          .setLngLat([thirdLabels.bottom.longitude, thirdLabels.bottom.latitude])
+          .addTo(map);
+        markersRef.current.set('label-bottom-third', bottomMarker);
+
+        const middleEl = makeLabel('Middle 1/3', { variant: 'third' });
+        const middleMarker = new Marker({ element: middleEl })
+          .setLngLat([thirdLabels.middle.longitude, thirdLabels.middle.latitude])
+          .addTo(map);
+        markersRef.current.set('label-middle-third', middleMarker);
+
+        const upperEl = makeLabel('Upper 1/3', { variant: 'third' });
+        const upperMarker = new Marker({ element: upperEl })
+          .setLngLat([thirdLabels.upper.longitude, thirdLabels.upper.latitude])
+          .addTo(map);
+        markersRef.current.set('label-upper-third', upperMarker);
+      }
 
       // Add start line (with coordinate validation to prevent NaN errors)
       const hasValidStartLine = startLine &&
@@ -1539,8 +2188,31 @@ export function CoursePositionEditor({
           .filter(m => !isNaN(m.longitude) && !isNaN(m.latitude))
           .sort((a, b) => (a.sequenceOrder ?? 0) - (b.sequenceOrder ?? 0));
 
+        // Build course line coordinates, collapsing gate pairs to their midpoint
+        const gateMarks = sortedMarks.filter(m => m.type === 'gate');
+        const nonGateMarks = sortedMarks.filter(m => m.type !== 'gate');
+        let lineCoords: [number, number][];
+        if (gateMarks.length === 2) {
+          // Replace two gate marks with their midpoint
+          const gateMid: [number, number] = [
+            (gateMarks[0].longitude + gateMarks[1].longitude) / 2,
+            (gateMarks[0].latitude + gateMarks[1].latitude) / 2,
+          ];
+          // Build line: windward → gate midpoint (sorted by relY descending = top to bottom)
+          const windwardMarks = nonGateMarks.filter(m => m.type === 'windward');
+          const otherMarks = nonGateMarks.filter(m => m.type !== 'windward');
+          // Order: windward marks first, then gate midpoint, then any others
+          lineCoords = [
+            ...windwardMarks.map((m): [number, number] => [m.longitude, m.latitude]),
+            gateMid,
+            ...otherMarks.map((m): [number, number] => [m.longitude, m.latitude]),
+          ];
+        } else {
+          lineCoords = sortedMarks.map((m): [number, number] => [m.longitude, m.latitude]);
+        }
+
         // Only add course line if we have at least 2 valid points
-        if (sortedMarks.length < 2) {
+        if (lineCoords.length < 2) {
           logger.warn('[CoursePositionEditor] Not enough valid marks for course line');
         } else {
           map.addSource('course-line', {
@@ -1550,7 +2222,7 @@ export function CoursePositionEditor({
             properties: {},
             geometry: {
               type: 'LineString',
-              coordinates: sortedMarks.map((m) => [m.longitude, m.latitude]),
+              coordinates: lineCoords,
             },
           },
         });
@@ -1650,7 +2322,7 @@ export function CoursePositionEditor({
     // Small delay to ensure map is ready
     const timeout = setTimeout(updateMarkers, 100);
     return () => clearTimeout(timeout);
-  }, [marks, startLine, mapReady, windDirection]);
+  }, [marks, startLine, mapReady, windDirection, currentDirection, currentSpeed, courseOverlay]);
 
   if (!visible) return null;
 
@@ -1775,7 +2447,7 @@ export function CoursePositionEditor({
                     color: '#22c55e',
                   }}
                 >
-                  Wind
+                  Wind {initialWindSpeed != null ? `${Math.round(initialWindSpeed)}kt` : ''} {formatCompassDirection(windDirection)}
                 </div>
               </div>
 
@@ -1813,7 +2485,7 @@ export function CoursePositionEditor({
                       height="24"
                       viewBox="0 0 28 20"
                       fill="none"
-                      style={{ transform: `rotate(${currentDirection}deg)` }}
+                      style={{ transform: `rotate(${currentDirection - 90}deg)` }}
                     >
                       {/* Wavy arrow matching scattered current arrows */}
                       <path d="M4 10 Q7 6, 10 10 Q13 14, 16 10 Q19 6, 22 10"
@@ -1852,7 +2524,7 @@ export function CoursePositionEditor({
                   }}
                 >
                   {currentDirection !== undefined
-                    ? `Current ${currentSpeed !== undefined ? `${currentSpeed.toFixed(1)}kt` : ''}`
+                    ? `Current ${currentSpeed !== undefined ? `${currentSpeed.toFixed(1)}kt` : ''} ${formatCompassDirection(currentDirection)}`
                     : 'Current —'
                   }
                 </div>
@@ -2027,7 +2699,7 @@ export function CoursePositionEditor({
                       position: 'absolute',
                       left: `${pos.x}%`,
                       top: `${pos.y}%`,
-                      transform: `translate(-50%, -50%) rotate(${arrowDir}deg)`,
+                      transform: `translate(-50%, -50%) rotate(${arrowDir - 90}deg)`,
                       pointerEvents: 'none',
                       zIndex: 5,
                       opacity: 0.6,
@@ -2056,6 +2728,64 @@ export function CoursePositionEditor({
                   visible={showDepthCurrent}
                 />
               )}
+
+              {/* Upwind Strategy Box - Bottom Right */}
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: 12,
+                  right: 12,
+                  maxWidth: 220,
+                  background: 'rgba(15, 23, 42, 0.92)',
+                  border: '1px solid rgba(34, 197, 94, 0.3)',
+                  borderRadius: 8,
+                  padding: '8px 10px',
+                  pointerEvents: 'none',
+                  zIndex: 100,
+                }}
+              >
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#22c55e', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <svg width="10" height="10" viewBox="0 0 10 10"><path d="M5 1 L5 9" stroke="#22c55e" strokeWidth="1.5" strokeLinecap="round"/><path d="M5 1 L3 3.5 M5 1 L7 3.5" stroke="#22c55e" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  Upwind Strategy
+                </div>
+                <div style={{ fontSize: 8, color: '#64748b', marginBottom: 4, fontStyle: 'italic' }}>
+                  Left/right looking upwind from the start
+                </div>
+                {generateStrategy(windDirection, initialWindSpeed, currentDirection, currentSpeed, 'upwind').map((line, i) => (
+                  <div key={i} style={{ fontSize: 10, color: '#cbd5e1', lineHeight: '14px', marginTop: i > 0 ? 2 : 0 }}>
+                    • {line}
+                  </div>
+                ))}
+              </div>
+
+              {/* Downwind Strategy Box - Bottom Left */}
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: 12,
+                  left: 12,
+                  maxWidth: 220,
+                  background: 'rgba(15, 23, 42, 0.92)',
+                  border: '1px solid rgba(59, 130, 246, 0.3)',
+                  borderRadius: 8,
+                  padding: '8px 10px',
+                  pointerEvents: 'none',
+                  zIndex: 100,
+                }}
+              >
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#3b82f6', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <svg width="10" height="10" viewBox="0 0 10 10"><path d="M5 1 L5 9" stroke="#3b82f6" strokeWidth="1.5" strokeLinecap="round"/><path d="M5 9 L3 6.5 M5 9 L7 6.5" stroke="#3b82f6" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  Downwind Strategy
+                </div>
+                <div style={{ fontSize: 8, color: '#64748b', marginBottom: 4, fontStyle: 'italic' }}>
+                  Left/right looking upwind (same side as upwind leg)
+                </div>
+                {generateStrategy(windDirection, initialWindSpeed, currentDirection, currentSpeed, 'downwind').map((line, i) => (
+                  <div key={i} style={{ fontSize: 10, color: '#cbd5e1', lineHeight: '14px', marginTop: i > 0 ? 2 : 0 }}>
+                    • {line}
+                  </div>
+                ))}
+              </div>
             </>
           ) : (
             <View style={styles.noLocationMessage}>
