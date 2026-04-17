@@ -272,6 +272,8 @@ export interface CardRaceData {
     height?: number;
     direction?: string;
   };
+  /** Expected fleet size for course positioning */
+  expected_fleet_size?: number;
   /** User ID who created this race (for ownership checks) */
   created_by?: string;
   /** Whether this is a demo race (shown when user has no real races) */
@@ -308,6 +310,8 @@ export interface CardShellProps {
   isPast?: boolean;
   /** Whether this race is currently being deleted (show loading overlay) */
   isDeleting?: boolean;
+  /** Callback to cancel an in-progress delete */
+  onCancelDelete?: () => void;
 }
 
 /**

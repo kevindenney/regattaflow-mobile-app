@@ -9,11 +9,12 @@
  */
 
 import React, { useMemo } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View, ViewStyle, Platform } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View, ViewStyle, Platform } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   interpolate,
   Extrapolation,
+  useReducedMotion,
 } from 'react-native-reanimated';
 
 import { CardShellProps } from './types';
@@ -38,10 +39,6 @@ import {
 const PAST_CARD_BG = '#FFFFFF';
 const PAST_CARD_OPACITY = 0.85;
 
-/** Subtle green left-border accent for the next upcoming race */
-const NEXT_RACE_BORDER_WIDTH = 3;
-const NEXT_RACE_BORDER_COLOR = IOS_COLORS.green; // #34C759
-
 export function CardShell({
   position,
   dimensions,
@@ -53,12 +50,15 @@ export function CardShell({
   isLastDone = false,
   isPast = false,
   isDeleting = false,
+  onCancelDelete,
 }: CardShellProps) {
   const relativeX = position.x;
+  const reducedMotion = useReducedMotion();
 
   /**
    * Animated style for horizontal position
    * Applies scale, opacity, and rotation based on distance from active card
+   * Respects reduced-motion preference: skips scale/rotation, keeps opacity
    */
   const animatedStyle = useAnimatedStyle(() => {
     'worklet';
@@ -74,19 +74,24 @@ export function CardShell({
       };
     }
 
-    // Scale based on horizontal distance
-    const scale = interpolate(
-      absDistanceX,
-      [0, 1],
-      [CARD_SCALE.active, CARD_SCALE.inactive],
-      Extrapolation.CLAMP
-    );
-
     // Opacity based on horizontal distance
     const opacity = interpolate(
       absDistanceX,
       [0, 1],
       [CARD_OPACITY.active, CARD_OPACITY.inactive],
+      Extrapolation.CLAMP
+    );
+
+    // Skip scale and rotation when reduced motion is preferred
+    if (reducedMotion) {
+      return { opacity, transform: [{ scale: 1 }] };
+    }
+
+    // Scale based on horizontal distance
+    const scale = interpolate(
+      absDistanceX,
+      [0, 1],
+      [CARD_SCALE.active, CARD_SCALE.inactive],
       Extrapolation.CLAMP
     );
 
@@ -106,7 +111,7 @@ export function CardShell({
         { rotateY: `${rotateY}deg` },
       ],
     };
-  }, [relativeX]);
+  }, [relativeX, reducedMotion]);
 
   // Static styles based on dimensions
   const cardStyle: ViewStyle = useMemo(
@@ -127,30 +132,24 @@ export function CardShell({
         Platform.OS !== 'web' && CARD_SHADOW_DRAMATIC,
         animatedStyle,
       style,
-      isNextRace && styles.nextRaceCard,
-      isLastDone && styles.lastDoneCard,
+      // Status badges moved inside card header (RaceSummaryCard)
     ]}
       testID={testID}
     >
-      {/* NOW bar on the left edge of the next step card */}
-      {isNextRace && (
-        <>
-          <View style={styles.nowBarStripe} />
-          <View style={styles.nowLabel}>
-            <Text style={styles.nowLabelText}>NOW</Text>
-          </View>
-        </>
-      )}
-      {isLastDone && relativeX !== gridState.currentRaceIndex.value ? (
-        <View style={styles.lastDoneBadge}>
-          <Text style={styles.lastDoneBadgeText}>LAST DONE</Text>
-        </View>
-      ) : null}
       {children}
       {isDeleting && (
         <View style={styles.deletingOverlay} pointerEvents="box-only">
           <ActivityIndicator size="large" color={IOS_COLORS.blue} />
           <Text style={styles.deletingText}>Deleting...</Text>
+          {onCancelDelete && (
+            <Pressable
+              onPress={onCancelDelete}
+              style={styles.cancelDeleteButton}
+              hitSlop={12}
+            >
+              <Text style={styles.cancelDeleteText}>Cancel</Text>
+            </Pressable>
+          )}
         </View>
       )}
     </Animated.View>
@@ -189,80 +188,17 @@ const styles = StyleSheet.create({
     color: IOS_COLORS.gray,
     letterSpacing: -0.2,
   },
-  nextRaceBorder: {
-    borderLeftWidth: NEXT_RACE_BORDER_WIDTH,
-    borderLeftColor: NEXT_RACE_BORDER_COLOR,
+  cancelDeleteButton: {
+    marginTop: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.06)',
   },
-  nextRaceCard: {
-    borderWidth: 2,
-    borderColor: 'rgba(52, 199, 89, 0.65)',
-  },
-  nowBarStripe: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 4,
-    backgroundColor: IOS_COLORS.green,
-    borderTopLeftRadius: 10,
-    borderBottomLeftRadius: 10,
-    zIndex: 12,
-  },
-  nowLabel: {
-    position: 'absolute',
-    top: -12,
-    left: -4,
-    zIndex: 13,
-    backgroundColor: IOS_COLORS.green,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  nowLabelText: {
-    fontSize: 9,
-    fontWeight: '800',
-    letterSpacing: 0.8,
-    color: '#FFFFFF',
-  },
-  lastDoneCard: {
-    borderWidth: 2,
-    borderColor: 'rgba(107, 114, 128, 0.55)',
-  },
-  nextRaceBadge: {
-    position: 'absolute',
-    top: 8,
-    right: 44,
-    zIndex: 12,
-    backgroundColor: 'rgba(52, 199, 89, 0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(52, 199, 89, 0.35)',
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  nextRaceBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.4,
-    color: IOS_COLORS.green,
-  },
-  lastDoneBadge: {
-    position: 'absolute',
-    top: 8,
-    right: 44,
-    zIndex: 12,
-    backgroundColor: 'rgba(107, 114, 128, 0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(107, 114, 128, 0.35)',
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  lastDoneBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.4,
-    color: '#4B5563',
+  cancelDeleteText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.blue,
   },
 });
 
