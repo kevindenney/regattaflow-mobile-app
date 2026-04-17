@@ -53,11 +53,6 @@ export default function EditRaceScreen() {
     router.replace('/(tabs)/races');
   };
 
-  if (!id) {
-    logger.warn('[EditRaceScreen] No ID provided, returning null');
-    return null;
-  }
-
   // Validate UUID format (basic check)
   const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const actualId = Array.isArray(id) ? id[0] : id;
@@ -67,6 +62,11 @@ export default function EditRaceScreen() {
     if (currentInterest?.slug !== 'nursing') return;
     router.replace(`/(tabs)/race/add-tufte?editId=${actualId}`);
   }, [actualId, currentInterest?.slug, router]);
+
+  if (!id) {
+    logger.warn('[EditRaceScreen] No ID provided, returning null');
+    return null;
+  }
 
   // Skip validation during static rendering (when id is placeholder '[id]')
   if (!uuidPattern.test(actualId)) {

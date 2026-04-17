@@ -793,6 +793,21 @@ export function useDashboardData() {
     };
   }, [mappedRaces]);
 
+  const liveResult = useMemo(() => ({
+    profile: profile.data,
+    nextRace,
+    recentRaces,
+    recentTimerSessions: recentSessions.data,
+    performanceHistory: performanceHistory.data,
+    boats: boats.data,
+    fleets: fleets.data,
+    loading,
+    error,
+    refreshing,
+    onRefresh,
+    refetch
+  }), [profile.data, nextRace, recentRaces, recentSessions.data, performanceHistory.data, boats.data, fleets.data, loading, error, refreshing, onRefresh, refetch]);
+
   if (isDemo && demoWorkspace) {
     // Find the next upcoming race in demo data (not just the first one)
     const demoNow = new Date();
@@ -820,20 +835,7 @@ export function useDashboardData() {
     };
   }
 
-  return useMemo(() => ({
-    profile: profile.data,
-    nextRace,
-    recentRaces,
-    recentTimerSessions: recentSessions.data,
-    performanceHistory: performanceHistory.data,
-    boats: boats.data,
-    fleets: fleets.data,
-    loading,
-    error,
-    refreshing,
-    onRefresh,
-    refetch
-  }), [profile.data, nextRace, recentRaces, recentSessions.data, performanceHistory.data, boats.data, fleets.data, loading, error, refreshing, onRefresh, refetch]);
+  return liveResult;
 }
 
 export function useBoatDetailData(boatId: string) {

@@ -2029,7 +2029,7 @@ function FieldRow({
     <View style={[styles.fieldRow, halfWidth && styles.fieldRowHalf]}>
       <View style={styles.fieldLabelRow}>
         {aiExtracted && <View style={styles.aiDot} />}
-        <Text style={styles.fieldLabel}>
+        <Text style={styles.fieldLabelInline}>
           {label}
           {required && <Text style={styles.required}> *</Text>}
         </Text>
@@ -2327,7 +2327,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 6,
   },
-  fieldLabel: {
+  fieldLabelInline: {
     fontSize: 13,
     color: COLORS.secondary,
   },

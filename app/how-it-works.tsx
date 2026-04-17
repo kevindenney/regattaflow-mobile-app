@@ -28,10 +28,13 @@ export default function HowItWorksPage() {
   const isDesktop = mounted && width > 768;
 
   // Native: redirect to signup — this is a web marketing page
-  if (Platform.OS !== 'web') {
-    React.useEffect(() => {
+  React.useEffect(() => {
+    if (Platform.OS !== 'web') {
       router.replace('/(auth)/signup');
-    }, []);
+    }
+  }, []);
+
+  if (Platform.OS !== 'web') {
     return null;
   }
 
