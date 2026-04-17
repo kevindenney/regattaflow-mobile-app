@@ -160,11 +160,27 @@ export function TimelineLane({
             />
           ) : null}
           {laneKind !== 'me' ? (
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{avatarEmoji || initials}</Text>
+            <View
+              style={[
+                styles.avatar,
+                laneKind === 'blueprint' && styles.avatarBlueprint,
+              ]}
+            >
+              {laneKind === 'blueprint' ? (
+                <Ionicons name="library-outline" size={12} color="#FFFFFF" />
+              ) : (
+                <Text style={styles.avatarText}>{avatarEmoji || initials}</Text>
+              )}
             </View>
           ) : null}
-          <Text style={styles.label} numberOfLines={1} ellipsizeMode="tail">
+          <Text
+            style={[
+              styles.label,
+              laneKind === 'blueprint' && styles.labelBlueprint,
+            ]}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
             {label}
           </Text>
         </View>
@@ -189,10 +205,15 @@ export function TimelineLane({
     );
   };
 
+  const laneContainerStyle = [
+    styles.lane,
+    laneKind === 'blueprint' && styles.laneBlueprint,
+  ];
+
   if (laneCollapsed) {
     // Header-only row: reveals the tile strip when toggled.
     return (
-      <View style={styles.lane} testID={testID}>
+      <View style={laneContainerStyle} testID={testID}>
         {renderHeader()}
       </View>
     );
@@ -224,7 +245,7 @@ export function TimelineLane({
   ));
 
   return (
-    <View style={[styles.lane, { minHeight: laneHeight + 8 }]} testID={testID}>
+    <View style={[laneContainerStyle, { minHeight: laneHeight + 8 }]} testID={testID}>
       {renderHeader()}
       <View style={styles.viewport}>
         {isScrollDriver ? (
@@ -263,6 +284,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#E5E4E1',
   },
+  // Curriculum/blueprint row — tinted background + thicker bottom border
+  // to visually separate it from the peer rows that follow it in the panel.
+  laneBlueprint: {
+    backgroundColor: '#F5F3FF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#DDD6FE',
+  },
   gutter: {
     paddingHorizontal: 8,
     paddingVertical: 6,
@@ -285,6 +313,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // Blueprint/curriculum avatar — purple fill with a book icon inside,
+  // reading visually as "this is the master plan" vs a person's initials.
+  avatarBlueprint: {
+    backgroundColor: '#7C3AED',
+  },
   avatarText: {
     fontSize: 11,
     fontWeight: '600',
@@ -295,6 +328,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#000',
+  },
+  labelBlueprint: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#4C1D95',
   },
   progress: {
     fontSize: 11,

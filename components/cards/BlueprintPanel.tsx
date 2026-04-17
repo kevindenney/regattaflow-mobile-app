@@ -17,7 +17,7 @@
  */
 
 import React, { useMemo } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { useSharedValue } from 'react-native-reanimated';
 import { TimelineLane, TimelineLaneTile } from './TimelineLane';
 import type { TimelineStepRecord } from '@/types/timeline-steps';
@@ -169,6 +169,15 @@ export function BlueprintPanel({
         onHeaderAction={onOpenBlueprint}
         headerActionIcon={onOpenBlueprint ? 'open-outline' : undefined}
       />
+      {/* "Following" section header — clarifies the rows below are peers
+          following the blueprint, not additional curriculum content. */}
+      {peerLanes.length > 0 ? (
+        <View style={styles.followingHeader}>
+          <Text style={styles.followingLabel}>
+            Following · {peerLanes.length}
+          </Text>
+        </View>
+      ) : null}
       {/* Peer rows — follow curriculum scroll. */}
       {peerLanes.map(({ peer, tiles }) => (
         <TimelineLane
@@ -200,5 +209,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E5E4E1',
     overflow: 'hidden',
+  },
+  followingHeader: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#FAFAFA',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E5E4E1',
+  },
+  followingLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#8E8E93',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
   },
 });
