@@ -23,7 +23,7 @@ export interface FetchWithTimeoutInit extends RequestInit {
  */
 export function isAbortError(error: unknown): boolean {
   if (!error) return false;
-  if (error instanceof DOMException && error.name === 'AbortError') return true;
+  if (typeof DOMException !== 'undefined' && error instanceof DOMException && error.name === 'AbortError') return true;
   if (error instanceof Error && error.name === 'AbortError') return true;
   const msg = (error as { message?: string })?.message;
   if (typeof msg === 'string' && msg.includes('AbortError')) return true;
