@@ -4,7 +4,7 @@
  * Allows users to select which races to create
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,8 +13,41 @@ import {
   StyleSheet,
   Platform,
 } from 'react-native';
-import { ArrowLeft, CheckCircle, Circle, Calendar, MapPin, Clock } from 'lucide-react-native';
+import { ArrowLeft, CheckCircle, Circle, Calendar, MapPin, Clock, Filter } from 'lucide-react-native';
 import type { ExtractedData, MultiRaceExtractedData } from './AIValidationScreen';
+
+const ALL_CLASSES = '__ALL__';
+
+/**
+ * Extract a normalized, deduped, sorted list of unique class names across all races.
+ * Case-insensitive dedupe but preserves the first-seen casing for display.
+ */
+function buildClassOptions(races: ExtractedData[]): string[] {
+  const seen = new Map<string, string>(); // lowercase → first-seen original
+  for (const race of races) {
+    const classes = (race as any).eligibleClasses as string[] | null | undefined;
+    if (!Array.isArray(classes)) continue;
+    for (const cls of classes) {
+      if (typeof cls !== 'string') continue;
+      const trimmed = cls.trim();
+      if (!trimmed) continue;
+      const key = trimmed.toLowerCase();
+      if (!seen.has(key)) seen.set(key, trimmed);
+    }
+  }
+  return Array.from(seen.values()).sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * Returns true if the race's eligibleClasses contains the target class.
+ * Substring + case-insensitive match so "IRC" filter catches "IRC Division 1", "IRC Monohull", etc.
+ */
+function raceMatchesClass(race: ExtractedData, targetClass: string): boolean {
+  const classes = (race as any).eligibleClasses as string[] | null | undefined;
+  if (!Array.isArray(classes) || classes.length === 0) return false; // ambiguous → excluded under specific filter
+  const needle = targetClass.toLowerCase();
+  return classes.some((cls) => typeof cls === 'string' && cls.toLowerCase().includes(needle));
+}
 
 interface MultiRaceSelectionScreenProps {
   extractedData: MultiRaceExtractedData;
@@ -27,8 +60,33 @@ export function MultiRaceSelectionScreen({
   onConfirm,
   onCancel,
 }: MultiRaceSelectionScreenProps) {
+  // Filter by class. ALL_CLASSES = no filter (shows everything including races with no eligibleClasses)
+  const [selectedClass, setSelectedClass] = useState<string>(ALL_CLASSES);
+
+  const classOptions = useMemo(() => buildClassOptions(extractedData.races), [extractedData.races]);
+
+  // Indices of races currently visible under the active class filter
+  const visibleIndices = useMemo(() => {
+    if (selectedClass === ALL_CLASSES) {
+      return extractedData.races.map((_, i) => i);
+    }
+    return extractedData.races
+      .map((race, i) => (raceMatchesClass(race, selectedClass) ? i : -1))
+      .filter((i) => i !== -1);
+  }, [extractedData.races, selectedClass]);
+
+  // Selected races. Resets to "all visible" whenever the filter changes —
+  // simpler and more predictable than carrying selections across hidden races.
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(
-    new Set(extractedData.races.map((_, index) => index)) // All selected by default
+    new Set(extractedData.races.map((_, index) => index)),
+  );
+  useEffect(() => {
+    setSelectedIndices(new Set(visibleIndices));
+  }, [visibleIndices]);
+
+  const visibleSelectedCount = useMemo(
+    () => visibleIndices.filter((i) => selectedIndices.has(i)).length,
+    [visibleIndices, selectedIndices],
   );
 
   const toggleRace = (index: number) => {
@@ -42,16 +100,21 @@ export function MultiRaceSelectionScreen({
   };
 
   const toggleAll = () => {
-    if (selectedIndices.size === extractedData.races.length) {
-      setSelectedIndices(new Set());
+    // Toggle only the currently visible races
+    const allVisibleSelected = visibleSelectedCount === visibleIndices.length;
+    const newSelected = new Set(selectedIndices);
+    if (allVisibleSelected) {
+      visibleIndices.forEach((i) => newSelected.delete(i));
     } else {
-      setSelectedIndices(new Set(extractedData.races.map((_, i) => i)));
+      visibleIndices.forEach((i) => newSelected.add(i));
     }
+    setSelectedIndices(newSelected);
   };
 
   const handleConfirm = () => {
-    const selectedRaces = extractedData.races.filter((_, index) =>
-      selectedIndices.has(index)
+    // Only confirm visible + selected races (matches what the user sees on screen)
+    const selectedRaces = extractedData.races.filter(
+      (_, index) => selectedIndices.has(index) && visibleIndices.includes(index),
     );
     onConfirm(selectedRaces);
   };
@@ -81,8 +144,10 @@ export function MultiRaceSelectionScreen({
     return timeString;
   };
 
-  // Group races by series
+  // Group races by series — only includes races visible under the active class filter
+  const visibleSet = useMemo(() => new Set(visibleIndices), [visibleIndices]);
   const groupedRaces = extractedData.races.reduce((acc, race, index) => {
+    if (!visibleSet.has(index)) return acc;
     const seriesName = race.raceSeriesName || 'Individual Races';
     if (!acc[seriesName]) {
       acc[seriesName] = [];
@@ -101,7 +166,9 @@ export function MultiRaceSelectionScreen({
         <View style={styles.headerContent}>
           <Text style={styles.headerTitle}>Multiple Races Detected!</Text>
           <Text style={styles.headerSubtitle}>
-            {extractedData.documentType} • {extractedData.races.length} races found
+            {`${extractedData.documentType || 'Document'} • ${extractedData.races.length} races found`}
+            {selectedClass !== ALL_CLASSES &&
+              ` • showing ${visibleIndices.length} for ${selectedClass}`}
           </Text>
         </View>
       </View>
@@ -111,7 +178,7 @@ export function MultiRaceSelectionScreen({
         <View style={styles.summaryCard}>
           <Text style={styles.summaryTitle}>📋 Document Summary</Text>
           <Text style={styles.summaryText}>
-            {`This ${extractedData.documentType} contains `}
+            {`This ${extractedData.documentType || 'document'} contains `}
             <Text style={styles.bold}>{extractedData.races.length} races</Text>
             {' in total.'}
             {extractedData.organizingAuthority && ` Organized by ${extractedData.organizingAuthority}.`}
@@ -121,21 +188,67 @@ export function MultiRaceSelectionScreen({
           </Text>
         </View>
 
+        {/* Class Filter — only shown if at least one race has eligibleClasses */}
+        {classOptions.length > 0 && (
+          <View style={styles.filterSection}>
+            <View style={styles.filterLabelRow}>
+              <Filter size={14} color="#475569" />
+              <Text style={styles.filterLabel}>Filter by class</Text>
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.filterChipsRow}
+            >
+              {[ALL_CLASSES, ...classOptions].map((cls) => {
+                const isActive = selectedClass === cls;
+                const label = cls === ALL_CLASSES ? 'All classes' : cls;
+                return (
+                  <TouchableOpacity
+                    key={cls}
+                    onPress={() => setSelectedClass(cls)}
+                    style={[styles.filterChip, isActive && styles.filterChipActive]}
+                  >
+                    <Text
+                      style={[
+                        styles.filterChipText,
+                        isActive && styles.filterChipTextActive,
+                      ]}
+                    >
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            {selectedClass !== ALL_CLASSES && (
+              <Text style={styles.filterHint}>
+                Hiding races where class isn't specified. Pick "All classes" to see them.
+              </Text>
+            )}
+          </View>
+        )}
+
         {/* Quick Actions */}
         <View style={styles.quickActions}>
           <TouchableOpacity
             onPress={toggleAll}
-            style={[styles.quickActionButton, styles.quickActionPrimary]}
+            disabled={visibleIndices.length === 0}
+            style={[
+              styles.quickActionButton,
+              styles.quickActionPrimary,
+              visibleIndices.length === 0 && styles.footerButtonDisabled,
+            ]}
           >
             <Text style={styles.quickActionTextPrimary}>
-              {selectedIndices.size === extractedData.races.length
+              {visibleSelectedCount === visibleIndices.length && visibleIndices.length > 0
                 ? 'Deselect All'
                 : 'Select All'}
             </Text>
           </TouchableOpacity>
           <View style={styles.selectionCount}>
             <Text style={styles.selectionCountText}>
-              {selectedIndices.size} of {extractedData.races.length} selected
+              {visibleSelectedCount} of {visibleIndices.length} selected
             </Text>
           </View>
         </View>
@@ -213,13 +326,13 @@ export function MultiRaceSelectionScreen({
         {/* Info Box - Different text based on selection count */}
         <View style={styles.infoBox}>
           <Text style={styles.infoText}>
-            {selectedIndices.size === 1 ? (
+            {visibleSelectedCount === 1 ? (
               <>
                 💡 <Text style={styles.bold}>Single Race:</Text> You'll review and edit the race details before it's added to your calendar.
               </>
-            ) : selectedIndices.size > 1 ? (
+            ) : visibleSelectedCount > 1 ? (
               <>
-                💡 <Text style={styles.bold}>Multiple Races:</Text> All {selectedIndices.size} races will be created with extracted details. You can edit each one individually from your Races tab.
+                💡 <Text style={styles.bold}>Multiple Races:</Text> All {visibleSelectedCount} races will be created with extracted details. You can edit each one individually from your Races tab.
               </>
             ) : (
               <>
@@ -240,19 +353,19 @@ export function MultiRaceSelectionScreen({
         </TouchableOpacity>
         <TouchableOpacity
           onPress={handleConfirm}
-          disabled={selectedIndices.size === 0}
+          disabled={visibleSelectedCount === 0}
           style={[
             styles.footerButton,
             styles.footerButtonConfirm,
-            selectedIndices.size === 0 && styles.footerButtonDisabled,
+            visibleSelectedCount === 0 && styles.footerButtonDisabled,
           ]}
         >
           <Text style={styles.footerButtonTextConfirm}>
-            {selectedIndices.size === 0 
+            {visibleSelectedCount === 0
               ? 'Select Races'
-              : selectedIndices.size === 1 
+              : visibleSelectedCount === 1
                 ? 'Review & Add Race'
-                : `Add ${selectedIndices.size} Races`}
+                : `Add ${visibleSelectedCount} Races`}
           </Text>
         </TouchableOpacity>
       </View>
@@ -319,6 +432,53 @@ const styles = StyleSheet.create({
   bold: {
     fontWeight: '600',
     color: '#1E293B',
+  },
+  filterSection: {
+    marginBottom: 16,
+  },
+  filterLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+  },
+  filterLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#475569',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  filterChipsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingRight: 16, // breathing room at end of horizontal scroll
+  },
+  filterChip: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+  },
+  filterChipActive: {
+    backgroundColor: '#3B82F6',
+    borderColor: '#3B82F6',
+  },
+  filterChipText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#475569',
+  },
+  filterChipTextActive: {
+    color: '#FFFFFF',
+  },
+  filterHint: {
+    fontSize: 12,
+    color: '#64748B',
+    fontStyle: 'italic',
+    marginTop: 8,
   },
   quickActions: {
     flexDirection: 'row',

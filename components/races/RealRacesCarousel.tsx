@@ -149,7 +149,6 @@ export function RealRacesCarousel({
   // Prioritize upcoming items first, then show past items
   const timelineItems: TimelineItem[] = useMemo(() => {
     const items: (TimelineItem & { hasDate: boolean })[] = [];
-    const now = new Date();
 
     // Add races
     races.forEach((race) => {
@@ -177,28 +176,21 @@ export function RealRacesCarousel({
       });
     }
 
-    // Separate upcoming and past items
-    // Consider an item "upcoming" if it has a valid date AND hasn't ended yet (start + 3 hours buffer)
-    // Items without dates are always treated as past
-    const upcoming = items.filter((item) => {
-      if (!item.hasDate) return false;
-      const endEstimate = new Date(item.date.getTime() + 3 * 60 * 60 * 1000);
-      return endEstimate > now;
+    // Single ordered list using the same sort key as the grid
+    // (baseCardGridRaces in app/(tabs)/races.tsx). Manual order wins:
+    // sort_order ASC primary, date ASC tiebreaker, id stable final tiebreaker.
+    // This keeps carousel scroll order in sync with grid card order so a single
+    // drag updates both views the same way.
+    items.sort((a, b) => {
+      const aSort = ((a.data as any).sort_order ?? 0) as number;
+      const bSort = ((b.data as any).sort_order ?? 0) as number;
+      if (aSort !== bSort) return aSort - bSort;
+      const aD = a.hasDate ? a.date.getTime() : Infinity;
+      const bD = b.hasDate ? b.date.getTime() : Infinity;
+      if (aD !== bD) return aD - bD;
+      return String((a.data as any).id ?? '').localeCompare(String((b.data as any).id ?? ''));
     });
-    const past = items.filter((item) => {
-      if (!item.hasDate) return true;
-      const endEstimate = new Date(item.date.getTime() + 3 * 60 * 60 * 1000);
-      return endEstimate <= now;
-    });
-
-    // Sort upcoming by date ascending (nearest first)
-    upcoming.sort((a, b) => a.date.getTime() - b.date.getTime());
-
-    // Sort past by date descending (most recent first)
-    past.sort((a, b) => b.date.getTime() - a.date.getTime());
-
-    // Return upcoming first, then past
-    return [...upcoming, ...past];
+    return items;
   }, [races, practiceSessions]);
 
   // Find selected race index for timeline layout (searches in combined timeline)

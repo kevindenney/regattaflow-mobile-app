@@ -67,8 +67,6 @@ export interface RacesFloatingHeaderProps {
   onAddPractice?: () => void;
   /** Callback when new season is pressed */
   onNewSeason?: () => void;
-  /** Callback when browse catalog is pressed */
-  onBrowseCatalog?: () => void;
   /** Callback when publish as blueprint is pressed */
   onPublishBlueprint?: () => void;
   /** Label for blueprint button (changes when already published) */
@@ -133,7 +131,6 @@ export function RacesFloatingHeader({
   onAddStep,
   onAddPractice,
   onNewSeason,
-  onBrowseCatalog,
   onPublishBlueprint,
   blueprintLabel,
   isBlueprintPublished,
@@ -275,46 +272,17 @@ export function RacesFloatingHeader({
   }
   const subtitle = subtitleParts.length > 0 ? subtitleParts.join(' | ') : undefined;
 
-  // Build custom subtitle content with separately tappable parts:
-  // "All Clinicals" → season selector | "2 of 3" → step picker | "1 upcoming" → next step
-  const hasMultipleActions = Boolean(onSeasonPress && (hasIndexCounter || hasUpcoming)) || Boolean(isBlueprintPublished && onPublishBlueprint) || Boolean(onToggleDomainView);
+  // Build custom subtitle content with separately tappable parts.
+  // Kept focused: season | current of total | N upcoming.
+  // Domain toggle and Published indicator were removed — the active-interest
+  // pill in the header already identifies the domain, and blueprint-published
+  // state belongs near the blueprint actions rather than in the subtitle.
+  const hasMultipleActions = Boolean(onSeasonPress && (hasIndexCounter || hasUpcoming));
   const subtitleContent = hasMultipleActions ? (
     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-      {onToggleDomainView && domainLabel && (
-        <>
-          <Pressable
-            onPress={onToggleDomainView}
-            hitSlop={{ top: 8, bottom: 8, right: 4 }}
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 3,
-              backgroundColor: isDomainView ? 'rgba(0,137,123,0.1)' : undefined,
-              paddingHorizontal: isDomainView ? 6 : 0,
-              paddingVertical: isDomainView ? 2 : 0,
-              borderRadius: 6,
-            }}
-          >
-            <Ionicons
-              name={isDomainView ? 'apps' : 'apps-outline'}
-              size={11}
-              color={isDomainView ? '#00897B' : IOS_COLORS.secondaryLabel}
-            />
-            <Text style={{
-              fontSize: 12,
-              color: isDomainView ? '#00897B' : IOS_COLORS.secondaryLabel,
-              fontWeight: isDomainView ? '600' : '400',
-            }}>
-              {domainLabel}
-            </Text>
-          </Pressable>
-          {(seasonLabel || hasIndexCounter || hasUpcoming || (isBlueprintPublished && onPublishBlueprint)) && (
-            <Text style={{ fontSize: 13, color: IOS_COLORS.secondaryLabel, marginHorizontal: 4 }}>|</Text>
-          )}
-        </>
-      )}
       {seasonLabel && (
-        <Pressable onPress={onSeasonPress} hitSlop={{ top: 8, bottom: 8, right: 4 }}>
+        <Pressable onPress={onSeasonPress} hitSlop={{ top: 8, bottom: 8, right: 4 }} style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+          <Ionicons name="grid-outline" size={11} color={IOS_COLORS.systemBlue} />
           <Text style={{ fontSize: 13, color: IOS_COLORS.systemBlue, fontWeight: '500' }}>
             {seasonLabel}
           </Text>
@@ -341,19 +309,6 @@ export function RacesFloatingHeader({
             {upcomingRaces} upcoming
           </Text>
         </Pressable>
-      )}
-      {isBlueprintPublished && onPublishBlueprint && (
-        <>
-          {(seasonLabel || hasIndexCounter || hasUpcoming) && (
-            <Text style={{ fontSize: 13, color: IOS_COLORS.secondaryLabel, marginHorizontal: 4 }}>|</Text>
-          )}
-          <Pressable onPress={onPublishBlueprint} hitSlop={{ top: 8, bottom: 8, left: 4 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-              <Ionicons name="layers" size={11} color="#00897B" />
-              <Text style={{ fontSize: 12, color: '#00897B', fontWeight: '600' }}>Published</Text>
-            </View>
-          </Pressable>
-        </>
       )}
     </View>
   ) : undefined;
@@ -395,8 +350,9 @@ export function RacesFloatingHeader({
       <TourStep step="add_your_race" position="bottom" horizontalAlign="targetRight" distance={18}>
         <View ref={addButtonRef} collapsable={collapsableProp}>
           <AnimatedPressable
-            style={[capsuleStyles.actionButton, addButtonAnimStyle]}
+            style={[capsuleStyles.actionButton, addButtonAnimStyle, isLoading && { opacity: 0.4 }]}
             onPress={handleAddPress}
+            disabled={isLoading}
             onPressIn={() => {
               addButtonScale.value = withSpring(0.9, IOS_ANIMATIONS.spring.stiff);
             }}
@@ -592,28 +548,6 @@ export function RacesFloatingHeader({
                     </>
                   ) : null}
 
-                  {onBrowseCatalog ? (
-                    <>
-                      <View style={styles.menuSeparator} />
-                      <TouchableOpacity
-                        style={styles.menuOption}
-                        onPress={() => handleMenuOption(onBrowseCatalog)}
-                        activeOpacity={0.7}
-                      >
-                        <View style={[styles.menuOptionIcon, { backgroundColor: `${IOS_COLORS.systemPurple}15` }]}>
-                          <MaterialCommunityIcons name="trophy-outline" size={24} color={IOS_COLORS.systemPurple} />
-                        </View>
-                        <View style={styles.menuOptionContent}>
-                          <Text style={styles.menuOptionTitle}>Browse Clinical Catalog</Text>
-                          <Text style={styles.menuOptionSubtitle}>
-                            {config.catalogSubtitle ?? 'Browse courses and clinical skills'}
-                          </Text>
-                        </View>
-                        <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />
-                      </TouchableOpacity>
-                    </>
-                  ) : null}
-
                   {onPublishBlueprint ? (
                     <>
                       <View style={styles.menuSeparator} />
@@ -719,29 +653,6 @@ export function RacesFloatingHeader({
                           <Text style={styles.menuOptionTitle}>New {vocab('Period')}</Text>
                           <Text style={styles.menuOptionSubtitle}>
                             Start a new {vocab('Period').toLowerCase()}
-                          </Text>
-                        </View>
-                        <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />
-                      </TouchableOpacity>
-                    </>
-                  )}
-
-                  {/* Browse Catalog Option */}
-                  {onBrowseCatalog && (
-                    <>
-                      <View style={styles.menuSeparator} />
-                      <TouchableOpacity
-                        style={styles.menuOption}
-                        onPress={() => handleMenuOption(onBrowseCatalog)}
-                        activeOpacity={0.7}
-                      >
-                        <View style={[styles.menuOptionIcon, { backgroundColor: `${IOS_COLORS.systemPurple}15` }]}>
-                          <MaterialCommunityIcons name="trophy-outline" size={24} color={IOS_COLORS.systemPurple} />
-                        </View>
-                        <View style={styles.menuOptionContent}>
-                          <Text style={styles.menuOptionTitle}>Browse {config.eventNoun} Catalog</Text>
-                          <Text style={styles.menuOptionSubtitle}>
-                            {config.catalogSubtitle ?? `Find and follow ${config.eventNoun.toLowerCase()}s`}
                           </Text>
                         </View>
                         <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />

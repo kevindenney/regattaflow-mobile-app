@@ -22,6 +22,7 @@ import { supabase } from '@/services/supabase';
 import { AdaptiveLearningService } from '@/services/AdaptiveLearningService';
 import type { RaceAnalysisData } from '@/hooks/useRaceAnalysisData';
 import { createLogger } from '@/lib/utils/logger';
+import { inferRaceCountFromTitle } from '@/lib/utils/raceTitle';
 
 const logger = createLogger('RaceResultDetailSheet');
 
@@ -186,13 +187,14 @@ const createInitialRaceResults = (count: number): RaceResultEntry[] =>
     keyMoment: '',
   }));
 
+
 // ─── Main Sheet ─────────────────────────────────────────────────────
 
 export function RaceResultDetailSheet({
   isOpen,
   onClose,
   raceId,
-  raceName: _raceName,
+  raceName,
   raceDate,
   userId,
   analysisData,
@@ -206,10 +208,15 @@ export function RaceResultDetailSheet({
   // Session management
   const [sessionId, setSessionId] = useState<string | null>(propTimerSessionId || null);
   const [isCreatingSession, setIsCreatingSession] = useState(false);
+  const [sessionError, setSessionError] = useState<string | null>(null);
 
-  // Form state
-  const [raceCount, setRaceCount] = useState(1);
-  const [raceResults, setRaceResults] = useState<RaceResultEntry[]>(createInitialRaceResults(1));
+  // Form state — default seeded from the step title so a "Races 5 & 6" step
+  // lands on the 2-race layout without making the sailor click the pill.
+  const inferredCount = inferRaceCountFromTitle(raceName);
+  const [raceCount, setRaceCount] = useState(inferredCount);
+  const [raceResults, setRaceResults] = useState<RaceResultEntry[]>(
+    createInitialRaceResults(inferredCount),
+  );
   const [narrative, setNarrative] = useState('');
   const [startEnd, setStartEnd] = useState<'pin' | 'middle' | 'boat' | null>(null);
   const [notes, setNotes] = useState('');
@@ -230,18 +237,27 @@ export function RaceResultDetailSheet({
     if (!isOpen) return;
 
     if (analysisData) {
-      const count = analysisData.raceCount || 1;
+      // Prefer saved raceCount, but fall back to title inference when the
+      // server returned 1 despite the title implying more races.
+      const count = analysisData.raceCount && analysisData.raceCount > 1
+        ? analysisData.raceCount
+        : Math.max(analysisData.raceCount || 1, inferredCount);
       setRaceCount(count);
 
       if (analysisData.raceResults && analysisData.raceResults.length > 0) {
-        setRaceResults(
-          analysisData.raceResults.map((r) => ({
-            raceNumber: r.raceNumber,
+        // Pad to `count` so a saved entry for Race 1 still shows an empty
+        // Race 2 slot when the step covers multiple races.
+        const padded = createInitialRaceResults(count);
+        for (const r of analysisData.raceResults) {
+          const idx = Math.max(0, Math.min(count - 1, (r.raceNumber || 1) - 1));
+          padded[idx] = {
+            raceNumber: idx + 1,
             position: r.position?.toString() || '',
             fleetSize: r.fleetSize?.toString() || '',
             keyMoment: r.keyMoment || '',
-          }))
-        );
+          };
+        }
+        setRaceResults(padded);
       } else if (analysisData.selfReportedPosition) {
         const results = createInitialRaceResults(count);
         results[0].position = analysisData.selfReportedPosition.toString();
@@ -252,15 +268,15 @@ export function RaceResultDetailSheet({
         setRaceResults(createInitialRaceResults(count));
       }
     } else {
-      setRaceCount(1);
-      setRaceResults(createInitialRaceResults(1));
+      setRaceCount(inferredCount);
+      setRaceResults(createInitialRaceResults(inferredCount));
       setNarrative('');
       setStartEnd(null);
       setNotes('');
     }
 
     setValidationError(null);
-  }, [isOpen, analysisData]);
+  }, [isOpen, analysisData, inferredCount]);
 
   // Ensure session exists when sheet opens
   useEffect(() => {
@@ -303,12 +319,15 @@ export function RaceResultDetailSheet({
 
         if (createError) {
           logger.error('Create session error', createError);
+          setSessionError('Could not create session. Your results may not save.');
           return;
         }
 
         setSessionId(created.id);
+        setSessionError(null);
       } catch (err) {
         logger.error('Session error', err);
+        setSessionError('Could not create session. Your results may not save.');
       } finally {
         setIsCreatingSession(false);
       }
@@ -357,11 +376,6 @@ export function RaceResultDetailSheet({
 
   // Save
   const handleSave = useCallback(async () => {
-    if (!sessionId) {
-      setValidationError('No race session found. Please try again.');
-      return;
-    }
-
     // Validate
     for (const race of raceResults) {
       if (race.position && !race.fleetSize) {
@@ -384,10 +398,50 @@ export function RaceResultDetailSheet({
       return;
     }
 
+    if (!effectiveUserId) {
+      setValidationError('You need to be signed in to save results.');
+      return;
+    }
+
     setValidationError(null);
     setIsSaving(true);
 
     try {
+      // Resolve the session id inline so the save works even if the
+      // background ensureSession effect is still pending (or hung on auth
+      // refresh). Prefer the cached id; otherwise fetch/create on demand.
+      let activeSessionId = sessionId;
+      if (!activeSessionId) {
+        const { data: existing } = await supabase
+          .from('race_timer_sessions')
+          .select('id')
+          .eq('regatta_id', raceId)
+          .eq('sailor_id', effectiveUserId)
+          .order('end_time', { ascending: false })
+          .limit(1);
+
+        if (existing && existing.length > 0) {
+          activeSessionId = existing[0].id;
+        } else {
+          const nowIso = new Date().toISOString();
+          const { data: created, error: createError } = await supabase
+            .from('race_timer_sessions')
+            .insert({
+              sailor_id: effectiveUserId,
+              regatta_id: raceId,
+              start_time: raceDate || nowIso,
+              end_time: nowIso,
+              duration_seconds: 0,
+            })
+            .select('id')
+            .single();
+
+          if (createError || !created) throw createError || new Error('Could not create race session');
+          activeSessionId = created.id;
+        }
+        setSessionId(activeSessionId);
+      }
+
       const fullNotes = [
         narrative,
         startEnd ? `Start: ${startEnd} end` : '',
@@ -420,7 +474,7 @@ export function RaceResultDetailSheet({
       const { error } = await supabase
         .from('race_timer_sessions')
         .update(updatePayload)
-        .eq('id', sessionId);
+        .eq('id', activeSessionId);
 
       if (error) throw error;
 
@@ -453,7 +507,7 @@ export function RaceResultDetailSheet({
     } finally {
       setIsSaving(false);
     }
-  }, [sessionId, raceResults, raceCount, narrative, startEnd, notes, effectiveUserId, raceId, onSaveComplete, onClose]);
+  }, [sessionId, raceResults, raceCount, narrative, startEnd, notes, effectiveUserId, raceId, raceDate, onSaveComplete, onClose]);
 
   const handleClose = useCallback(() => {
     if (Platform.OS !== 'web') {
@@ -490,6 +544,13 @@ export function RaceResultDetailSheet({
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.content}>
+            {/* Session error banner */}
+            {sessionError && (
+              <View style={styles.sessionErrorBanner}>
+                <Text style={styles.sessionErrorText}>{sessionError}</Text>
+              </View>
+            )}
+
             {/* Sparkline (larger version) */}
             {recentResults.length > 0 && (
               <View style={styles.sparklineContainer}>
@@ -583,7 +644,7 @@ export function RaceResultDetailSheet({
 
             {/* Start end segmented control */}
             <View style={styles.fieldGroup}>
-              <Text style={styles.fieldLabel}>START END</Text>
+              <Text style={styles.fieldLabel}>START POSITION</Text>
               <View style={styles.pillRow}>
                 {(['pin', 'middle', 'boat'] as const).map((option) => (
                   <Pressable
@@ -636,7 +697,7 @@ export function RaceResultDetailSheet({
             <Pressable
               style={[styles.doneButton, isSaving && styles.doneButtonDisabled]}
               onPress={handleSave}
-              disabled={isSaving || isCreatingSession}
+              disabled={isSaving}
             >
               {isSaving ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
@@ -670,6 +731,23 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 40,
+  },
+  sessionErrorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 12,
+    marginBottom: 12,
+    backgroundColor: '#FFF7ED',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+  },
+  sessionErrorText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#9A3412',
+    lineHeight: 18,
   },
   header: {
     flexDirection: 'row',
