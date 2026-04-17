@@ -43,7 +43,7 @@ const isProgramWorkspace = (
 ): boolean => {
   const domain = String(activeDomain || '').toLowerCase().trim();
   if (domain === 'sailing') return false;
-  if (domain === 'nursing' || domain === 'drawing' || domain === 'fitness' || domain === 'health-and-fitness') return true;
+  if (domain === 'nursing' || domain === 'drawing' || domain === 'fitness' || domain === 'health-and-fitness' || domain === 'lac-craft-business') return true;
   return organizationType === 'institution';
 };
 
@@ -60,7 +60,7 @@ const getEventTabTitle = (
   activeDomain?: string | null
 ): string => {
   const domain = String(activeDomain || '').toLowerCase().trim();
-  const defaultLabel = domain === 'sailing' ? 'Race' : 'Event';
+  const defaultLabel = domain === 'sailing' ? 'Race' : 'Practice';
   if (!vocabulary) return defaultLabel;
   const term = vocabulary['Learning Event'];
   if (!term) return defaultLabel;
@@ -87,10 +87,10 @@ export const getTabsForUserType = (
   if (isGuest) {
     return [
       { name: 'races', title: eventTitle, icon: 'flag-outline', iconFocused: 'flag' },
+      { name: 'playbook', title: 'Playbook', icon: 'book-outline', iconFocused: 'book' },
       { name: 'discover', title: 'Discover', icon: 'compass-outline', iconFocused: 'compass' },
-      { name: 'learn', title: 'Learn', icon: 'book-outline', iconFocused: 'book' },
+      { name: 'learn', title: 'Learn', icon: 'school-outline', iconFocused: 'school' },
       { name: 'reflect', title: 'Reflect', icon: 'stats-chart-outline', iconFocused: 'stats-chart' },
-      { name: 'search', title: 'Search', icon: 'search-outline', iconFocused: 'search' },
     ];
   }
 
@@ -115,23 +115,17 @@ export const getTabsForUserType = (
     ];
   }
 
-  // Legacy support: pure coach user type (will be migrated to sailor + capability)
-  if (userType === 'coach' && !capabilities?.hasCoaching) {
-    return [
-      { name: 'clients', title: 'Clients', icon: 'people-outline', iconFocused: 'people' },
-      { name: 'schedule', title: 'Schedule', icon: 'calendar-outline', iconFocused: 'calendar' },
-      { name: 'earnings', title: 'Earnings', icon: 'cash-outline', iconFocused: 'cash' },
-    ];
-  }
+  // Legacy coach users now get the same tabs as learners (coach persona deprecated)
+  // Existing coaches with hasCoaching capability still get coaching tabs below.
 
   // Learners (sailors, nurses, artists, athletes — including those with coaching capability)
   if (userType === 'sailor' || userType === 'coach') {
     const tabs: TabConfig[] = [
       { name: 'races', title: eventTitle, icon: 'flag-outline', iconFocused: 'flag' },
+      { name: 'playbook', title: 'Playbook', icon: 'book-outline', iconFocused: 'book' },
       { name: 'discover', title: 'Discover', icon: 'compass-outline', iconFocused: 'compass' },
-      { name: 'learn', title: 'Learn', icon: 'book-outline', iconFocused: 'book' },
+      { name: 'learn', title: 'Learn', icon: 'school-outline', iconFocused: 'school' },
       { name: 'reflect', title: 'Reflect', icon: 'stats-chart-outline', iconFocused: 'stats-chart' },
-      { name: 'search', title: 'Search', icon: 'search-outline', iconFocused: 'search' },
     ];
 
     // Add coaching tabs if user has coaching capability
@@ -157,14 +151,14 @@ export const getTabsForUserType = (
 // Navigation items by persona (used by NavigationDrawer and WebSidebarNav)
 export const SAILOR_NAV_ITEMS: NavItem[] = [
   { key: 'races', label: 'Race', route: '/(tabs)/races', icon: 'flag-outline' },
+  { key: 'playbook', label: 'Playbook', route: '/(tabs)/playbook', icon: 'book-outline' },
   { key: 'discover', label: 'Discover', route: '/(tabs)/discover', icon: 'compass-outline' },
   { key: 'learn', label: 'Learn', route: '/(tabs)/learn', icon: 'school-outline' },
   { key: 'reflect', label: 'Reflect', route: '/(tabs)/reflect', icon: 'stats-chart-outline' },
-  { key: 'search', label: 'Search', route: '/(tabs)/search', icon: 'search-outline' },
 ];
 
 export const SAILOR_SECONDARY_ITEMS: NavItem[] = [
-  { key: 'playbook', label: 'Playbook', route: '/playbook', icon: 'book-outline' },
+  { key: 'search', label: 'Search', route: '/(tabs)/search', icon: 'search-outline' },
 ];
 
 export const COACH_NAV_ITEMS: NavItem[] = [

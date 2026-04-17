@@ -66,9 +66,9 @@ const WEATHER_ITEMS: ChecklistItem[] = [
 const BASE_EQUIPMENT_ITEMS: ChecklistItem[] = [
   {
     id: 'sails',
-    label: 'Check sails for damage',
+    label: 'Select & inspect sails',
     priority: 'high',
-    description: 'Inspect main, jib, and spinnaker for tears, UV damage, or worn stitching',
+    description: 'Choose sails for race conditions and inspect for damage',
     raceTypes: ['fleet', 'distance', 'match', 'team'],
     phase: 'days_before',
     category: 'equipment',
