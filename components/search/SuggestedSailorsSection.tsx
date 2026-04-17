@@ -127,10 +127,10 @@ export function SuggestedSailorsSection({
       <View style={styles.header}>
         <View style={styles.headerTextContainer}>
           <Text style={styles.headerTitle}>
-            {unfollowedSuggestions.length} Sailors to Follow
+            {unfollowedSuggestions.length} People to Follow
           </Text>
           <Text style={styles.headerSubtitle}>
-            People in your fleet and club
+            People in your community
           </Text>
         </View>
         {unfollowedSuggestions.length > 0 && (

@@ -98,7 +98,7 @@ export function DiscoverInterestsContent({
         const isHidden = !userInterestSlugs.has(slug);
         if (isHidden) await addInterest(slug);
         await switchInterest(slug);
-        showAlert('Interest Active', `${name} is now your active interest.`);
+        showAlert('Interest Added', `${name} has been added to your interests.`);
       } else {
         const sampleInterest = SAMPLE_INTERESTS.find((i) => i.slug === slug);
         const { error } = await supabase
@@ -260,7 +260,7 @@ export function DiscoverInterestsContent({
         >
           <Ionicons name="add-circle-outline" size={16} color={interest.accentColor} />
           <Text style={[styles.addBtnText, { color: interest.accentColor }]}>
-            Switch to {interest.name}
+            Add {interest.name}
           </Text>
         </TouchableOpacity>
       )}
