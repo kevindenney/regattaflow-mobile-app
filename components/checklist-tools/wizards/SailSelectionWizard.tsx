@@ -8,6 +8,7 @@
 
 import { NudgeList } from '@/components/checklist-tools/NudgeBanner';
 import { QuickAddSailButton, QuickAddSailForm } from '@/components/checklist-tools/QuickAddSailForm';
+import { SailInspectionWizard } from '@/components/sail-inspection';
 import { usePersonalizedNudges } from '@/hooks/useAdaptiveLearning';
 import { useAuth } from '@/providers/AuthProvider';
 import { formatSailDisplayName, getSailConditionColor, useSailInventory } from '@/hooks/useSailInventory';
@@ -28,15 +29,21 @@ import {
   ChevronDown,
   ChevronUp,
   CircleDot,
+  Eye,
+  Pencil,
+  Plus,
   Sailboat,
   Sparkles,
+  Trash2,
   Wind,
   X
 } from 'lucide-react-native';
+import { equipmentService } from '@/services/EquipmentService';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
+  Modal as RNModal,
   Platform,
   Pressable,
   ScrollView,
@@ -45,8 +52,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { showAlert } from '@/lib/utils/crossPlatformAlert';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 
 // iOS System Colors
 const IOS_COLORS = {
@@ -163,55 +169,89 @@ export function SailSelectionWizard({
     downwindId?: string;
   }>(existingIntention?.selectedSails || {});
   const [userNotes, setUserNotes] = useState(existingIntention?.userNotes || '');
-  const [expandedCategory, setExpandedCategory] = useState<SailCategory | null>(null);
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<SailCategory>>(new Set());
   const [isSaving, setIsSaving] = useState(false);
   const [showQuickAddSail, setShowQuickAddSail] = useState(false);
+  const [inspectingSail, setInspectingSail] = useState<SailInventoryItem | null>(null);
+  const [addingToCategory, setAddingToCategory] = useState<SailCategory | null>(null);
+  const [newSailName, setNewSailName] = useState('');
+  const [newSailMaker, setNewSailMaker] = useState('');
+  const [newSailWeight, setNewSailWeight] = useState<'light' | 'medium' | 'heavy'>('medium');
+  const [isAddingSail, setIsAddingSail] = useState(false);
+  const [editingSailId, setEditingSailId] = useState<string | null>(null);
+  const [editSailName, setEditSailName] = useState('');
+  const [editSailMaker, setEditSailMaker] = useState('');
+  const [editSailWeight, setEditSailWeight] = useState<'light' | 'medium' | 'heavy'>('medium');
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+  // Check for unsaved changes before closing
+  const hasUnsavedChanges = useMemo(() => {
+    const origSails = existingIntention?.selectedSails || {};
+    const origNotes = existingIntention?.userNotes || '';
+    const sailsChanged =
+      selectedSails.mainsailId !== origSails.mainsailId ||
+      selectedSails.headsailId !== origSails.headsailId ||
+      selectedSails.downwindId !== origSails.downwindId;
+    return sailsChanged || userNotes !== origNotes;
+  }, [selectedSails, userNotes, existingIntention]);
+
+  const handleClose = useCallback(() => {
+    if (hasUnsavedChanges) {
+      showConfirm(
+        'Discard Changes?',
+        'You have unsaved sail selections.',
+        () => onCancel(),
+        { destructive: true, confirmText: 'Discard' }
+      );
+    } else {
+      onCancel();
+    }
+  }, [hasUnsavedChanges, onCancel]);
 
   // Fetch recommendations when sails are loaded
-  useEffect(() => {
+  const fetchRecommendations = useCallback(async () => {
     if (!hasSails || isLoadingSails) return;
+    setIsLoadingRecommendations(true);
+    setRecommendationError(null);
+    try {
+      const recs = await sailRecommendationService.getAIEnhancedRecommendations({
+        sails: sailInventory,
+        wind: wind || {},
+        waveState: waveState || undefined,
+        boatClass: boatClass || undefined,
+      });
+      setRecommendations(recs);
 
-    const fetchRecommendations = async () => {
-      setIsLoadingRecommendations(true);
-      setRecommendationError(null);
+      // Pre-select recommended sails if no existing selection
+      if (!existingIntention?.selectedSails) {
+        setSelectedSails({
+          mainsailId: recs.mainsail?.sailId,
+          headsailId: recs.headsail?.sailId,
+          downwindId: recs.downwind?.sailId,
+        });
+      }
+    } catch (error) {
+      console.error('Failed to get sail recommendations:', error);
+      setRecommendationError(normalizeRecommendationError(error));
       try {
-        const recs = await sailRecommendationService.getAIEnhancedRecommendations({
+        const fallback = await sailRecommendationService.getRecommendations({
           sails: sailInventory,
           wind: wind || {},
           waveState: waveState || undefined,
           boatClass: boatClass || undefined,
         });
-        setRecommendations(recs);
-
-        // Pre-select recommended sails if no existing selection
-        if (!existingIntention?.selectedSails) {
-          setSelectedSails({
-            mainsailId: recs.mainsail?.sailId,
-            headsailId: recs.headsail?.sailId,
-            downwindId: recs.downwind?.sailId,
-          });
-        }
-      } catch (error) {
-        console.error('Failed to get sail recommendations:', error);
-        setRecommendationError(normalizeRecommendationError(error));
-        try {
-          const fallback = await sailRecommendationService.getRecommendations({
-            sails: sailInventory,
-            wind: wind || {},
-            waveState: waveState || undefined,
-            boatClass: boatClass || undefined,
-          });
-          setRecommendations(fallback);
-        } catch {
-          setRecommendations(null);
-        }
-      } finally {
-        setIsLoadingRecommendations(false);
+        setRecommendations(fallback);
+      } catch {
+        setRecommendations(null);
       }
-    };
-
-    fetchRecommendations();
+    } finally {
+      setIsLoadingRecommendations(false);
+    }
   }, [hasSails, isLoadingSails, sailInventory, wind, waveState, boatClass, existingIntention]);
+
+  useEffect(() => {
+    fetchRecommendations();
+  }, [fetchRecommendations]);
 
   // Format conditions summary
   const conditionsSummary = useMemo(() => {
@@ -242,6 +282,102 @@ export function SailSelectionWizard({
       [`${category}Id`]: sailId,
     }));
   }, []);
+
+  // Handle inspect sail
+  const handleInspectSail = useCallback((sail: SailInventoryItem) => {
+    setInspectingSail(sail);
+  }, []);
+
+  const handleInspectionComplete = useCallback(() => {
+    setInspectingSail(null);
+    refreshSails();
+  }, [refreshSails]);
+
+  // Handle add sail
+  const CATEGORY_DB_MAP: Record<SailCategory, string> = {
+    mainsail: 'mainsail',
+    headsail: 'genoa',
+    downwind: 'spinnaker',
+  };
+
+  const handleAddSail = useCallback(async () => {
+    if (!boatId || !addingToCategory) return;
+    setIsAddingSail(true);
+    try {
+      const dbCategory = CATEGORY_DB_MAP[addingToCategory];
+      const categoryLabel = addingToCategory === 'mainsail' ? 'Mainsail' : addingToCategory === 'headsail' ? 'Genoa' : 'Spinnaker';
+      await equipmentService.createEquipment({
+        boat_id: boatId,
+        category: dbCategory,
+        custom_name: newSailName.trim() || `${categoryLabel} #${(allSails.length + 1)}`,
+        manufacturer: newSailMaker.trim() || undefined,
+        condition_rating: 8,
+        specifications: { sailWeight: newSailWeight },
+      });
+      setAddingToCategory(null);
+      setNewSailName('');
+      setNewSailMaker('');
+      setNewSailWeight('medium');
+      await refreshSails();
+    } catch (error) {
+      console.error('Failed to add sail:', error);
+      showAlert('Error', 'Failed to add sail. Please try again.');
+    } finally {
+      setIsAddingSail(false);
+    }
+  }, [boatId, addingToCategory, newSailName, newSailMaker, refreshSails]);
+
+  // Handle delete sail with confirmation
+  const handleDeleteSail = useCallback((sail: SailInventoryItem) => {
+    showConfirm(
+      'Remove Sail',
+      `Remove "${formatSailDisplayName(sail)}" from your inventory?`,
+      async () => {
+        try {
+          await equipmentService.deleteEquipment(sail.id);
+          setSelectedSails((prev) => {
+            const updated = { ...prev };
+            if (prev.mainsailId === sail.id) delete updated.mainsailId;
+            if (prev.headsailId === sail.id) delete updated.headsailId;
+            if (prev.downwindId === sail.id) delete updated.downwindId;
+            return updated;
+          });
+          await refreshSails();
+        } catch (error) {
+          console.error('Failed to delete sail:', error);
+          showAlert('Error', 'Failed to remove sail. Please try again.');
+        }
+      },
+      { destructive: true }
+    );
+  }, [refreshSails]);
+
+  // Handle start editing sail
+  const handleStartEdit = useCallback((sail: SailInventoryItem) => {
+    setEditingSailId(sail.id);
+    setEditSailName(sail.customName || '');
+    setEditSailMaker(sail.manufacturer || '');
+    setEditSailWeight(sail.sailWeight || 'medium');
+  }, []);
+
+  // Handle save edit
+  const handleSaveEdit = useCallback(async (sailId: string) => {
+    setIsSavingEdit(true);
+    try {
+      await equipmentService.updateEquipment(sailId, {
+        custom_name: editSailName.trim() || undefined,
+        manufacturer: editSailMaker.trim() || undefined,
+        specifications: { sailWeight: editSailWeight },
+      });
+      setEditingSailId(null);
+      await refreshSails();
+    } catch (error) {
+      console.error('Failed to update sail:', error);
+      showAlert('Error', 'Failed to update sail. Please try again.');
+    } finally {
+      setIsSavingEdit(false);
+    }
+  }, [editSailName, editSailMaker, editSailWeight, refreshSails]);
 
   // Handle save
   const handleSave = useCallback(async () => {
@@ -310,6 +446,25 @@ export function SailSelectionWizard({
     }, 150);
   }, [router, onCancel]);
 
+  // Sail weight display helpers
+  const getWeightLabel = (weight?: 'light' | 'medium' | 'heavy') => {
+    switch (weight) {
+      case 'light': return 'Light';
+      case 'medium': return 'Medium';
+      case 'heavy': return 'Heavy';
+      default: return null;
+    }
+  };
+
+  const getWeightColor = (weight?: 'light' | 'medium' | 'heavy') => {
+    switch (weight) {
+      case 'light': return IOS_COLORS.blue;
+      case 'medium': return IOS_COLORS.orange;
+      case 'heavy': return IOS_COLORS.red;
+      default: return IOS_COLORS.gray;
+    }
+  };
+
   // Render a sail option
   const renderSailOption = (
     sail: SailInventoryItem,
@@ -319,42 +474,156 @@ export function SailSelectionWizard({
     const isSelected =
       selectedSails[`${category}Id` as keyof typeof selectedSails] === sail.id;
     const conditionColor = getSailConditionColor(sail.conditionRating);
+    const isEditing = editingSailId === sail.id;
+
+    // Inline edit form
+    if (isEditing) {
+      return (
+        <View key={sail.id} style={[styles.sailOption, styles.sailOptionEditing]}>
+          <TextInput
+            style={styles.editSailInput}
+            value={editSailName}
+            onChangeText={setEditSailName}
+            placeholder="Sail name"
+            placeholderTextColor={IOS_COLORS.tertiaryLabel}
+            autoFocus
+          />
+          <TextInput
+            style={styles.editSailInput}
+            value={editSailMaker}
+            onChangeText={setEditSailMaker}
+            placeholder="Sailmaker (optional)"
+            placeholderTextColor={IOS_COLORS.tertiaryLabel}
+          />
+          <View style={styles.weightPickerRow}>
+            <Text style={styles.weightPickerLabel}>Cloth Weight</Text>
+            <View style={styles.weightPickerOptions}>
+              {(['light', 'medium', 'heavy'] as const).map((w) => (
+                <Pressable
+                  key={w}
+                  style={[
+                    styles.weightPickerOption,
+                    editSailWeight === w && { backgroundColor: `${getWeightColor(w)}18`, borderColor: getWeightColor(w) },
+                  ]}
+                  onPress={() => setEditSailWeight(w)}
+                >
+                  <Text
+                    style={[
+                      styles.weightPickerOptionText,
+                      editSailWeight === w && { color: getWeightColor(w), fontWeight: '600' },
+                    ]}
+                  >
+                    {getWeightLabel(w)}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+          <View style={styles.inlineAddActions}>
+            <Pressable style={styles.inlineAddCancel} onPress={() => setEditingSailId(null)}>
+              <Text style={styles.inlineAddCancelText}>Cancel</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.inlineAddSave, isSavingEdit && styles.inlineAddSaveDisabled]}
+              onPress={() => handleSaveEdit(sail.id)}
+              disabled={isSavingEdit}
+            >
+              {isSavingEdit ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.inlineAddSaveText}>Save</Text>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      );
+    }
 
     return (
-      <Pressable
-        key={sail.id}
-        style={[styles.sailOption, isSelected && styles.sailOptionSelected]}
-        onPress={() => handleSelectSail(category, sail.id)}
-      >
-        <View style={styles.sailOptionLeft}>
+      <View key={sail.id} style={[styles.sailOption, isSelected && styles.sailOptionSelected]}>
+        {/* Main row — tap to select */}
+        <Pressable
+          style={styles.sailOptionMainRow}
+          onPress={() => handleSelectSail(category, sail.id)}
+        >
           <CircleDot
             size={20}
             color={isSelected ? IOS_COLORS.blue : IOS_COLORS.gray3}
             fill={isSelected ? IOS_COLORS.blue : 'transparent'}
           />
           <View style={styles.sailOptionInfo}>
-            <Text style={[styles.sailOptionName, isSelected && styles.sailOptionNameSelected]}>
-              {formatSailDisplayName(sail)}
-            </Text>
-            {sail.conditionRating && (
-              <View style={styles.sailConditionRow}>
-                <View
-                  style={[styles.sailConditionDot, { backgroundColor: conditionColor }]}
-                />
+            <View style={styles.sailNameRow}>
+              <Text style={[styles.sailOptionName, isSelected && styles.sailOptionNameSelected]}>
+                {formatSailDisplayName(sail)}
+              </Text>
+              {sail.sailWeight && (
+                <View style={[styles.weightBadge, { backgroundColor: `${getWeightColor(sail.sailWeight)}15` }]}>
+                  <Text style={[styles.weightBadgeText, { color: getWeightColor(sail.sailWeight) }]}>
+                    {getWeightLabel(sail.sailWeight)}
+                  </Text>
+                </View>
+              )}
+              {isRecommended && (
+                <View style={styles.recommendedBadge}>
+                  <Sparkles size={10} color={IOS_COLORS.purple} />
+                  <Text style={styles.recommendedBadgeText}>Rec</Text>
+                </View>
+              )}
+            </View>
+            <View style={styles.sailMetaRow}>
+              {sail.conditionRating != null && (
+                <>
+                  <View
+                    style={[styles.sailConditionDot, { backgroundColor: conditionColor }]}
+                  />
+                  <Text style={styles.sailConditionText}>
+                    {sail.conditionRating}/10
+                  </Text>
+                </>
+              )}
+              {sail.totalRacesUsed != null && sail.totalRacesUsed > 0 && (
                 <Text style={styles.sailConditionText}>
-                  {sail.conditionRating}% condition
+                  {sail.conditionRating != null ? ' · ' : ''}{sail.totalRacesUsed} races
                 </Text>
-              </View>
-            )}
+              )}
+            </View>
           </View>
+        </Pressable>
+
+        {/* Action buttons — always visible */}
+        <View style={styles.sailActions}>
+          <Pressable
+            style={styles.sailActionButton}
+            onPress={(e) => {
+              e.stopPropagation?.();
+              handleStartEdit(sail);
+            }}
+            hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+          >
+            <Pencil size={13} color={IOS_COLORS.blue} />
+          </Pressable>
+          <Pressable
+            style={styles.sailActionButton}
+            onPress={(e) => {
+              e.stopPropagation?.();
+              handleInspectSail(sail);
+            }}
+            hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+          >
+            <Eye size={13} color={IOS_COLORS.blue} />
+          </Pressable>
+          <Pressable
+            style={[styles.sailActionButton, styles.sailActionButtonDanger]}
+            onPress={(e) => {
+              e.stopPropagation?.();
+              handleDeleteSail(sail);
+            }}
+            hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+          >
+            <Trash2 size={13} color={IOS_COLORS.red} />
+          </Pressable>
         </View>
-        {isRecommended && (
-          <View style={styles.recommendedBadge}>
-            <Sparkles size={12} color={IOS_COLORS.purple} />
-            <Text style={styles.recommendedBadgeText}>Recommended</Text>
-          </View>
-        )}
-      </Pressable>
+      </View>
     );
   };
 
@@ -365,35 +634,62 @@ export function SailSelectionWizard({
     sails: SailInventoryItem[],
     recommendation?: SailRecommendation
   ) => {
-    const isExpanded = expandedCategory === category;
+    const isExpanded = !collapsedCategories.has(category);
     const selectedId = selectedSails[`${category}Id` as keyof typeof selectedSails];
     const selectedSail = getSailById(selectedId);
+    const isAddingHere = addingToCategory === category;
 
-    if (sails.length === 0) return null;
+    const toggleCategory = () => {
+      setCollapsedCategories((prev) => {
+        const next = new Set(prev);
+        if (next.has(category)) {
+          next.delete(category);
+        } else {
+          next.add(category);
+        }
+        return next;
+      });
+    };
 
     return (
       <View style={styles.categorySection}>
-        <Pressable
-          style={styles.categoryHeader}
-          onPress={() => setExpandedCategory(isExpanded ? null : category)}
-        >
-          <View style={styles.categoryHeaderLeft}>
-            <Sailboat size={18} color={IOS_COLORS.label} />
-            <Text style={styles.categoryTitle}>{label}</Text>
-          </View>
-          <View style={styles.categoryHeaderRight}>
-            {selectedSail && (
-              <Text style={styles.selectedSailName}>
-                {formatSailDisplayName(selectedSail)}
-              </Text>
-            )}
-            {isExpanded ? (
-              <ChevronUp size={18} color={IOS_COLORS.gray} />
-            ) : (
-              <ChevronDown size={18} color={IOS_COLORS.gray} />
-            )}
-          </View>
-        </Pressable>
+        <View style={styles.categoryHeaderRow}>
+          <Pressable
+            style={styles.categoryHeader}
+            onPress={toggleCategory}
+          >
+            <View style={styles.categoryHeaderLeft}>
+              <Sailboat size={18} color={IOS_COLORS.label} />
+              <Text style={styles.categoryTitle}>{label}</Text>
+              <Text style={styles.categorySailCount}>{sails.length}</Text>
+            </View>
+            <View style={styles.categoryHeaderRight}>
+              {!isExpanded && selectedSail && (
+                <Text style={styles.selectedSailName} numberOfLines={1}>
+                  {formatSailDisplayName(selectedSail)}
+                </Text>
+              )}
+              {isExpanded ? (
+                <ChevronUp size={18} color={IOS_COLORS.gray} />
+              ) : (
+                <ChevronDown size={18} color={IOS_COLORS.gray} />
+              )}
+            </View>
+          </Pressable>
+          <Pressable
+            style={styles.addSailButton}
+            onPress={() => {
+              if (!isExpanded) toggleCategory();
+              setAddingToCategory(isAddingHere ? null : category);
+              setNewSailName('');
+              setNewSailMaker('');
+              setNewSailWeight('medium');
+            }}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          >
+            <Plus size={16} color={IOS_COLORS.blue} />
+          </Pressable>
+        </View>
 
         {isExpanded && (
           <View style={styles.categoryContent}>
@@ -408,15 +704,86 @@ export function SailSelectionWizard({
             )}
 
             {/* Sail options */}
-            <View style={styles.sailOptions}>
-              {sails.map((sail) =>
-                renderSailOption(
-                  sail,
-                  category,
-                  sail.id === recommendation?.sailId
-                )
-              )}
-            </View>
+            {sails.length > 0 ? (
+              <View style={styles.sailOptions}>
+                {sails.map((sail) =>
+                  renderSailOption(
+                    sail,
+                    category,
+                    sail.id === recommendation?.sailId
+                  )
+                )}
+              </View>
+            ) : (
+              <Text style={styles.emptyCategoryText}>
+                No {label.toLowerCase()} sails yet
+              </Text>
+            )}
+
+            {/* Inline add form */}
+            {isAddingHere && (
+              <View style={styles.inlineAddForm}>
+                <TextInput
+                  style={styles.inlineAddInput}
+                  value={newSailName}
+                  onChangeText={setNewSailName}
+                  placeholder={`Sail name (e.g. ${label} #2)`}
+                  placeholderTextColor={IOS_COLORS.tertiaryLabel}
+                  autoFocus
+                />
+                <TextInput
+                  style={styles.inlineAddInput}
+                  value={newSailMaker}
+                  onChangeText={setNewSailMaker}
+                  placeholder="Sailmaker (optional)"
+                  placeholderTextColor={IOS_COLORS.tertiaryLabel}
+                />
+                {/* Sail weight picker */}
+                <View style={styles.weightPickerRow}>
+                  <Text style={styles.weightPickerLabel}>Cloth Weight</Text>
+                  <View style={styles.weightPickerOptions}>
+                    {(['light', 'medium', 'heavy'] as const).map((w) => (
+                      <Pressable
+                        key={w}
+                        style={[
+                          styles.weightPickerOption,
+                          newSailWeight === w && { backgroundColor: `${getWeightColor(w)}18`, borderColor: getWeightColor(w) },
+                        ]}
+                        onPress={() => setNewSailWeight(w)}
+                      >
+                        <Text
+                          style={[
+                            styles.weightPickerOptionText,
+                            newSailWeight === w && { color: getWeightColor(w), fontWeight: '600' },
+                          ]}
+                        >
+                          {getWeightLabel(w)}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+                <View style={styles.inlineAddActions}>
+                  <Pressable
+                    style={styles.inlineAddCancel}
+                    onPress={() => setAddingToCategory(null)}
+                  >
+                    <Text style={styles.inlineAddCancelText}>Cancel</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.inlineAddSave, isAddingSail && styles.inlineAddSaveDisabled]}
+                    onPress={handleAddSail}
+                    disabled={isAddingSail}
+                  >
+                    {isAddingSail ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Text style={styles.inlineAddSaveText}>Add</Text>
+                    )}
+                  </Pressable>
+                </View>
+              </View>
+            )}
           </View>
         )}
       </View>
@@ -454,7 +821,7 @@ export function SailSelectionWizard({
   // Render loading state
   if (isLoadingSails || (isLoadingRecommendations && !recommendations)) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <View style={styles.container}>
         <View style={styles.header}>
           <Pressable style={styles.closeButton} onPress={onCancel}>
             <X size={24} color={IOS_COLORS.gray} />
@@ -466,14 +833,14 @@ export function SailSelectionWizard({
           <ActivityIndicator size="large" color={IOS_COLORS.blue} />
           <Text style={styles.loadingText}>Loading sails...</Text>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
-  // Render error/no sails state
-  if (sailError || !hasSails) {
+  // Render error state (no boat selected)
+  if (sailError || !boatId) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <View style={styles.container}>
         <View style={styles.header}>
           <Pressable style={styles.closeButton} onPress={onCancel}>
             <X size={24} color={IOS_COLORS.gray} />
@@ -484,68 +851,17 @@ export function SailSelectionWizard({
         <ScrollView contentContainerStyle={styles.errorScrollContent}>
           <View style={styles.errorContainer}>
             <AlertTriangle size={48} color={IOS_COLORS.orange} />
-            <Text style={styles.errorTitle}>No Sails Found</Text>
+            <Text style={styles.errorTitle}>{sailError ? 'Error' : 'No Boat Selected'}</Text>
             <Text style={styles.errorDescription}>
-              {sailError || 'Add sails to your boat inventory to get recommendations.'}
+              {sailError || 'Select a boat to manage your sail inventory.'}
             </Text>
-
-            {/* Navigation buttons */}
-            {boatId ? (
-              <Pressable style={styles.linkButton} onPress={handleManageBoatSails}>
-                <Sailboat size={18} color="#FFFFFF" />
-                <Text style={styles.linkButtonText}>Manage Boat Sails</Text>
-              </Pressable>
-            ) : (
-              <Pressable style={styles.linkButton} onPress={handleSelectBoat}>
-                <Sailboat size={18} color="#FFFFFF" />
-                <Text style={styles.linkButtonText}>Select a Boat</Text>
-              </Pressable>
-            )}
-
-            {/* Show quick-add button or form (only if boat is selected) */}
-            {boatId && !showQuickAddSail && (
-              <View style={styles.quickAddButtonContainer}>
-                <QuickAddSailButton onPress={() => setShowQuickAddSail(true)} />
-              </View>
-            )}
-
-            {boatId && showQuickAddSail && (
-              <QuickAddSailForm
-                boatId={boatId}
-                onSuccess={handleQuickAddSuccess}
-                onCancel={() => setShowQuickAddSail(false)}
-              />
-            )}
-
-            {/* Generic sail recommendations based on conditions */}
-            {wind && (
-              <View style={styles.genericRecommendationsCard}>
-                <View style={styles.genericRecommendationsHeader}>
-                  <Sparkles size={16} color={IOS_COLORS.purple} />
-                  <Text style={styles.genericRecommendationsTitle}>
-                    Suggested for {WIND_RANGES[windRange].label}
-                  </Text>
-                </View>
-
-                <View style={styles.sailHint}>
-                  <Text style={styles.sailHintCategory}>Mainsail</Text>
-                  <Text style={styles.sailHintText}>{SAIL_HINTS.mainsail[windRange]}</Text>
-                </View>
-
-                <View style={styles.sailHint}>
-                  <Text style={styles.sailHintCategory}>Headsail</Text>
-                  <Text style={styles.sailHintText}>{SAIL_HINTS.jib[windRange]}</Text>
-                </View>
-
-                <View style={styles.sailHint}>
-                  <Text style={styles.sailHintCategory}>Downwind</Text>
-                  <Text style={styles.sailHintText}>{SAIL_HINTS.spinnaker[windRange]}</Text>
-                </View>
-              </View>
-            )}
+            <Pressable style={styles.linkButton} onPress={handleSelectBoat}>
+              <Sailboat size={18} color="#FFFFFF" />
+              <Text style={styles.linkButtonText}>Select a Boat</Text>
+            </Pressable>
           </View>
         </ScrollView>
-      </SafeAreaView>
+      </View>
     );
   }
 
@@ -554,7 +870,7 @@ export function SailSelectionWizard({
   const downwindSails = [...sailInventory.spinnakers, ...sailInventory.codeZeros];
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <View style={styles.container}>
       <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -563,7 +879,7 @@ export function SailSelectionWizard({
         <View style={styles.header}>
           <Pressable
             style={styles.closeButton}
-            onPress={onCancel}
+            onPress={handleClose}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
             <X size={24} color={IOS_COLORS.gray} />
@@ -602,8 +918,17 @@ export function SailSelectionWizard({
 
           {recommendationError && (
             <View style={styles.recommendationWarningCard}>
-              <AlertTriangle size={16} color={IOS_COLORS.orange} />
-              <Text style={styles.recommendationWarningText}>{recommendationError}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, flex: 1 }}>
+                <AlertTriangle size={16} color={IOS_COLORS.orange} />
+                <Text style={[styles.recommendationWarningText, { flex: 1 }]}>{recommendationError}</Text>
+              </View>
+              <Pressable
+                onPress={fetchRecommendations}
+                style={styles.retryButton}
+                hitSlop={8}
+              >
+                <Text style={styles.retryButtonText}>Retry</Text>
+              </Pressable>
             </View>
           )}
 
@@ -687,7 +1012,26 @@ export function SailSelectionWizard({
           </Pressable>
         </View>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+
+      {/* Sail Inspection Modal */}
+      {inspectingSail && (
+        <RNModal
+          visible={true}
+          animationType="slide"
+          presentationStyle="pageSheet"
+          onRequestClose={() => setInspectingSail(null)}
+        >
+          <SailInspectionWizard
+            equipmentId={inspectingSail.id}
+            boatId={boatId}
+            sailName={formatSailDisplayName(inspectingSail)}
+            inspectionType="pre_race"
+            onComplete={handleInspectionComplete}
+            onCancel={() => setInspectingSail(null)}
+          />
+        </RNModal>
+      )}
+    </View>
   );
 }
 
@@ -872,11 +1216,31 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: 'hidden',
   },
+  categoryHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   categoryHeader: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: 14,
+  },
+  addSailButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: `${IOS_COLORS.blue}12`,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  categorySailCount: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: IOS_COLORS.gray,
+    marginLeft: 4,
   },
   categoryHeaderLeft: {
     flexDirection: 'row',
@@ -920,24 +1284,27 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   sailOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
+    paddingVertical: 10,
     paddingHorizontal: 10,
     borderRadius: 10,
     backgroundColor: IOS_COLORS.background,
+  },
+  sailOptionEditing: {
+    backgroundColor: `${IOS_COLORS.blue}08`,
+    borderWidth: 1,
+    borderColor: IOS_COLORS.blue,
+    gap: 8,
+    paddingVertical: 12,
   },
   sailOptionSelected: {
     backgroundColor: `${IOS_COLORS.blue}10`,
     borderWidth: 1,
     borderColor: IOS_COLORS.blue,
   },
-  sailOptionLeft: {
+  sailOptionMainRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    flex: 1,
   },
   sailOptionInfo: {
     flex: 1,
@@ -950,6 +1317,29 @@ const styles = StyleSheet.create({
   sailOptionNameSelected: {
     color: IOS_COLORS.blue,
     fontWeight: '600',
+  },
+  sailNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
+  },
+  sailMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 3,
+  },
+  weightBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 5,
+  },
+  weightBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
   },
   sailConditionRow: {
     flexDirection: 'row',
@@ -966,19 +1356,123 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: IOS_COLORS.gray,
   },
+  sailActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 6,
+    marginTop: 6,
+    paddingLeft: 30,
+  },
+  sailActionButton: {
+    width: 32,
+    height: 28,
+    borderRadius: 7,
+    backgroundColor: `${IOS_COLORS.blue}10`,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sailActionButtonDanger: {
+    backgroundColor: `${IOS_COLORS.red}10`,
+  },
+  editSailInput: {
+    backgroundColor: IOS_COLORS.secondaryBackground,
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 14,
+    color: IOS_COLORS.label,
+  },
   recommendedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
     backgroundColor: `${IOS_COLORS.purple}15`,
     borderRadius: 6,
   },
   recommendedBadgeText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
     color: IOS_COLORS.purple,
+  },
+  emptyCategoryText: {
+    fontSize: 14,
+    color: IOS_COLORS.gray,
+    paddingVertical: 12,
+    textAlign: 'center',
+  },
+  inlineAddForm: {
+    gap: 8,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: IOS_COLORS.separator,
+    marginTop: 8,
+  },
+  inlineAddInput: {
+    backgroundColor: IOS_COLORS.background,
+    borderRadius: 10,
+    padding: 12,
+    fontSize: 15,
+    color: IOS_COLORS.label,
+  },
+  weightPickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+  },
+  weightPickerLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+  },
+  weightPickerOptions: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  weightPickerOption: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 8,
+    backgroundColor: IOS_COLORS.background,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  weightPickerOptionText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: IOS_COLORS.gray2,
+  },
+  inlineAddActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+    marginTop: 2,
+  },
+  inlineAddCancel: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
+  inlineAddCancelText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: IOS_COLORS.gray,
+  },
+  inlineAddSave: {
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    backgroundColor: IOS_COLORS.blue,
+  },
+  inlineAddSaveDisabled: {
+    backgroundColor: IOS_COLORS.gray,
+  },
+  inlineAddSaveText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
   // Notes
   notesSection: {
@@ -1020,9 +1514,8 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   recommendationWarningCard: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
+    flexDirection: 'column',
+    gap: 10,
     padding: 12,
     backgroundColor: '#FFF7ED',
     borderRadius: 10,
@@ -1035,6 +1528,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#9A3412',
     lineHeight: 17,
+  },
+  retryButton: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    backgroundColor: '#FED7AA',
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#9A3412',
   },
   // Bottom Action
   bottomAction: {
