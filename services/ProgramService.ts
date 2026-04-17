@@ -1275,6 +1275,237 @@ class ProgramService {
     if (error) throw error;
     return (data || []) as DomainCatalogRecord[];
   }
+
+  // ---------------------------------------------------------------------------
+  // Follow / Unfollow a Program
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Follow a program: enroll as a learner and copy the program's timeline
+   * step templates into the user's personal timeline.
+   *
+   * Returns the number of timeline steps created.
+   */
+  async subscribeToProgram(
+    userId: string,
+    programId: string,
+    interestId: string,
+  ): Promise<{ participantId: string; stepsCreated: number }> {
+    // 1. Fetch the program to get org_id and metadata.program_path
+    const { data: program, error: progErr } = await supabase
+      .from('programs')
+      .select('id, organization_id, title, metadata')
+      .eq('id', programId)
+      .single();
+    if (progErr || !program) throw progErr ?? new Error('Program not found');
+
+    const orgId = program.organization_id as string;
+    const programPath = (program.metadata as Record<string, unknown>)?.program_path as string | undefined;
+
+    // 2. Create program_participants record (idempotent via unique constraint)
+    const { data: participant, error: partErr } = await supabase
+      .from('program_participants')
+      .upsert(
+        {
+          organization_id: orgId,
+          program_id: programId,
+          user_id: userId,
+          role: 'learner',
+          status: 'active',
+          metadata: { followed_at: new Date().toISOString() },
+        },
+        { onConflict: 'program_id,user_id,role' }
+      )
+      .select('id')
+      .single();
+    if (partErr) throw partErr;
+
+    // 3. Fetch timeline_step_templates for this program
+    //    Templates are keyed by (organization_id, path_name) where path_name
+    //    matches the program's metadata.program_path.
+    // Helper: auto-subscribe to the program's blueprint if one exists.
+    // subscriber_id must be the auth uid (userId), NOT the profile_id.
+    const autoSubscribeBlueprint = async () => {
+      const { data: blueprint } = await supabase
+        .from('timeline_blueprints')
+        .select('id')
+        .eq('program_id', programId)
+        .eq('is_published', true)
+        .maybeSingle();
+      if (!blueprint?.id) return;
+      await supabase
+        .from('blueprint_subscriptions')
+        .upsert(
+          { blueprint_id: blueprint.id, subscriber_id: userId, auto_adopt: true },
+          { onConflict: 'blueprint_id,subscriber_id' }
+        );
+    };
+
+    if (!programPath) {
+      // No templates configured — enroll only, no steps
+      await autoSubscribeBlueprint();
+      return { participantId: participant!.id, stepsCreated: 0 };
+    }
+
+    const { data: templates, error: tplErr } = await supabase
+      .from('timeline_step_templates')
+      .select('*')
+      .eq('organization_id', orgId)
+      .eq('path_name', programPath)
+      .order('sort_order', { ascending: true });
+    if (tplErr) throw tplErr;
+
+    if (!templates || templates.length === 0) {
+      await autoSubscribeBlueprint();
+      return { participantId: participant!.id, stepsCreated: 0 };
+    }
+
+    // 4. Check which templates the user already has (avoid duplicates)
+    const { data: existingSteps } = await supabase
+      .from('timeline_steps')
+      .select('source_id')
+      .eq('user_id', userId)
+      .eq('interest_id', interestId)
+      .eq('source_type', 'template');
+
+    const existingSourceIds = new Set(
+      (existingSteps ?? []).map((s: { source_id: string | null }) => s.source_id)
+    );
+
+    // 5. Get max sort_order for this user + interest
+    const { data: maxRow } = await supabase
+      .from('timeline_steps')
+      .select('sort_order')
+      .eq('user_id', userId)
+      .eq('interest_id', interestId)
+      .order('sort_order', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    let nextSort = ((maxRow as { sort_order: number } | null)?.sort_order ?? 0) + 1;
+
+    // 6. Create timeline_steps from templates
+    const stepsToInsert = templates
+      .filter((t: { id: string }) => !existingSourceIds.has(t.id))
+      .map((t: { id: string; title: string; description: string | null; category: string; sort_order: number; metadata: Record<string, unknown> }) => ({
+        user_id: userId,
+        interest_id: interestId,
+        organization_id: orgId,
+        source_type: 'template',
+        source_id: t.id,
+        title: t.title,
+        description: t.description,
+        category: t.category ?? 'general',
+        status: 'pending',
+        visibility: 'organization',
+        sort_order: nextSort++,
+        metadata: {
+          ...t.metadata,
+          program_id: programId,
+          program_title: program.title,
+          template_sort_order: t.sort_order,
+        },
+      }));
+
+    if (stepsToInsert.length === 0) {
+      await autoSubscribeBlueprint();
+      return { participantId: participant!.id, stepsCreated: 0 };
+    }
+
+    const { error: insertErr } = await supabase
+      .from('timeline_steps')
+      .insert(stepsToInsert);
+    if (insertErr) throw insertErr;
+
+    // 7. Auto-subscribe to the program's blueprint (if one exists)
+    await autoSubscribeBlueprint();
+
+    return { participantId: participant!.id, stepsCreated: stepsToInsert.length };
+  }
+
+  /**
+   * Unsubscribe from a program: remove the participant record, remove the
+   * matching blueprint_subscriptions row (so the program's published
+   * blueprint stops syncing new steps), and optionally remove any
+   * template-sourced timeline steps the user has already received.
+   */
+  async unsubscribeFromProgram(
+    userId: string,
+    programId: string,
+    removeSteps: boolean = false,
+  ): Promise<void> {
+    // Remove participant record
+    const { error: delErr } = await supabase
+      .from('program_participants')
+      .delete()
+      .eq('program_id', programId)
+      .eq('user_id', userId)
+      .eq('role', 'learner');
+    if (delErr) throw delErr;
+
+    // Remove the auto-subscribed blueprint subscription for this program
+    // so the Clinical/timeline tab stops showing it. subscribeToProgram
+    // writes this row via autoSubscribeBlueprint() with subscriber_id = auth uid.
+    const { data: blueprint } = await supabase
+      .from('timeline_blueprints')
+      .select('id')
+      .eq('program_id', programId)
+      .eq('is_published', true)
+      .maybeSingle();
+    if (blueprint?.id) {
+      const { error: subDelErr } = await supabase
+        .from('blueprint_subscriptions')
+        .delete()
+        .eq('blueprint_id', blueprint.id)
+        .eq('subscriber_id', userId);
+      if (subDelErr) throw subDelErr;
+    }
+
+    // Optionally remove the template-sourced steps
+    if (removeSteps) {
+      const { data: program } = await supabase
+        .from('programs')
+        .select('metadata')
+        .eq('id', programId)
+        .single();
+      const programPath = (program?.metadata as Record<string, unknown>)?.program_path as string | undefined;
+      if (!programPath) return;
+
+      // Get template IDs for this program
+      const { data: templates } = await supabase
+        .from('timeline_step_templates')
+        .select('id')
+        .eq('organization_id', (program as { organization_id?: string })?.organization_id ?? '')
+        .eq('path_name', programPath);
+
+      if (templates && templates.length > 0) {
+        const templateIds = templates.map((t: { id: string }) => t.id);
+        await supabase
+          .from('timeline_steps')
+          .delete()
+          .eq('user_id', userId)
+          .eq('source_type', 'template')
+          .in('source_id', templateIds);
+      }
+    }
+  }
+
+  /**
+   * Check if a user is subscribed to (enrolled in) a specific program.
+   */
+  async isSubscribedToProgram(
+    userId: string,
+    programId: string,
+  ): Promise<boolean> {
+    const { data, error } = await supabase
+      .from('program_participants')
+      .select('id')
+      .eq('program_id', programId)
+      .eq('user_id', userId)
+      .eq('role', 'learner')
+      .maybeSingle();
+    if (error) return false;
+    return !!data;
+  }
 }
 
 export const programService = new ProgramService();

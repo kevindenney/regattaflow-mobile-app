@@ -18,7 +18,6 @@ import type {
   UpdateTimelineStepInput,
   TimelineStepListFilters,
 } from '@/types/timeline-steps';
-import { resolveDefaultVisibility } from '@/services/PrivacySettingsService';
 import type { StepMetadata } from '@/types/step-detail';
 import type {
   CourseLesson,
@@ -64,7 +63,8 @@ export async function getUserTimeline(
       .select('*')
       .eq('user_id', userId)
       .order('sort_order', { ascending: true })
-      .order('created_at', { ascending: true });
+      .order('created_at', { ascending: true })
+      .limit(200);
 
     if (interestId) {
       if (Array.isArray(interestId)) {
@@ -81,7 +81,8 @@ export async function getUserTimeline(
       .contains('collaborator_user_ids', [userId])
       .neq('user_id', userId)
       .order('sort_order', { ascending: true })
-      .order('created_at', { ascending: true });
+      .order('created_at', { ascending: true })
+      .limit(200);
 
     if (interestId) {
       if (Array.isArray(interestId)) {
@@ -91,12 +92,20 @@ export async function getUserTimeline(
       }
     }
 
-    const [ownResult, collabResult] = await Promise.all([ownQuery, collabQuery]);
+    // Also fetch cross-interest pinned steps (only for single-interest queries on own timeline)
+    const singleInterestId = interestId && !Array.isArray(interestId) ? interestId : null;
+    const pinnedPromise = singleInterestId
+      ? getPinnedStepsForInterest(userId, singleInterestId)
+      : Promise.resolve([]);
+
+    const [ownResult, collabResult, pinnedSteps] = await Promise.all([
+      ownQuery, collabQuery, pinnedPromise,
+    ]);
 
     if (ownResult.error) throw ownResult.error;
     if (collabResult.error) throw collabResult.error;
 
-    // Merge: own steps first (sorted), then collaborated steps appended — deduplicated
+    // Merge: own steps first (sorted), then collaborated steps, then pinned — deduplicated
     const ownSteps = (ownResult.data ?? []) as TimelineStepRecord[];
     const collabSteps = (collabResult.data ?? []) as TimelineStepRecord[];
     const seenIds = new Set(ownSteps.map((s) => s.id));
@@ -105,7 +114,11 @@ export async function getUserTimeline(
       seenIds.add(s.id);
       return true;
     });
-    return [...ownSteps, ...uniqueCollabSteps];
+    // Mark pinned steps so the UI can render a pin indicator
+    const uniquePinnedSteps = pinnedSteps
+      .filter((s) => !seenIds.has(s.id))
+      .map((s) => ({ ...s, _pinned: true as const }));
+    return [...ownSteps, ...uniqueCollabSteps, ...uniquePinnedSteps];
   } catch (err) {
     if (!isAbortError(err)) logger.error('Failed to fetch user timeline', err);
     throw err;
@@ -262,51 +275,25 @@ export async function createStep(
   try {
     logger.debug('Creating timeline step', { title: input.title, userId: input.user_id });
 
-    // Resolve visibility through the cascade: explicit → interest default → profile default → 'followers'
-    const visibility =
-      input.visibility ??
-      (await resolveDefaultVisibility(input.user_id, input.interest_id));
-
-    // Calculate next sort_order so new steps slot in at the end
-    const { data: maxRow } = await supabase
-      .from('timeline_steps')
-      .select('sort_order')
-      .eq('user_id', input.user_id)
-      .eq('interest_id', input.interest_id)
-      .order('sort_order', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    const nextSort = (maxRow?.sort_order ?? 0) + 1;
-
+    // Single round-trip: the create_timeline_step RPC runs the visibility
+    // cascade (interest default → profile default → 'followers'), assigns a
+    // monotonically-increasing sort_order, defaults starts_at to NOW() when
+    // the caller omits it, and performs the insert — all server-side.
     const { data, error } = await supabase
-      .from('timeline_steps')
-      .insert({
-        user_id: input.user_id,
-        interest_id: input.interest_id,
-        organization_id: input.organization_id ?? null,
-        program_session_id: input.program_session_id ?? null,
-        source_type: input.source_type ?? 'manual',
-        source_id: input.source_id ?? null,
-        title: input.title,
-        description: input.description ?? null,
-        category: input.category ?? 'general',
-        status: input.status ?? 'pending',
-        starts_at: input.starts_at ?? null,
-        ends_at: input.ends_at ?? null,
-        location_name: input.location_name ?? null,
-        location_lat: input.location_lat ?? null,
-        location_lng: input.location_lng ?? null,
-        location_place_id: input.location_place_id ?? null,
-        visibility,
-        share_approximate_location: input.share_approximate_location ?? false,
-        sort_order: nextSort,
-        metadata: input.metadata ?? {},
-      })
-      .select()
+      .rpc('create_timeline_step', { p_input: input as unknown as Record<string, unknown> })
       .single();
 
     if (error) throw error;
-    return data as TimelineStepRecord;
+    if (!data) throw new Error('create_timeline_step returned no row');
+
+    const created = data as unknown as TimelineStepRecord;
+
+    // Fire-and-forget: trigger cross-interest suggestions from other Playbooks
+    import('@/services/ai/PlaybookAIService')
+      .then(({ PlaybookAIService }) => PlaybookAIService.crossInterest(created.id))
+      .catch((e) => logger.debug('Cross-interest trigger skipped', e));
+
+    return created;
   } catch (err) {
     logger.error('Failed to create timeline step', err);
     throw err;
@@ -355,6 +342,10 @@ export async function updateStep(
 export async function deleteStep(stepId: string): Promise<void> {
   try {
     logger.debug('Deleting timeline step', { stepId });
+
+    // A server-side AFTER DELETE trigger (cleanup_blueprint_step_action_on_delete)
+    // handles the blueprint_step_actions cleanup when the deleted step was
+    // adopted from a blueprint, so this is a single round-trip.
     const { error } = await supabase
       .from('timeline_steps')
       .delete()
@@ -923,4 +914,117 @@ export async function adoptTemplate(
     logger.error('Failed to adopt template', err);
     throw err;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Cross-interest step pins
+// ---------------------------------------------------------------------------
+
+export async function pinStepToInterest(
+  stepId: string,
+  userId: string,
+  interestId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from('timeline_step_pins')
+    .upsert({ step_id: stepId, user_id: userId, interest_id: interestId }, {
+      onConflict: 'step_id,user_id,interest_id',
+    });
+  if (error) throw error;
+}
+
+/**
+ * Pin a step to multiple interests at once. Used by the inspiration flow
+ * to auto-pin steps that overlap with user's existing interests.
+ */
+export async function bulkPinStepToInterests(
+  stepId: string,
+  userId: string,
+  interestSlugs: string[],
+): Promise<void> {
+  if (interestSlugs.length === 0) return;
+
+  // Resolve slugs to IDs
+  const { data: interests, error: lookupError } = await supabase
+    .from('interests')
+    .select('id, slug')
+    .in('slug', interestSlugs);
+
+  if (lookupError || !interests?.length) return;
+
+  // Upsert pins for each interest
+  const rows = interests.map((i: { id: string }) => ({
+    step_id: stepId,
+    user_id: userId,
+    interest_id: i.id,
+  }));
+
+  const { error } = await supabase
+    .from('timeline_step_pins')
+    .upsert(rows, { onConflict: 'step_id,user_id,interest_id' });
+
+  if (error) {
+    logger.warn('[TimelineStepService] bulkPinStepToInterests failed:', error.message);
+  }
+}
+
+export async function unpinStepFromInterest(
+  stepId: string,
+  userId: string,
+  interestId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from('timeline_step_pins')
+    .delete()
+    .eq('step_id', stepId)
+    .eq('user_id', userId)
+    .eq('interest_id', interestId);
+  if (error) throw error;
+}
+
+export async function getPinnedStepsForInterest(
+  userId: string,
+  interestId: string,
+): Promise<TimelineStepRecord[]> {
+  const { data: pins, error: pinErr } = await supabase
+    .from('timeline_step_pins')
+    .select('step_id')
+    .eq('user_id', userId)
+    .eq('interest_id', interestId);
+
+  if (pinErr) {
+    // Graceful degradation — table may not exist yet after migration
+    logger.warn('[TimelineStepService] getPinnedStepsForInterest failed:', pinErr.message);
+    return [];
+  }
+  if (!pins || pins.length === 0) return [];
+
+  const { data: steps, error: stepErr } = await supabase
+    .from('timeline_steps')
+    .select('*')
+    .in('id', pins.map((p) => p.step_id))
+    .eq('user_id', userId);
+
+  if (stepErr) {
+    logger.warn('[TimelineStepService] Failed to fetch pinned steps:', stepErr.message);
+    return [];
+  }
+  return (steps ?? []) as TimelineStepRecord[];
+}
+
+export async function getStepPinInterestIds(
+  stepId: string,
+  userId: string,
+): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('timeline_step_pins')
+    .select('interest_id')
+    .eq('step_id', stepId)
+    .eq('user_id', userId);
+
+  if (error) {
+    logger.warn('[TimelineStepService] getStepPinInterestIds failed:', error.message);
+    return [];
+  }
+  return (data ?? []).map((p) => p.interest_id);
 }

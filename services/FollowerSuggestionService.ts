@@ -9,6 +9,7 @@ import { supabase } from './supabase';
 import { createLogger } from '@/lib/utils/logger';
 import { isAbortError } from '@/lib/utils/fetchWithTimeout';
 import { isDemoRaceId } from '@/lib/demo/demoRaceData';
+import { isPersistedRaceId } from '@/lib/races/isPersistedRaceId';
 import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
 
 const logger = createLogger('FollowerSuggestionService');
@@ -251,8 +252,10 @@ export class FollowerSuggestionService {
    * Enriches suggester names with a secondary lookup.
    */
   static async getSuggestionsForRace(raceId: string): Promise<FollowerSuggestion[]> {
-    // Demo races don't have database entries - return empty array
-    if (isDemoRaceId(raceId)) {
+    // Skip non-persisted ids (demo-, temp-, or malformed UUIDs). Postgres
+    // rejects these with 22P02 (invalid UUID syntax), and in-flight optimistic
+    // race ids fire this query before the real UUID is available.
+    if (!isPersistedRaceId(raceId)) {
       return [];
     }
 

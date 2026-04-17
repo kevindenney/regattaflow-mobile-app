@@ -137,7 +137,31 @@ async function applyConceptUpdate(
     throw new Error('concept_update suggestion missing target_concept_id');
   }
   const target = await getConceptById(payload.target_concept_id);
-  if (!target) throw new Error('Target concept not found');
+
+  // If the target concept doesn't exist (e.g. AI hallucinated the ID during
+  // ingest), fall back to creating a new concept from the suggestion payload.
+  if (!target) {
+    logger.warn('concept_update target not found — falling back to concept_create', {
+      target_concept_id: payload.target_concept_id,
+    });
+    // Look up interest_id from the playbook since concept_update payloads don't carry it.
+    const { data: pb } = await supabase
+      .from('playbooks')
+      .select('interest_id')
+      .eq('id', suggestion.playbook_id)
+      .single();
+    await applyConceptCreate(userId, {
+      ...suggestion,
+      kind: 'concept_create',
+      payload: {
+        title: payload.title ?? 'Untitled Concept',
+        body_md: payload.body_md ?? payload.append_insight ?? '',
+        interest_id: pb?.interest_id,
+        related_concept_ids: payload.related_concept_ids,
+      },
+    } as PlaybookSuggestionRecord);
+    return;
+  }
 
   let conceptIdToUpdate = target.id;
 

@@ -11,6 +11,7 @@
 
 import { supabase } from '@/services/supabase';
 import { createLogger } from '@/lib/utils/logger';
+import { isPersistedRaceId } from '@/lib/races/isPersistedRaceId';
 import type {
   PlaybookRecord,
   PlaybookResourceRecord,
@@ -63,13 +64,29 @@ export async function getOrCreatePlaybook(
     }
     if (existing) return existing as PlaybookRecord;
 
+    // Use upsert with the unique constraint to handle race conditions
+    // (e.g. two concurrent calls both find no existing row)
     const { data: created, error: createErr } = await supabase
       .from('playbooks')
-      .insert({ user_id: userId, interest_id: interestId, name: 'My Playbook' })
+      .upsert(
+        { user_id: userId, interest_id: interestId, name: 'My Playbook' },
+        { onConflict: 'user_id,interest_id', ignoreDuplicates: true },
+      )
       .select()
       .single();
 
-    if (createErr) throw createErr;
+    if (createErr) {
+      // If upsert still fails (e.g. ignoreDuplicates returns no rows),
+      // re-fetch — the row must exist from a concurrent insert
+      const { data: refetched } = await supabase
+        .from('playbooks')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('interest_id', interestId)
+        .maybeSingle();
+      if (refetched) return refetched as PlaybookRecord;
+      throw createErr;
+    }
     return created as PlaybookRecord;
   } catch (err) {
     logger.error('Failed to get/create playbook', err);
@@ -283,22 +300,35 @@ export async function createConcept(
   input: CreatePlaybookConceptInput,
 ): Promise<PlaybookConceptRecord> {
   try {
+    let slug = input.slug;
+    const row = {
+      playbook_id: input.playbook_id,
+      user_id: userId,
+      origin: input.origin,
+      source_concept_id: input.source_concept_id ?? null,
+      interest_id: input.interest_id,
+      pathway_id: input.pathway_id ?? null,
+      slug,
+      title: input.title,
+      body_md: input.body_md ?? '',
+      updated_by: userId,
+    };
     const { data, error } = await supabase
       .from('playbook_concepts')
-      .insert({
-        playbook_id: input.playbook_id,
-        user_id: userId,
-        origin: input.origin,
-        source_concept_id: input.source_concept_id ?? null,
-        interest_id: input.interest_id,
-        pathway_id: input.pathway_id ?? null,
-        slug: input.slug,
-        title: input.title,
-        body_md: input.body_md ?? '',
-        updated_by: userId,
-      })
+      .insert(row)
       .select()
       .single();
+    // If slug collides, append a short suffix and retry once.
+    if (error && error.code === '23505' && error.message?.includes('slug')) {
+      slug = `${input.slug}-${Date.now().toString(36).slice(-4)}`;
+      const { data: retry, error: retryErr } = await supabase
+        .from('playbook_concepts')
+        .insert({ ...row, slug })
+        .select()
+        .single();
+      if (retryErr) throw retryErr;
+      return retry as PlaybookConceptRecord;
+    }
     if (error) throw error;
     return data as PlaybookConceptRecord;
   } catch (err) {
@@ -1108,6 +1138,10 @@ export async function getSectionCounts(
 export async function getStepLinks(
   stepId: string,
 ): Promise<StepPlaybookLinkRecord[]> {
+  // Skip optimistic/demo ids — they are not persisted UUIDs and Postgres
+  // will reject them with 22P02 (invalid UUID syntax).
+  if (!isPersistedRaceId(stepId)) return [];
+
   try {
     const { data, error } = await supabase
       .from('step_playbook_links')

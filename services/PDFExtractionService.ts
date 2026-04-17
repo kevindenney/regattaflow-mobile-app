@@ -126,10 +126,22 @@ export class PDFExtractionService {
         const page = await pdf.getPage(pageNum);
         const textContent = await page.getTextContent();
 
-        // Concatenate text items
-        const pageText = textContent.items
-          .map((item: any) => item.str)
-          .join(' ');
+        // Reconstruct text preserving line breaks using Y-coordinate changes.
+        // PDF.js items have transform[5] = Y position. When Y changes significantly,
+        // it's a new line. This preserves table/schedule structure critical for extraction.
+        let pageText = '';
+        let lastY: number | null = null;
+        for (const item of textContent.items as any[]) {
+          if (!item.str) continue;
+          const y = item.transform?.[5];
+          if (lastY !== null && y !== undefined && Math.abs(y - lastY) > 2) {
+            pageText += '\n';
+          } else if (pageText.length > 0 && !pageText.endsWith('\n')) {
+            pageText += ' ';
+          }
+          pageText += item.str;
+          if (y !== undefined) lastY = y;
+        }
 
         fullText += pageText + '\n\n';
 
