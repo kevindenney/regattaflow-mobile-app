@@ -3,6 +3,10 @@
  * FREE weather and marine data API - no API key required!
  * Documentation: https://open-meteo.com/en/docs
  * Marine API: https://open-meteo.com/en/docs/marine-weather-api
+ *
+ * Routes through weather-proxy edge function to avoid CORS issues
+ * and enable server-side caching. Falls back to direct API calls
+ * if the proxy is unavailable.
  */
 
 import type { GeoLocation } from '@/lib/types/map';
@@ -11,6 +15,7 @@ import { createLogger } from '@/lib/utils/logger';
 
 const WEATHER_API_URL = 'https://api.open-meteo.com/v1/forecast';
 const MARINE_API_URL = 'https://marine-api.open-meteo.com/v1/marine';
+const WEATHER_PROXY_URL = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/weather-proxy`;
 const logger = createLogger('OpenMeteoService');
 
 // Circuit breaker state
@@ -82,13 +87,47 @@ export class OpenMeteoService {
   }
 
   /**
+   * Fetch Open-Meteo data through the Supabase edge function proxy.
+   * Avoids CORS issues and enables server-side caching.
+   */
+  private async fetchViaProxy<T>(endpoint: string, params: Record<string, string>): Promise<T> {
+    if (!WEATHER_PROXY_URL || WEATHER_PROXY_URL.includes('undefined')) {
+      throw new Error('Proxy URL not configured');
+    }
+    const response = await fetch(WEATHER_PROXY_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`,
+      },
+      body: JSON.stringify({ endpoint, params }),
+    });
+    if (!response.ok) {
+      throw new Error(`Proxy error: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  /**
    * Get comprehensive marine weather forecast
    * Combines weather API + marine API for complete data
+   *
+   * @param location - Latitude/longitude
+   * @param hours - Hours of future forecast to fetch
+   * @param pastHours - Hours of historical forecast to include (for races that
+   *   have already started; OpenMeteo's `past_hours` param returns forecast
+   *   values that were valid for past timestamps so we can render the same
+   *   hourly grid the map uses, no matter whether the race is past, now, or
+   *   future).
    */
-  async getMarineWeather(location: GeoLocation, hours: number = 48): Promise<AdvancedWeatherConditions[]> {
+  async getMarineWeather(
+    location: GeoLocation,
+    hours: number = 48,
+    pastHours: number = 0,
+  ): Promise<AdvancedWeatherConditions[]> {
     checkCircuit();
 
-    const cacheKey = `weather_${location.latitude.toFixed(4)}_${location.longitude.toFixed(4)}_${hours}`;
+    const cacheKey = `weather_${location.latitude.toFixed(4)}_${location.longitude.toFixed(4)}_${hours}_${pastHours}`;
     const cached = this.getCached<AdvancedWeatherConditions[]>(cacheKey);
 
     if (cached) {
@@ -99,8 +138,8 @@ export class OpenMeteoService {
     try {
       // Fetch weather and marine data in parallel
       const [weatherData, marineData] = await Promise.all([
-        this.fetchWeatherForecast(location, hours),
-        this.fetchMarineForecast(location, hours),
+        this.fetchWeatherForecast(location, hours, pastHours),
+        this.fetchMarineForecast(location, hours, pastHours),
       ]);
 
       // Merge the data
@@ -146,10 +185,14 @@ export class OpenMeteoService {
   }
 
   /**
-   * Fetch weather forecast from Open-Meteo Weather API
+   * Fetch weather forecast from Open-Meteo Weather API (via proxy, with direct fallback)
    */
-  private async fetchWeatherForecast(location: GeoLocation, hours: number): Promise<OpenMeteoWeatherResponse> {
-    const params = new URLSearchParams({
+  private async fetchWeatherForecast(
+    location: GeoLocation,
+    hours: number,
+    pastHours: number = 0,
+  ): Promise<OpenMeteoWeatherResponse> {
+    const params: Record<string, string> = {
       latitude: location.latitude.toString(),
       longitude: location.longitude.toString(),
       hourly: [
@@ -165,23 +208,40 @@ export class OpenMeteoService {
         'visibility',
       ].join(','),
       forecast_hours: hours.toString(),
-      wind_speed_unit: 'kn', // Get wind in knots directly
-    });
-
-    const response = await fetch(`${WEATHER_API_URL}?${params}`);
-    
-    if (!response.ok) {
-      throw new Error(`Weather API error: ${response.status} ${response.statusText}`);
+      wind_speed_unit: 'kn',
+      // Explicit UTC: timestamps in `hourly.time` are UTC wall-clock strings without a Z
+      // suffix. `mergeWeatherAndMarine` appends Z before parsing so JS doesn't
+      // silently reinterpret them as the browser's local time (which caused an 8h
+      // offset in Hong Kong and elsewhere).
+      timezone: 'UTC',
+    };
+    if (pastHours > 0) {
+      params.past_hours = pastHours.toString();
     }
 
-    return response.json();
+    // Try proxy first, fall back to direct
+    try {
+      return await this.fetchViaProxy<OpenMeteoWeatherResponse>('forecast', params);
+    } catch (proxyErr) {
+      logger.warn('[OpenMeteoService] Proxy failed, falling back to direct API', proxyErr);
+      const directUrl = `${WEATHER_API_URL}?${new URLSearchParams(params)}`;
+      const response = await fetch(directUrl);
+      if (!response.ok) {
+        throw new Error(`Weather API error: ${response.status} ${response.statusText}`);
+      }
+      return await response.json();
+    }
   }
 
   /**
-   * Fetch marine forecast from Open-Meteo Marine API
+   * Fetch marine forecast from Open-Meteo Marine API (via proxy, with direct fallback)
    */
-  private async fetchMarineForecast(location: GeoLocation, hours: number): Promise<OpenMeteoMarineResponse> {
-    const params = new URLSearchParams({
+  private async fetchMarineForecast(
+    location: GeoLocation,
+    hours: number,
+    pastHours: number = 0,
+  ): Promise<OpenMeteoMarineResponse> {
+    const params: Record<string, string> = {
       latitude: location.latitude.toString(),
       longitude: location.longitude.toString(),
       hourly: [
@@ -196,23 +256,25 @@ export class OpenMeteoService {
         'wind_wave_period',
       ].join(','),
       forecast_hours: hours.toString(),
-    });
-
-    const response = await fetch(`${MARINE_API_URL}?${params}`);
-    
-    if (!response.ok) {
-      // Marine data might not be available for all locations (inland areas)
-      logger.warn('[OpenMeteoService] Marine API not available for this location, using defaults');
-      return {
-        latitude: location.latitude,
-        longitude: location.longitude,
-        hourly: {
-          time: [],
-        },
-      };
+      // Must match the forecast endpoint so the two response arrays share the
+      // same time keys when merged.
+      timezone: 'UTC',
+    };
+    if (pastHours > 0) {
+      params.past_hours = pastHours.toString();
     }
 
-    return response.json();
+    try {
+      return await this.fetchViaProxy('marine', params);
+    } catch (proxyErr) {
+      logger.warn('[OpenMeteoService] Marine proxy failed, falling back to direct API', proxyErr);
+      const response = await fetch(`${MARINE_API_URL}?${new URLSearchParams(params)}`);
+      if (!response.ok) {
+        logger.warn('[OpenMeteoService] Marine API not available for this location, using defaults');
+        return { latitude: location.latitude, longitude: location.longitude, hourly: { time: [] } };
+      }
+      return response.json();
+    }
   }
 
   /**
@@ -256,7 +318,14 @@ export class OpenMeteoService {
 
       const beaufortScale = this.calculateBeaufortScale(windSpeed);
       const visibilityKm = visibilityMeters / 1000;
-      const timestamp = new Date(time);
+      // Open-Meteo returns ISO strings like "2026-04-11T12:00" with no zone
+      // designator. Because we request `timezone=UTC`, those are UTC wall-clock
+      // times — but `new Date("2026-04-11T12:00")` would otherwise interpret the
+      // string as the browser's local time (8h off in Hong Kong, etc.). Append
+      // `Z` so JS parses it as UTC, which produces a Date representing the real
+      // instant that matches the race time we're searching for.
+      const normalizedTime = /Z|[+-]\d{2}:?\d{2}$/.test(time) ? time : `${time}Z`;
+      const timestamp = new Date(normalizedTime);
 
       results.push({
         wind: {
