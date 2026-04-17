@@ -1,21 +1,30 @@
 /**
- * Signup Prompt Modal Component
- * Encourages guest users to create a free account
- * Shows contextual benefits based on the feature being accessed
+ * Signup Prompt Modal
+ *
+ * Soft conversion nudge shown to guests after they've explored a sample.
+ * Vocabulary-aware: pulls the active interest's noun for "Learning Event"
+ * (Race / Project / Session / Workout / Clinical) so the copy never feels
+ * sailing-flavored when the user picked Design or Knitting.
+ *
+ * Visual style matches the BetterAt welcome flow (cream background, blue
+ * accent, Manrope) — NOT the old dark slate RegattaFlow look.
  */
 
 import React from 'react';
 import {
+  Image,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
   StyleSheet,
   View,
-  Modal,
-  TouchableOpacity,
-  ScrollView,
 } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useVocabulary } from '@/hooks/useVocabulary';
+import { useInterest } from '@/providers/InterestProvider';
 
 export type SignupPromptFeature =
   | 'multiple_races'
@@ -32,6 +41,10 @@ interface SignupPromptModalProps {
   message?: string;
 }
 
+const ACCENT = '#2563EB';
+const BRAND_DARK = '#0B1A33';
+const CREAM = '#FAF8F5';
+
 export default function SignupPromptModal({
   visible,
   onClose,
@@ -39,68 +52,79 @@ export default function SignupPromptModal({
   title,
   message,
 }: SignupPromptModalProps) {
-  // Default content based on feature
+  const { vocab } = useVocabulary();
+  const { currentInterest } = useInterest();
+
+  // Pluralize the interest noun (Race → Races, Project → Projects, etc.)
+  // The five vocab values all pluralize cleanly with a trailing "s".
+  const eventSingular = vocab('Learning Event').toLowerCase();
+  const eventPlural = `${eventSingular}s`;
+
+  // Default content based on the feature being accessed.
+  // All copy is interest-neutral or vocab-aware — never sailing-specific.
   const getFeatureContent = () => {
     switch (feature) {
       case 'multiple_races':
         return {
-          title: 'Add More Races',
-          message: 'Create a free account to add unlimited races and track all your sailing events.',
+          title: `Save your ${eventPlural}`,
+          message: `Create a free account to keep all your ${eventPlural} in one place and pick up where you left off.`,
           benefits: [
-            'Add unlimited races',
+            `Unlimited ${eventPlural}`,
             'Sync across all your devices',
-            'Never lose your race data',
-            'Access your races anywhere',
+            'Never lose your progress',
+            'Pick up where you left off',
           ],
-          icon: 'boat' as const,
+          icon: 'sparkles' as const,
         };
       case 'ai_analysis':
         return {
-          title: 'AI Race Analysis',
-          message: 'Get AI-powered insights and tactical recommendations for your races.',
+          title: 'Unlock AI insights',
+          message: `Get personalized suggestions and reflections on every ${eventSingular}.`,
           benefits: [
-            'AI-powered race strategy',
-            'Tactical recommendations',
-            'Performance analytics',
-            'Post-race analysis',
+            'Personalized AI suggestions',
+            'Reflection prompts that learn from you',
+            'Progress insights over time',
+            'A coach in your pocket',
           ],
-          icon: 'analytics' as const,
+          icon: 'sparkles' as const,
         };
       case 'cloud_sync':
         return {
-          title: 'Sync Your Data',
-          message: 'Keep your race data safe and accessible on all your devices.',
+          title: 'Sync your progress',
+          message: 'Keep your work safe and accessible on every device you use.',
           benefits: [
             'Automatic cloud backup',
             'Access from any device',
-            'Never lose your data',
+            'Never lose your progress',
             'Seamless sync',
           ],
           icon: 'cloud' as const,
         };
       case 'post_race_results':
         return {
-          title: 'View Full Results',
-          message: 'Create an account to save and view your complete race results and history.',
+          title: 'See your full history',
+          message: `Create an account to save and review every ${eventSingular} you've worked on.`,
           benefits: [
-            'Full race results history',
-            'Performance tracking over time',
-            'Compare results across races',
-            'Export for coaching sessions',
+            `Full ${eventSingular} history`,
+            'Track progress over time',
+            `Compare ${eventPlural} side by side`,
+            'Share with coaches and peers',
           ],
-          icon: 'trophy' as const,
+          icon: 'time' as const,
         };
       default:
         return {
-          title: title || 'Create Free Account',
-          message: message || 'Sign up to unlock the full RegattaFlow experience.',
+          title: title || 'Save your progress',
+          message:
+            message ||
+            `Sign up free to start your own ${eventPlural} and keep your progress.`,
           benefits: [
-            'Add unlimited races',
+            `Unlimited ${eventPlural}`,
             'Sync across devices',
             'Cloud backup',
-            'AI race analysis',
+            'Personalized AI suggestions',
           ],
-          icon: 'person-add' as const,
+          icon: 'sparkles' as const,
         };
     }
   };
@@ -109,7 +133,8 @@ export default function SignupPromptModal({
 
   const handleSignUp = () => {
     onClose();
-    router.push('/(auth)/signup');
+    const interestParam = currentInterest?.slug ? `?interest=${currentInterest.slug}` : '';
+    router.push(`/(auth)/signup${interestParam}` as any);
   };
 
   const handleSignIn = () => {
@@ -124,10 +149,7 @@ export default function SignupPromptModal({
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
-      <LinearGradient
-        colors={['#0f172a', '#1e293b', '#334155']}
-        style={styles.container}
-      >
+      <View style={styles.container}>
         <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
@@ -135,13 +157,30 @@ export default function SignupPromptModal({
         >
           {/* Header */}
           <View style={styles.header}>
-            <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-              <Ionicons name="close" size={24} color="#f8fafc" />
-            </TouchableOpacity>
+            <Pressable
+              style={({ pressed }) => [styles.closeButton, pressed && styles.closeButtonPressed]}
+              onPress={onClose}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel="Close"
+            >
+              <Ionicons name="close" size={24} color={BRAND_DARK} />
+            </Pressable>
+
+            {/* Brand pill — consistent with welcome flow */}
+            <View style={styles.brandPill}>
+              <Image
+                source={require('@/assets/images/brand-mark.png')}
+                style={styles.brandPillMark}
+                resizeMode="contain"
+              />
+              <ThemedText style={styles.brandPillText}>BetterAt</ThemedText>
+            </View>
 
             <View style={styles.iconContainer}>
+              <View style={styles.iconRing} />
               <View style={styles.iconCircle}>
-                <Ionicons name={content.icon} size={48} color="#0ea5e9" />
+                <Ionicons name={content.icon} size={42} color={ACCENT} />
               </View>
             </View>
 
@@ -153,12 +192,11 @@ export default function SignupPromptModal({
 
           {/* Benefits */}
           <View style={styles.benefitsSection}>
-            <ThemedText style={styles.benefitsTitle}>Free Account Benefits</ThemedText>
             <View style={styles.benefitsList}>
               {content.benefits.map((benefit, index) => (
                 <View key={index} style={styles.benefitItem}>
                   <View style={styles.benefitIcon}>
-                    <Ionicons name="checkmark" size={20} color="#22c55e" />
+                    <Ionicons name="checkmark" size={18} color="#16A34A" />
                   </View>
                   <ThemedText style={styles.benefitText}>{benefit}</ThemedText>
                 </View>
@@ -166,78 +204,84 @@ export default function SignupPromptModal({
             </View>
           </View>
 
-          {/* Free Account Card */}
+          {/* Trial Card — every signup gets 14 days of Pro free, then chooses
+              Free / Plus / Pro. Don't undersell by saying "$0 forever". */}
           <View style={styles.freeCard}>
             <View style={styles.freeBadge}>
-              <ThemedText style={styles.freeBadgeText}>100% Free</ThemedText>
+              <ThemedText style={styles.freeBadgeText}>14-DAY FREE TRIAL</ThemedText>
             </View>
 
             <View style={styles.freeCardContent}>
-              <ThemedText style={styles.freeCardTitle}>RegattaFlow Account</ThemedText>
-              <ThemedText style={styles.freeCardPrice}>$0</ThemedText>
-              <ThemedText style={styles.freeCardSubtext}>No credit card required</ThemedText>
+              <ThemedText style={styles.freeCardTitle}>Try Pro free</ThemedText>
+              <ThemedText style={styles.freeCardPrice}>14 days</ThemedText>
+              <ThemedText style={styles.freeCardSubtext}>
+                No credit card required
+              </ThemedText>
             </View>
 
-            <View style={styles.freeFeatures}>
-              <View style={styles.freeFeatureItem}>
-                <Ionicons name="infinite" size={16} color="#0ea5e9" />
-                <ThemedText style={styles.freeFeatureText}>Unlimited races</ThemedText>
-              </View>
-              <View style={styles.freeFeatureItem}>
-                <Ionicons name="sync" size={16} color="#0ea5e9" />
-                <ThemedText style={styles.freeFeatureText}>Multi-device sync</ThemedText>
-              </View>
-              <View style={styles.freeFeatureItem}>
-                <Ionicons name="cloud-upload" size={16} color="#0ea5e9" />
-                <ThemedText style={styles.freeFeatureText}>Automatic backup</ThemedText>
-              </View>
+            <View style={styles.tierRow}>
+              <ThemedText style={styles.tierRowText}>
+                Then keep <ThemedText style={styles.tierRowBold}>Free</ThemedText> ·{' '}
+                <ThemedText style={styles.tierRowBold}>Plus $9/mo</ThemedText> ·{' '}
+                <ThemedText style={styles.tierRowBold}>Pro $29/mo</ThemedText>
+              </ThemedText>
             </View>
           </View>
 
           {/* Action Buttons */}
           <View style={styles.actionButtons}>
-            <TouchableOpacity style={styles.primaryButton} onPress={handleSignUp}>
-              <Ionicons name="person-add" size={20} color="#ffffff" />
-              <ThemedText style={styles.primaryButtonText}>Create Free Account</ThemedText>
-            </TouchableOpacity>
+            <Pressable
+              style={({ pressed }) => [styles.primaryButton, pressed && styles.primaryButtonPressed]}
+              onPress={handleSignUp}
+              accessibilityRole="button"
+              accessibilityLabel="Start free trial"
+            >
+              <Ionicons name="sparkles" size={18} color="#FFFFFF" />
+              <ThemedText style={styles.primaryButtonText}>Start free trial</ThemedText>
+            </Pressable>
 
-            <TouchableOpacity style={styles.secondaryButton} onPress={onClose}>
-              <ThemedText style={styles.secondaryButtonText}>Continue as Guest</ThemedText>
-            </TouchableOpacity>
+            <Pressable
+              style={({ pressed }) => [styles.secondaryButton, pressed && styles.secondaryButtonPressed]}
+              onPress={onClose}
+              accessibilityRole="button"
+              accessibilityLabel="Continue as guest"
+            >
+              <ThemedText style={styles.secondaryButtonText}>Continue as guest</ThemedText>
+            </Pressable>
           </View>
 
           {/* Sign In Link */}
           <View style={styles.signInContainer}>
-            <ThemedText style={styles.signInText}>Already have an account?</ThemedText>
-            <TouchableOpacity onPress={handleSignIn}>
-              <ThemedText style={styles.signInLink}>Sign In</ThemedText>
-            </TouchableOpacity>
+            <ThemedText style={styles.signInText}>Already have an account? </ThemedText>
+            <Pressable onPress={handleSignIn} hitSlop={12} accessibilityRole="link" accessibilityLabel="Log in to existing account">
+              <ThemedText style={styles.signInLink}>Log in</ThemedText>
+            </Pressable>
           </View>
 
           {/* Trust Indicators */}
           <View style={styles.trustIndicators}>
             <View style={styles.trustItem}>
-              <Ionicons name="shield-checkmark" size={16} color="#22c55e" />
+              <Ionicons name="shield-checkmark" size={14} color="#94A3B8" />
               <ThemedText style={styles.trustText}>Secure</ThemedText>
             </View>
             <View style={styles.trustItem}>
-              <Ionicons name="lock-closed" size={16} color="#22c55e" />
-              <ThemedText style={styles.trustText}>Privacy First</ThemedText>
+              <Ionicons name="lock-closed" size={14} color="#94A3B8" />
+              <ThemedText style={styles.trustText}>Privacy first</ThemedText>
             </View>
             <View style={styles.trustItem}>
-              <Ionicons name="flash" size={16} color="#22c55e" />
-              <ThemedText style={styles.trustText}>Instant Setup</ThemedText>
+              <Ionicons name="flash" size={14} color="#94A3B8" />
+              <ThemedText style={styles.trustText}>Instant setup</ThemedText>
             </View>
           </View>
 
           {/* Footer */}
           <View style={styles.footer}>
             <ThemedText style={styles.footerText}>
-              Your current race data will be saved to your account
+              Your current progress will be saved to your account.
             </ThemedText>
           </View>
         </ScrollView>
-      </LinearGradient>
+      </View>
     </Modal>
   );
 }
@@ -245,6 +289,7 @@ export default function SignupPromptModal({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: CREAM,
   },
   scrollView: {
     flex: 1,
@@ -255,221 +300,333 @@ const styles = StyleSheet.create({
 
   // Header
   header: {
-    paddingTop: 20,
+    paddingTop: 12,
     paddingHorizontal: 24,
-    paddingBottom: 24,
+    paddingBottom: 16,
   },
   closeButton: {
     alignSelf: 'flex-end',
     padding: 8,
+    borderRadius: 8,
   },
+  closeButtonPressed: {
+    opacity: 0.55,
+  },
+
+  // Brand pill
+  brandPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    gap: 8,
+    marginTop: 4,
+    marginBottom: 16,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: 'rgba(37, 99, 235, 0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(37, 99, 235, 0.10)',
+  },
+  brandPillMark: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+  },
+  brandPillText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: BRAND_DARK,
+    letterSpacing: -0.1,
+    marginRight: 4,
+    ...Platform.select({
+      ios: { fontFamily: 'Manrope-Bold' },
+      android: { fontFamily: 'Manrope-Bold' },
+      web: { fontFamily: 'Manrope, system-ui, sans-serif', fontWeight: '700' as const },
+    }),
+  },
+
+  // Hero icon
   iconContainer: {
     alignItems: 'center',
-    marginVertical: 16,
+    justifyContent: 'center',
+    marginVertical: 12,
+    width: '100%',
+    height: 110,
+  },
+  iconRing: {
+    position: 'absolute',
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    backgroundColor: 'rgba(37, 99, 235, 0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(37, 99, 235, 0.12)',
   },
   iconCircle: {
-    width: 96,
-    height: 96,
-    backgroundColor: 'rgba(14, 165, 233, 0.15)',
-    borderRadius: 48,
+    width: 76,
+    height: 76,
+    backgroundColor: 'rgba(37, 99, 235, 0.10)',
+    borderRadius: 38,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(14, 165, 233, 0.3)',
   },
+
   titleContainer: {
     alignItems: 'center',
     marginTop: 8,
   },
   title: {
-    fontSize: 28,
+    fontSize: 26,
+    lineHeight: 32,
     fontWeight: '700',
-    color: '#f8fafc',
+    color: BRAND_DARK,
     textAlign: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
+    letterSpacing: -0.4,
+    ...Platform.select({
+      ios: { fontFamily: 'Manrope-Bold' },
+      android: { fontFamily: 'Manrope-Bold' },
+      web: { fontFamily: 'Manrope, system-ui, sans-serif', fontWeight: '700' as const },
+    }),
   },
   description: {
-    fontSize: 16,
-    color: '#cbd5e1',
+    fontSize: 15,
+    color: '#64748B',
     textAlign: 'center',
-    lineHeight: 24,
-    paddingHorizontal: 20,
+    lineHeight: 22,
+    paddingHorizontal: 12,
+    ...Platform.select({
+      ios: { fontFamily: 'Manrope-Regular' },
+      android: { fontFamily: 'Manrope-Regular' },
+      web: { fontFamily: 'Manrope, system-ui, sans-serif' },
+    }),
   },
 
   // Benefits
   benefitsSection: {
     paddingHorizontal: 24,
+    marginTop: 8,
     marginBottom: 24,
   },
-  benefitsTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#f8fafc',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
   benefitsList: {
-    gap: 14,
+    gap: 12,
   },
   benefitItem: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: 12,
   },
   benefitIcon: {
-    width: 28,
-    height: 28,
-    backgroundColor: 'rgba(34, 197, 94, 0.2)',
-    borderRadius: 14,
+    width: 26,
+    height: 26,
+    backgroundColor: 'rgba(22, 163, 74, 0.12)',
+    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 2,
   },
   benefitText: {
     flex: 1,
-    fontSize: 16,
-    color: '#e2e8f0',
-    lineHeight: 24,
+    fontSize: 15,
+    color: BRAND_DARK,
+    lineHeight: 22,
+    ...Platform.select({
+      ios: { fontFamily: 'Manrope-Regular' },
+      android: { fontFamily: 'Manrope-Regular' },
+      web: { fontFamily: 'Manrope, system-ui, sans-serif' },
+    }),
   },
 
-  // Free Card
+  // Free card
   freeCard: {
     marginHorizontal: 24,
-    marginBottom: 28,
-    backgroundColor: 'rgba(14, 165, 233, 0.1)',
-    borderWidth: 2,
-    borderColor: '#0ea5e9',
+    marginBottom: 24,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: 'rgba(37, 99, 235, 0.18)',
     borderRadius: 16,
-    padding: 20,
+    paddingVertical: 22,
+    paddingHorizontal: 20,
     position: 'relative',
+    ...Platform.select({
+      ios: {
+        shadowColor: ACCENT,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.08,
+        shadowRadius: 12,
+      },
+      android: { elevation: 2 },
+      web: { boxShadow: '0 4px 16px rgba(37, 99, 235, 0.08)' as any },
+    }),
   },
   freeBadge: {
     position: 'absolute',
-    top: -12,
+    top: -10,
     alignSelf: 'center',
-    backgroundColor: '#22c55e',
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 5,
+    left: 0,
+    right: 0,
+    marginHorizontal: 'auto',
+    backgroundColor: '#16A34A',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    width: 110,
+    alignItems: 'center',
   },
   freeBadgeText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
-    color: '#ffffff',
+    color: '#FFFFFF',
+    letterSpacing: 0.4,
   },
   freeCardContent: {
     alignItems: 'center',
-    marginTop: 8,
-    marginBottom: 16,
   },
   freeCardTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#f8fafc',
+    fontSize: 16,
+    fontWeight: '700',
+    color: BRAND_DARK,
     marginBottom: 4,
+    ...Platform.select({
+      ios: { fontFamily: 'Manrope-Bold' },
+      android: { fontFamily: 'Manrope-Bold' },
+      web: { fontFamily: 'Manrope, system-ui, sans-serif', fontWeight: '700' as const },
+    }),
   },
   freeCardPrice: {
-    fontSize: 36,
+    fontSize: 32,
     fontWeight: '700',
-    color: '#22c55e',
-    marginBottom: 2,
+    color: ACCENT,
+    marginBottom: 4,
+    letterSpacing: -0.8,
+    ...Platform.select({
+      ios: { fontFamily: 'Manrope-Bold' },
+      android: { fontFamily: 'Manrope-Bold' },
+      web: { fontFamily: 'Manrope, system-ui, sans-serif', fontWeight: '700' as const },
+    }),
   },
   freeCardSubtext: {
-    fontSize: 14,
-    color: '#94a3b8',
+    fontSize: 13,
+    color: '#94A3B8',
   },
-  freeFeatures: {
-    gap: 10,
-  },
-  freeFeatureItem: {
-    flexDirection: 'row',
+  tierRow: {
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(11, 26, 51, 0.10)',
     alignItems: 'center',
-    gap: 8,
   },
-  freeFeatureText: {
-    fontSize: 14,
-    color: '#e2e8f0',
-    flex: 1,
+  tierRowText: {
+    fontSize: 12,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  tierRowBold: {
+    color: BRAND_DARK,
+    fontWeight: '600',
   },
 
-  // Action Buttons
+  // Action buttons
   actionButtons: {
     paddingHorizontal: 24,
-    gap: 12,
-    marginBottom: 20,
+    gap: 10,
+    marginBottom: 16,
   },
   primaryButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#0ea5e9',
-    borderRadius: 12,
-    paddingVertical: 18,
+    backgroundColor: ACCENT,
+    borderRadius: 14,
+    ...Platform.select({ web: { outlineStyle: 'none', cursor: 'pointer' } as any }),
+    paddingVertical: 16,
     paddingHorizontal: 24,
     gap: 8,
+    ...Platform.select({
+      ios: {
+        shadowColor: ACCENT,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.32,
+        shadowRadius: 16,
+      },
+      android: { elevation: 6 },
+      web: { boxShadow: '0 8px 16px rgba(37, 99, 235, 0.32)' as any },
+    }),
+  },
+  primaryButtonPressed: {
+    transform: [{ scale: 0.98 }],
   },
   primaryButtonText: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
-    color: '#ffffff',
+    color: '#FFFFFF',
+    letterSpacing: 0.2,
+    ...Platform.select({
+      ios: { fontFamily: 'Manrope-Bold' },
+      android: { fontFamily: 'Manrope-Bold' },
+      web: { fontFamily: 'Manrope, system-ui, sans-serif', fontWeight: '700' as const },
+    }),
   },
   secondaryButton: {
     alignItems: 'center',
     paddingVertical: 14,
-    borderWidth: 1,
-    borderColor: '#475569',
-    borderRadius: 12,
+    borderRadius: 14,
+    ...Platform.select({ web: { outlineStyle: 'none', cursor: 'pointer' } as any }),
+  },
+  secondaryButtonPressed: {
+    opacity: 0.55,
   },
   secondaryButtonText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
-    color: '#94a3b8',
+    color: '#64748B',
   },
 
-  // Sign In
+  // Sign in
   signInContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 6,
-    marginBottom: 24,
+    marginBottom: 20,
   },
   signInText: {
     fontSize: 14,
-    color: '#94a3b8',
+    color: '#64748B',
   },
   signInLink: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#0ea5e9',
+    color: ACCENT,
   },
 
-  // Trust Indicators
+  // Trust indicators
   trustIndicators: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'center',
+    gap: 24,
     paddingHorizontal: 24,
-    marginBottom: 20,
+    marginBottom: 16,
   },
   trustItem: {
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
   },
   trustText: {
     fontSize: 12,
-    color: '#94a3b8',
-    textAlign: 'center',
+    color: '#94A3B8',
   },
 
   // Footer
   footer: {
-    paddingHorizontal: 24,
+    paddingHorizontal: 32,
     alignItems: 'center',
   },
   footerText: {
-    fontSize: 14,
-    color: '#64748b',
+    fontSize: 12,
+    color: '#94A3B8',
     textAlign: 'center',
-    lineHeight: 20,
+    lineHeight: 18,
   },
 });
