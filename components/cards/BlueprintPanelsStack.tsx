@@ -6,8 +6,9 @@
  * blueprint list plus the user's own adopted steps.
  */
 
-import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import React, { useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useBlueprintSteps, useAdoptBlueprintStep } from '@/hooks/useBlueprint';
 import { usePeerTimelines } from '@/hooks/usePeerTimelines';
 import { useRouter } from 'expo-router';
@@ -31,19 +32,44 @@ export function BlueprintPanelsStack({
   // Map blueprintId → peers for quick lookup.
   const peersByBlueprint = new Map(groups.map((g) => [g.blueprintId, g.peers]));
 
+  // Master collapse for the whole stack. Expanded by default so the panels
+  // remain visible on first load; user can collapse once they want the
+  // screen back. Hooks must run before any early return.
+  const [expanded, setExpanded] = useState(true);
+
   if (!subscribedBlueprints || subscribedBlueprints.length === 0) return null;
+
+  const count = subscribedBlueprints.length;
 
   return (
     <View style={styles.stack}>
-      {subscribedBlueprints.map((bp) => (
-        <BlueprintPanelRow
-          key={bp.blueprint_id}
-          info={bp}
-          interestId={interestId}
-          peers={peersByBlueprint.get(bp.blueprint_id)}
-          myAdoptedSteps={myTimelineSteps ?? undefined}
+      <Pressable
+        style={styles.header}
+        onPress={() => setExpanded((v) => !v)}
+        accessibilityRole="button"
+        accessibilityLabel={`${expanded ? 'Collapse' : 'Expand'} ${count} subscribed blueprint${count === 1 ? '' : 's'}`}
+      >
+        <Ionicons
+          name={expanded ? 'chevron-down' : 'chevron-forward'}
+          size={12}
+          color="#8E8E93"
+          style={styles.headerChevron}
         />
-      ))}
+        <Text style={styles.headerLabel}>
+          Subscribed · {count}
+        </Text>
+      </Pressable>
+      {expanded
+        ? subscribedBlueprints.map((bp) => (
+            <BlueprintPanelRow
+              key={bp.blueprint_id}
+              info={bp}
+              interestId={interestId}
+              peers={peersByBlueprint.get(bp.blueprint_id)}
+              myAdoptedSteps={myTimelineSteps ?? undefined}
+            />
+          ))
+        : null}
     </View>
   );
 }
@@ -100,5 +126,22 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 12,
     paddingVertical: 12,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+  },
+  headerChevron: {
+    width: 12,
+  },
+  headerLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#8E8E93',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
   },
 });
