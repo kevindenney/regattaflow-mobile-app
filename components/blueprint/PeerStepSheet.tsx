@@ -104,7 +104,7 @@ export function PeerStepSheet({
   const handleOpenMyStep = () => {
     if (!alreadyAdoptedStepId) return;
     onClose();
-    router.push(`/p/step/${alreadyAdoptedStepId}` as any);
+    router.push(`/step/${alreadyAdoptedStepId}` as any);
   };
 
   const handleViewProfile = () => {
