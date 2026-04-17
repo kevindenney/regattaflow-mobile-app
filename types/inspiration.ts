@@ -1,0 +1,86 @@
+/**
+ * Inspiration Types
+ *
+ * Types for the "Inspiration → Interest → Blueprint" pipeline.
+ * A user pastes inspiring content (URL, text, description) and the system
+ * extracts skills, proposes an interest, and generates a blueprint skeleton.
+ */
+
+/** How the user provided the inspiring content */
+export type InspirationContentType = 'url' | 'text' | 'description';
+
+/** Input to the inspiration-extract edge function */
+export interface InspirationExtractInput {
+  content_type: InspirationContentType;
+  content: string;
+  user_existing_interest_slugs: string[];
+}
+
+/** AI-proposed interest details */
+export interface ProposedInterest {
+  name: string;
+  slug: string;
+  description: string;
+  suggested_domain_slug: string;
+  accent_color: string;
+  icon_name: string;
+}
+
+/** A single step in the generated blueprint */
+export interface InspirationBlueprintStep {
+  title: string;
+  description: string;
+  category: string;
+  order: number;
+  sub_steps: string[];
+  reasoning: string;
+  estimated_duration_days: number;
+  /** Slugs of existing user interests this step overlaps with */
+  cross_interest_slugs: string[];
+}
+
+/** Generated blueprint skeleton */
+export interface InspirationBlueprint {
+  title: string;
+  description: string;
+  steps: InspirationBlueprintStep[];
+}
+
+/** Overlap between generated content and user's existing interests */
+export interface InterestOverlap {
+  slug: string;
+  relevance: string;
+}
+
+/** Full extraction result from the AI edge function */
+export interface InspirationExtraction {
+  proposed_interest: ProposedInterest;
+  blueprint: InspirationBlueprint;
+  source_summary: string;
+  existing_interest_overlaps: InterestOverlap[];
+  /** 0–1 confidence in the extraction quality */
+  confidence: number;
+}
+
+/** Input to InspirationService.activate() */
+export interface ActivateInspirationInput {
+  userId: string;
+  extraction: InspirationExtraction;
+  /** User overrides to the proposed interest */
+  interestEdits?: Partial<ProposedInterest>;
+  /** User edits to individual steps (removals, title changes, etc.) */
+  editedSteps?: InspirationBlueprintStep[];
+  /** Original content for saving to playbook inbox */
+  sourceContent: string;
+  sourceContentType: InspirationContentType;
+}
+
+/** Result of activating an inspiration */
+export interface ActivateInspirationResult {
+  interestId: string;
+  interestSlug: string;
+  blueprintId: string;
+  blueprintSlug: string;
+  stepIds: string[];
+  playbookId: string;
+}
