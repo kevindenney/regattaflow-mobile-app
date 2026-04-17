@@ -2732,7 +2732,13 @@ export default function RacesScreen() {
       return;
     }
 
-    const matchingRace = safeRecentRaces.find((race: any) => race.id === targetId);
+    // Match against both safeRecentRaces AND myTimelineSteps — adopted
+    // curriculum steps live in myTimelineSteps and don't always surface
+    // in safeRecentRaces, so a deep link from e.g. the peer sheet would
+    // otherwise bail silently and leave ?selected= in the URL.
+    const matchingRace =
+      safeRecentRaces.find((race: any) => race.id === targetId) ??
+      myTimelineSteps?.find((s) => s.id === targetId);
     if (!matchingRace) {
       return;
     }
@@ -2747,7 +2753,7 @@ export default function RacesScreen() {
       url.searchParams.delete('selected');
       window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
     }
-  }, [loading, safeRecentRaces, searchParams?.selected]);
+  }, [loading, safeRecentRaces, myTimelineSteps, searchParams?.selected]);
 
   useEffect(() => {
     if (hasRealRaces) {
