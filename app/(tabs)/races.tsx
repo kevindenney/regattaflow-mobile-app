@@ -8,6 +8,7 @@ import {
 } from '@/components/cards';
 import { IOS_COLORS } from '@/components/cards/constants';
 import { TimelineGridView } from '@/components/cards/TimelineGridView';
+import { openInterestSwitcher } from '@/components/InterestSwitcher';
 
 import {
   PreRaceStrategySection,
@@ -89,13 +90,18 @@ import { useVenueInsights } from '@/hooks/useVenueInsights';
 import { useVenueLiveWeather } from '@/hooks/useVenueLiveWeather';
 import { useQueryClient } from '@tanstack/react-query';
 import { useMyTimeline } from '@/hooks/useTimelineSteps';
-import { createStep as createTimelineStep, deleteStep as deleteTimelineStep } from '@/services/TimelineStepService';
+import { createStep as createTimelineStep, deleteStep as deleteTimelineStep, updateStepMetadata } from '@/services/TimelineStepService';
+import type { TimelineStepRecord } from '@/types/timeline-steps';
+import { RaceCollaborationService } from '@/services/RaceCollaborationService';
 import { timelineStepsToCardRaceData } from '@/lib/timeline/timelineStepAdapter';
+import { compareTimelineItems } from '@/lib/races/timelineCompare';
 import { StepFilterBar, type StepFilters } from '@/components/step/StepFilterBar';
 import { StepDetailContent } from '@/components/step/StepDetailContent';
+// PeerTimelinesFooter peer sections now integrated into BlueprintProgressStrip
+import { BlueprintProgressStrip } from '@/components/blueprint/BlueprintProgressStrip';
 import { BlueprintPanelsStack } from '@/components/cards/BlueprintPanelsStack';
 import { PublishBlueprintSheet } from '@/components/blueprint/PublishBlueprintSheet';
-import { useUserBlueprints, useSubscribedBlueprints, useSuggestedNextSteps, useAdoptBlueprintStep, useDismissBlueprintStep } from '@/hooks/useBlueprint';
+import { useUserBlueprints, useSubscribedBlueprints, useSuggestedNextSteps, useAdoptBlueprintStep, useDismissBlueprintStep, useAutoAdoptSubscribedSteps } from '@/hooks/useBlueprint';
 import { useScrollToolbarHide } from '@/hooks/useScrollToolbarHide';
 import { FEATURE_FLAGS } from '@/lib/featureFlags';
 import {
@@ -129,9 +135,24 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActionSheetIOS, ActivityIndicator, Animated, Dimensions, LayoutRectangle, Modal, Platform, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import Reanimated, { useAnimatedStyle, useSharedValue, withTiming, withSequence, withDelay, withRepeat, runOnJS, Easing } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const logger = createLogger('RacesScreen');
+
+// Storage keys for the guest signup nudge.
+// - LAST_SHOWN: timestamp (ms) of the most recent auto-fired signup modal,
+//   used to enforce a 24h cross-session cooldown so we don't nag returning guests.
+// - FIRST_SESSION_DONE: 'true' once the user has completed their first browsing
+//   session (i.e. seen the modal at least once). Drives the welcome-back banner.
+const SIGNUP_MODAL_LAST_SHOWN_KEY = '@betterat/signup_modal_last_shown_ms';
+const GUEST_FIRST_SESSION_DONE_KEY = '@betterat/guest_first_session_done';
+// Persisted tap counter — increments on every sample-step tap while the cooldown
+// is active. When it crosses the threshold we re-fire the modal as a high-intent
+// signal, even if the 24h cooldown hasn't elapsed yet.
+const SIGNUP_MODAL_TAPS_KEY = '@betterat/signup_modal_taps_since_shown';
+const SIGNUP_MODAL_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours
+const SIGNUP_MODAL_TAP_THRESHOLD = 5;
 
 // Destructure tactical calculations for easy access
 const { calculateDistance, calculateBearing } = TacticalCalculations;
@@ -142,6 +163,17 @@ const { calculateDistance, calculateBearing } = TacticalCalculations;
 // - DOCUMENT_TYPE_OPTIONS, ADD_RACE_CARD_DISMISSED_KEY, MOCK_GPS_TRACK, MOCK_SPLIT_TIMES
 // - normalizeDirection, pickNumeric, normalizeCurrentType, extractWindSnapshot
 // - extractCurrentSnapshot, parseGpsTrack, parseSplitTimes, detectRaceType
+
+/** Naive English plural — handles "Activity" → "Activities", "Race" → "Races" */
+const pluralize = (noun: string): string => {
+  if (noun.endsWith('y') && !/[aeiou]y$/i.test(noun)) {
+    return noun.slice(0, -1) + 'ies';
+  }
+  if (noun.endsWith('s') || noun.endsWith('x') || noun.endsWith('sh') || noun.endsWith('ch')) {
+    return noun + 'es';
+  }
+  return noun + 's';
+};
 
 // Local helper for RaceDocumentsCard type conversion
 const normalizeDocumentType = (
@@ -174,23 +206,14 @@ export default function RacesScreen() {
   ) ?? [];
   const existingBlueprint = existingBlueprintsForInterest[0] ?? null;
 
-  // Subscribed blueprints (for timeline grid label)
+  // Subscribed blueprints (for per-card blueprint chip lookup)
   const { data: subscribedBlueprints } = useSubscribedBlueprints(viewMode === 'domain' ? null : currentInterest?.id);
-  const activeSubscribedBlueprint = subscribedBlueprints?.[0] ?? null;
 
   // Smart Add Step Sheet: suggested next steps from subscribed blueprints
   const [showAddStepSheet, setShowAddStepSheet] = useState(false);
   const { data: suggestedNextSteps } = useSuggestedNextSteps(viewMode === 'domain' ? null : currentInterest?.id);
   const adoptBlueprintStep = useAdoptBlueprintStep();
   const dismissBlueprintStep = useDismissBlueprintStep();
-
-  // Resolve blueprint title/slug: own published blueprint takes priority, then subscribed
-  const timelineBlueprintTitle = existingBlueprint?.is_published
-    ? existingBlueprint.title
-    : activeSubscribedBlueprint?.blueprint_title ?? null;
-  const timelineBlueprintSlug = existingBlueprint?.is_published
-    ? existingBlueprint.slug
-    : activeSubscribedBlueprint?.blueprint_slug ?? null;
 
   // Faculty blueprint guidance banner
   const FACULTY_ROLES = useMemo(() => new Set([
@@ -245,6 +268,68 @@ export default function RacesScreen() {
 
   // State for dismissing the demo notice
   const [demoNoticeDismissed, setDemoNoticeDismissed] = useState(false);
+
+  // First-run: prompt guests to sign up after they explore a sample step.
+  // - One-shot per session to avoid nagging within a session
+  // - 24h cooldown across cold launches so returning guests aren't re-nagged
+  // - Records "first session completed" so we can switch the banner copy on
+  //   subsequent visits (welcome-back variant)
+  const [showSampleSignupPrompt, setShowSampleSignupPrompt] = useState(false);
+  const sampleSignupShownRef = React.useRef(false);
+  const signupModalLastShownRef = React.useRef<number | null>(null);
+  const sampleTapCountRef = React.useRef<number>(0);
+  const [isReturningGuest, setIsReturningGuest] = useState(false);
+
+  // Persist these flags so the nudge is well-mannered across cold launches.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [lastShownStr, firstSessionDone, tapCountStr] = await Promise.all([
+          AsyncStorage.getItem(SIGNUP_MODAL_LAST_SHOWN_KEY),
+          AsyncStorage.getItem(GUEST_FIRST_SESSION_DONE_KEY),
+          AsyncStorage.getItem(SIGNUP_MODAL_TAPS_KEY),
+        ]);
+        if (cancelled) return;
+        const lastShown = lastShownStr ? Number(lastShownStr) : null;
+        signupModalLastShownRef.current = Number.isFinite(lastShown) ? lastShown : null;
+        const tapCount = tapCountStr ? Number(tapCountStr) : 0;
+        sampleTapCountRef.current = Number.isFinite(tapCount) ? tapCount : 0;
+        if (firstSessionDone === 'true') {
+          setIsReturningGuest(true);
+        }
+      } catch {
+        // Storage failures are non-fatal — fall back to default behavior
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Pulse animation overlaid on the toolbar + button. Triggered after the
+  // sample-signup modal is dismissed so the user knows where to create their own.
+  const addPulseProgress = useSharedValue(0);
+  const [showAddPulse, setShowAddPulse] = useState(false);
+  const triggerAddButtonPulse = useCallback(() => {
+    setShowAddPulse(true);
+    addPulseProgress.value = 0;
+    addPulseProgress.value = withRepeat(
+      withTiming(1, { duration: 900, easing: Easing.out(Easing.ease) }),
+      3,
+      false,
+      (finished) => {
+        if (finished) {
+          runOnJS(setShowAddPulse)(false);
+        }
+      },
+    );
+  }, [addPulseProgress]);
+
+  const addPulseRingStyle = useAnimatedStyle(() => ({
+    opacity: 0.55 * (1 - addPulseProgress.value),
+    transform: [{ scale: 1 + addPulseProgress.value * 0.9 }],
+  }));
 
   // Season archive modal
   const [showFullArchive, setShowFullArchive] = useState(false);
@@ -379,6 +464,16 @@ export default function RacesScreen() {
   // Single-line toolbar mode: season context is in toolbar subtitle.
   const totalHeaderHeight = toolbarHeight;
 
+  // Filter bar hide animation — slides up and collapses alongside the toolbar.
+  const [filterBarHeight, setFilterBarHeight] = useState(0);
+  const animatedFilterBarStyle = useAnimatedStyle(() => {
+    const collapse = toolbarHidden && filterBarHeight > 0 ? -filterBarHeight : 0;
+    return {
+      transform: [{ translateY: withTiming(collapse, { duration: 250 }) }],
+      marginBottom: withTiming(collapse, { duration: 250 }),
+    };
+  }, [toolbarHidden, filterBarHeight]);
+
   // Selected race detail state — restore from localStorage on web refresh
   const [selectedRaceId, setSelectedRaceId] = useState<string | null>(() => {
     if (typeof searchParams?.selected === 'string') return null; // route param takes priority
@@ -393,7 +488,8 @@ export default function RacesScreen() {
   const [selectedDemoRaceId, setSelectedDemoRaceId] = useState<string | null>(MOCK_RACES[0]?.id ?? null);
   const [deletingRaceId, setDeletingRaceId] = useState<string | null>(null);
   const isDeletingRace = deletingRaceId !== null;
-  const [timelineCustomOrderIds, setTimelineCustomOrderIds] = useState<string[]>([]);
+  // Legacy: timelineCustomOrderIds was used for client-side reorder persistence.
+  // Now sort_order in DB is the source of truth, so this is no longer needed.
   const [raceDetailReloadKey, setRaceDetailReloadKey] = useState(0);
   const fetchedRaceDetailIdRef = useRef<string | null>(null);
   // When a handler sets step data directly, store the ID here so the fetch effect skips overwriting it
@@ -529,8 +625,10 @@ export default function RacesScreen() {
   });
 
   // Real-time race updates - moved early to avoid hoisting issues with callbacks
-  // For guests, use the guest races hook (demo races + local guest race)
-  const guestRacesResult = useGuestRaces();
+  // For guests, use the guest races hook (demo races + local guest race).
+  // Pass the active interest slug so non-sailing interests (e.g. nursing,
+  // drawing) don't get the sailing demo races leaked into their view.
+  const guestRacesResult = useGuestRaces(currentInterest?.slug);
   const authenticatedRacesResult = useLiveRaces(user?.id);
 
   // Select the appropriate races based on auth state
@@ -561,12 +659,30 @@ export default function RacesScreen() {
     [interestSlug, user?.id],
   );
   // Fetch user's timeline steps for the current interest
-  const { data: myTimelineSteps } = useMyTimeline(
-    viewMode === 'domain' && effectiveInterestIds.length > 1 ? effectiveInterestIds : currentInterest?.id
-  );
+  const _timelineInterestParam = viewMode === 'domain' && effectiveInterestIds.length > 1 ? effectiveInterestIds : currentInterest?.id;
+  const { data: myTimelineSteps } = useMyTimeline(_timelineInterestParam);
+  // Backfill: auto-adopt steps for subscriptions that predate the auto-adopt feature
+  useAutoAdoptSubscribedSteps(currentInterest?.id, myTimelineSteps);
+  // Lookup map: blueprint_id → title (from own + subscribed blueprints)
+  const blueprintTitleById = useMemo(() => {
+    const map = new Map<string, string>();
+    (userBlueprints ?? []).forEach((bp) => { if (bp.id && bp.title) map.set(bp.id, bp.title); });
+    (subscribedBlueprints ?? []).forEach((sub) => {
+      if (sub.blueprint_id && sub.blueprint_title) map.set(sub.blueprint_id, sub.blueprint_title);
+    });
+    return map;
+  }, [userBlueprints, subscribedBlueprints]);
   const timelineStepCards = useMemo(
-    () => (myTimelineSteps?.length ? timelineStepsToCardRaceData(myTimelineSteps) : EMPTY_RACES),
-    [myTimelineSteps],
+    () => {
+      if (!myTimelineSteps?.length) return EMPTY_RACES;
+      const cards = timelineStepsToCardRaceData(myTimelineSteps);
+      return cards.map((card) => {
+        const bpId = (card as any).source_blueprint_id;
+        const bpTitle = bpId ? blueprintTitleById.get(bpId) : null;
+        return bpTitle ? { ...card, blueprintTitle: bpTitle } : card;
+      });
+    },
+    [myTimelineSteps, blueprintTitleById],
   );
 
   const interestFilteredRaces = useMemo(() => {
@@ -595,25 +711,13 @@ export default function RacesScreen() {
     const existingIds = new Set(regattas.map((r: any) => r.id));
     const newSteps = timelineStepCards.filter((s) => !existingIds.has(s.id));
     if (newSteps.length === 0) return regattas.length > 0 ? regattas : EMPTY_RACES;
-    // Sort with status-aware partitioning: completed/done steps first, then
-    // pending/planned steps. Within each group, timeline steps sort by sort_order,
-    // sailing races sort by date ascending.
-    const now = Date.now();
-    const merged = [...regattas, ...newSteps].sort((a: any, b: any) => {
-      const aCompleted = a.stepStatus === 'completed' || a.status === 'completed' ||
-        (!a.isTimelineStep && a.date && new Date(a.date).getTime() + 3 * 60 * 60 * 1000 < now);
-      const bCompleted = b.stepStatus === 'completed' || b.status === 'completed' ||
-        (!b.isTimelineStep && b.date && new Date(b.date).getTime() + 3 * 60 * 60 * 1000 < now);
-      if (aCompleted !== bCompleted) return aCompleted ? -1 : 1;
-      // Timeline steps: use sort_order (DB-persisted sequence)
-      const aSortOrder = a.sort_order ?? 999;
-      const bSortOrder = b.sort_order ?? 999;
-      if (a.isTimelineStep && b.isTimelineStep) return aSortOrder - bSortOrder;
-      // Sailing races: use date
-      const aDate = a.date ? new Date(a.date).getTime() : Infinity;
-      const bDate = b.date ? new Date(b.date).getTime() : Infinity;
-      return aDate - bDate;
-    });
+    // Unified comparator (see lib/races/timelineCompare.ts):
+    //   [past dated ASC] | [undated DESC by sort_order] | [future dated ASC]
+    // Shared with the grid view so both always show the same sequence.
+    const nowMs = Date.now();
+    const merged = [...regattas, ...newSteps].sort((a: any, b: any) =>
+      compareTimelineItems(a, b, nowMs),
+    );
     // Final dedup pass — guard against same ID appearing from multiple sources
     const seen = new Set<string>();
     const result = merged.filter((r: any) => {
@@ -621,6 +725,7 @@ export default function RacesScreen() {
       seen.add(r.id);
       return true;
     });
+
     return result;
   }, [liveRaces, isSailingInterest, interestSlug, timelineStepCards]);
 
@@ -632,11 +737,9 @@ export default function RacesScreen() {
     }
   }, [liveRacesLoading, interestFilteredRaces]);
 
-  // DB sort_order is now the source of truth for step ordering.
-  // Clear any stale AsyncStorage custom order so it doesn't override DB order.
+  // Clear any stale AsyncStorage custom order from previous versions
   useEffect(() => {
     void AsyncStorage.removeItem(timelineOrderStorageKey).catch(() => {});
-    setTimelineCustomOrderIds([]);
   }, [timelineOrderStorageKey]);
 
   const scrollToPosition = useCallback((position: number) => {
@@ -881,6 +984,7 @@ export default function RacesScreen() {
     normalizedLiveRaces,
     safeRecentRaces,
     safeNextRace,
+    nextActionItem,
     nextRacePreview,
     hasRealRaces,
     recentRace,
@@ -923,33 +1027,12 @@ export default function RacesScreen() {
     }).length;
   }, [safeRecentRaces]);
 
-  // Header counter includes both regattas and timeline steps
-  const headerTotalRaces = safeRecentRaces.length;
-  const headerCurrentRaceIndex = useMemo(() => {
-    if (!selectedRaceId || headerTotalRaces <= 0) return undefined;
-    const idx = safeRecentRaces.findIndex((r: any) => r.id === selectedRaceId);
-    return idx >= 0 ? idx + 1 : undefined;
-  }, [selectedRaceId, headerTotalRaces, safeRecentRaces]);
+  // headerTotalRaces and headerCurrentRaceIndex are computed later
+  // (after filteredCardGridRaces) so they reflect the sorted card order.
 
-  // Timeline step navigation — sorted steps with current position
-  const sortedTimelineSteps = useMemo(
-    () => safeRecentRaces
-      .filter((r: any) => r.isTimelineStep)
-      .sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0)),
-    [safeRecentRaces],
-  );
-  const currentStepIndex = useMemo(() => {
-    if (!selectedRaceId) return -1;
-    return sortedTimelineSteps.findIndex((s: any) => s.id === selectedRaceId);
-  }, [selectedRaceId, sortedTimelineSteps]);
-  const nextStepId = useMemo(() => {
-    if (currentStepIndex < 0 || currentStepIndex >= sortedTimelineSteps.length - 1) return null;
-    return sortedTimelineSteps[currentStepIndex + 1]?.id ?? null;
-  }, [currentStepIndex, sortedTimelineSteps]);
-  const prevStepId = useMemo(() => {
-    if (currentStepIndex <= 0) return null;
-    return sortedTimelineSteps[currentStepIndex - 1]?.id ?? null;
-  }, [currentStepIndex, sortedTimelineSteps]);
+  // Jump-to navigation handler — switches to a race/step by id.
+  // The picker iterates the unified `orderedBaseCardGridRaces` list (steps + regattas),
+  // so this works for both timeline steps and regatta cards.
   const handleGoToStep = useCallback((stepId: string) => {
     setSelectedRaceId(stepId);
     setHasManuallySelected(true);
@@ -964,6 +1047,10 @@ export default function RacesScreen() {
     }
     // Filter races that belong to the selected filter season
     return safeRecentRaces.filter((race: any) => {
+      // Timeline steps without a season always pass through
+      if (race.isTimelineStep && !race.season_id) {
+        return true;
+      }
       // Check if race has season_id matching the filter season (race_events)
       if (race.season_id === activeFilterSeasonId ||
           race.metadata?.season_id === activeFilterSeasonId) {
@@ -989,7 +1076,7 @@ export default function RacesScreen() {
 
   const seasonToolbarLabel = useMemo(() => {
     if (!activeFilterSeasonId) {
-      return `All ${eventConfig.eventNoun}s`;
+      return `All ${pluralize(eventConfig.eventNoun)}`;
     }
     return (displaySeason as any)?.short_name || displaySeason?.name || undefined;
   }, [activeFilterSeasonId, displaySeason, eventConfig.eventNoun]);
@@ -1020,7 +1107,9 @@ export default function RacesScreen() {
       : safeRecentRaces;
 
     // If no races and sample race not dismissed (only for own timeline), show demo data
-    if (racesToShow.length === 0 && !sampleRaceDismissed && !isViewingOtherTimeline) {
+    // Skip sample data if user has subscribed blueprints — the FOR YOU section provides real content
+    const hasSubscriptions = (subscribedBlueprints ?? []).length > 0;
+    if (racesToShow.length === 0 && !sampleRaceDismissed && !isViewingOtherTimeline && !hasSubscriptions) {
       // For interests with demo timeline steps, show those instead of a race card
       const demoSteps = getDemoTimelineSteps(eventConfig.interestSlug);
       if (demoSteps) return demoSteps;
@@ -1063,7 +1152,7 @@ export default function RacesScreen() {
       }];
     }
 
-    return racesToShow.map((race: any) => ({
+    const mapped = racesToShow.map((race: any) => ({
       ...(timelineStatusOverrides[race.id] ? {
         status: timelineStatusOverrides[race.id].status,
         start_date: timelineStatusOverrides[race.id].startDateIso,
@@ -1073,7 +1162,7 @@ export default function RacesScreen() {
       name: race.name || race.race_name || `Unnamed ${eventConfig.eventNoun}`,
       venue: race.venue || race.venue_name,
       status: timelineStatusOverrides[race.id]?.status || race.status,
-      date: timelineStatusOverrides[race.id]?.startDateIso || race.start_date || race.date || new Date().toISOString(),
+      date: timelineStatusOverrides[race.id]?.startDateIso || race.start_date || race.date || (race.isTimelineStep ? undefined : new Date().toISOString()),
       startTime: timelineStatusOverrides[race.id]?.startTimeLabel || race.start_time || race.startTime,
       boatClass: race.boat_class || race.boatClass,
       vhf_channel: race.vhf_channel || race.critical_details?.vhf_channel,
@@ -1087,6 +1176,8 @@ export default function RacesScreen() {
       venueCoordinates: race.venueCoordinates,
       created_by: race.created_by,
       metadata: race.metadata, // Preserve metadata for sample detection
+      notice_of_race_url: race.notice_of_race_url, // Source document URL from AI extraction
+      expected_fleet_size: race.expected_fleet_size,
       boat_id: race.boat_id || (race as any).boatId,
       class_id: race.class_id || (race as any).classId,
       // Basic defaults for new cards (will be enriched for selected race later)
@@ -1109,92 +1200,59 @@ export default function RacesScreen() {
         description: race.description,
         due_at: race.due_at,
         completed_at: race.completed_at,
+        // Provenance fields for StepProvenanceBanner
+        source_type: race.source_type,
+        source_blueprint_id: race.source_blueprint_id,
+        copied_from_user_id: race.copied_from_user_id,
       } : null),
     }));
 
-    // Re-sort after applying status overrides so that marking done/not-done
-    // immediately moves the step to the correct side of the now bar.
-    const nowMs = Date.now();
-    mapped.sort((a: any, b: any) => {
-      const aCompleted = a.stepStatus === 'completed' || a.status === 'completed' ||
-        (!a.isTimelineStep && new Date(a.date).getTime() + 3 * 60 * 60 * 1000 < nowMs);
-      const bCompleted = b.stepStatus === 'completed' || b.status === 'completed' ||
-        (!b.isTimelineStep && new Date(b.date).getTime() + 3 * 60 * 60 * 1000 < nowMs);
-      if (aCompleted !== bCompleted) return aCompleted ? -1 : 1;
-      return new Date(a.date).getTime() - new Date(b.date).getTime();
-    });
-
+    // Unified comparator — same rules as the primary merge sort above.
+    const nowMsMapped = Date.now();
+    mapped.sort((a: any, b: any) => compareTimelineItems(a, b, nowMsMapped));
     return mapped;
-  }, [safeRecentRaces, sampleRaceDismissed, isViewingOtherTimeline, currentTimeline, timelineStatusOverrides]);
+  }, [safeRecentRaces, sampleRaceDismissed, isViewingOtherTimeline, currentTimeline, timelineStatusOverrides, eventConfig.interestSlug, eventConfig.eventNoun, eventConfig.defaultSubtype, subscribedBlueprints]);
 
-  const orderedBaseCardGridRaces: CardRaceData[] = useMemo(() => {
-    if (isViewingOtherTimeline || timelineCustomOrderIds.length === 0) {
-      return baseCardGridRaces;
-    }
-    const raceById = new Map(baseCardGridRaces.map((race) => [race.id, race]));
-    const ordered = timelineCustomOrderIds
-      .map((id) => raceById.get(id))
-      .filter((race): race is CardRaceData => !!race);
-    for (const race of baseCardGridRaces) {
-      if (!ordered.some((entry) => entry.id === race.id)) {
-        ordered.push(race);
-      }
-    }
-    // Enforce status partition even with custom ordering:
-    // done steps must stay left of planned steps (the now bar boundary).
-    // Within each group, preserve the user's custom order.
-    const nowMs = Date.now();
-    const isCompleted = (r: any) =>
-      r.stepStatus === 'completed' || r.status === 'completed' ||
-      (!r.isTimelineStep && new Date(r.date).getTime() + 3 * 60 * 60 * 1000 < nowMs);
-    const done = ordered.filter((r) => isCompleted(r));
-    const planned = ordered.filter((r) => !isCompleted(r));
-    return [...done, ...planned];
-  }, [baseCardGridRaces, isViewingOtherTimeline, timelineCustomOrderIds]);
-
-  useEffect(() => {
-    if (isViewingOtherTimeline) return;
-    const validIds = new Set(baseCardGridRaces.map((race) => race.id));
-    setTimelineCustomOrderIds((prev) => {
-      const next = prev.filter((id) => validIds.has(id));
-      if (next.length === prev.length && next.every((id, idx) => id === prev[idx])) {
-        return prev;
-      }
-      return next;
-    });
-  }, [baseCardGridRaces, isViewingOtherTimeline]);
+  // Use the chronological order from baseCardGridRaces (which comes from
+  // interestFilteredRaces sorted by: completed first, then date, then sort_order).
+  // The reorder mode persists sort_order to the DB, so the chronological sort
+  // naturally picks up reordered positions as tie-breakers within same-date items.
+  const orderedBaseCardGridRaces: CardRaceData[] = baseCardGridRaces;
 
   const handleTimelineGridReorder = useCallback(async (orderedRaceIds: string[]) => {
     if (isViewingOtherTimeline) return;
-    const validIds = new Set(baseCardGridRaces.map((race) => race.id));
+    const byId = new Map(baseCardGridRaces.map((race) => [race.id, race]));
     const deduped: string[] = [];
     for (const id of orderedRaceIds) {
-      if (!validIds.has(id) || deduped.includes(id)) continue;
+      if (!byId.has(id) || deduped.includes(id)) continue;
       deduped.push(id);
     }
-    const missingIds = baseCardGridRaces
-      .map((race) => race.id)
-      .filter((id) => !deduped.includes(id));
-    const nextOrder = [...deduped, ...missingIds];
-    setTimelineCustomOrderIds(nextOrder);
-    try {
-      await AsyncStorage.setItem(timelineOrderStorageKey, JSON.stringify(nextOrder));
-    } catch (error) {
-      logger.warn('Unable to persist timeline reorder', { error });
-    }
 
-    // Persist sort_order to database in parallel (fire-and-forget for speed)
-    const updates = nextOrder.map((id, idx) => ({ id, sort_order: idx + 1 }));
+    // Persist sort_order to the correct table per id. Steps go to
+    // timeline_steps; regattas go to regattas. sort_order is the primary
+    // sort key everywhere, so this assignment fully determines visual order.
+    const updates = deduped.map((id, idx) => {
+      const row = byId.get(id) as any;
+      return {
+        id,
+        sort_order: idx + 1,
+        table: row?.isTimelineStep ? 'timeline_steps' as const : 'regattas' as const,
+      };
+    });
+
     Promise.all(
-      updates.map(({ id, sort_order }) =>
-        supabase.from('timeline_steps').update({ sort_order }).eq('id', id)
+      updates.map(({ id, sort_order, table }) =>
+        supabase.from(table).update({ sort_order }).eq('id', id)
       )
     ).then(() => {
       queryClient.invalidateQueries({ queryKey: ['timeline-steps'] });
+      // useLiveRaces is a custom realtime hook (not React Query), so refetch
+      // its loader directly to pick up regatta sort_order updates.
+      void refetchRaces?.();
     }).catch((err) => {
       console.error('[Reorder] DB persistence failed:', err);
     });
-  }, [baseCardGridRaces, isViewingOtherTimeline, logger, timelineOrderStorageKey, queryClient]);
+  }, [baseCardGridRaces, isViewingOtherTimeline, queryClient, refetchRaces]);
 
   // Move a step one position earlier or later in the custom order
   const handleMoveStep = useCallback((raceId: string, direction: 'earlier' | 'later') => {
@@ -1366,12 +1424,11 @@ export default function RacesScreen() {
     const race = orderedBaseCardGridRaces.find((entry) => entry.id === raceId) as any;
     if (!race?.isTimelineStep) return;
     try {
-      await supabase
+      const { error } = await supabase
         .from('timeline_steps')
         .update({ due_at: dateIso })
-        .eq('id', raceId)
-        .select('id')
-        .single();
+        .eq('id', raceId);
+      if (error) throw error;
       await refetchRacesRef.current?.();
     } catch (error: any) {
       showAlert('Update failed', error?.message || 'Could not set due date.');
@@ -1400,7 +1457,7 @@ export default function RacesScreen() {
       _timelineRaces?: any[],
       _currentRaceIndex?: number,
       _onSelectRace?: (index: number) => void,
-      _nextRaceIndex?: number,
+      nextRaceIndex?: number,
       // Handler for card press (navigation to this card when clicking partially visible cards)
       onCardPress?: () => void,
       // Refetch trigger for AfterRaceContent
@@ -1426,8 +1483,10 @@ export default function RacesScreen() {
           seasonWeek={currentSeasonWeek}
           raceNumber={raceIndex !== undefined ? raceIndex + 1 : undefined}
           totalRaces={totalRaces}
+          nextRaceIndex={nextRaceIndex}
           onCardPress={onCardPress}
           refetchTrigger={refetchTrigger}
+          onContentScroll={handleToolbarScroll}
           onMoveStepEarlier={canManage ? () => handleMoveStepEarlier(race.id) : undefined}
           onMoveStepLater={canManage ? () => handleMoveStepLater(race.id) : undefined}
           onMoveStepToPlannedNext={canManage ? () => handleMoveStepToPlannedNext(race.id) : undefined}
@@ -1437,7 +1496,7 @@ export default function RacesScreen() {
         />
       );
     },
-    [cardGridDimensions, currentSeasonWeek, handleMoveStepEarlier, handleMoveStepLater, handleMoveStepToCompletedMostRecent, handleMoveStepToPlannedNext, handleSetDueDate]
+    [cardGridDimensions, currentSeasonWeek, handleMoveStepEarlier, handleMoveStepLater, handleMoveStepToCompletedMostRecent, handleMoveStepToPlannedNext, handleSetDueDate, handleToolbarScroll]
   );
 
   // Handle race change from CardGrid
@@ -1653,7 +1712,7 @@ export default function RacesScreen() {
       setSelectedRaceData({
         id: newStep.id,
         name: newStep.title,
-        date: newStep.starts_at || undefined,
+        date: newStep.due_at || undefined,
         isTimelineStep: true,
         stepStatus: 'pending',
         status: 'pending',
@@ -1676,13 +1735,199 @@ export default function RacesScreen() {
   const handleAddStep = useCallback(async () => {
     if (!user?.id || !currentInterest?.id) return;
 
+    // ---------------------------------------------------------------------
+    // Optimistic add: the card appears instantly under a `temp-` id, then
+    // the RPC runs in the background. On success we swap the temp row for
+    // the server row in every cache (and re-point selection/refs) so the
+    // user never sees a blank moment while supabase is round-tripping.
+    // On slow-network warnings (30s supabase timeout), the old implementation
+    // made the user wait the full latency before any UI changed.
+    // ---------------------------------------------------------------------
+    const interestId = currentInterest.id;
+    const tempId = `temp-${
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`
+    }`;
+    const nowIso = new Date().toISOString();
+    // Matches the RPC's epoch-delta-seconds sort_order so the optimistic
+    // row slots into the same place the server row will.
+    const EPOCH_2024 = Date.UTC(2024, 0, 1) / 1000;
+    const optimisticSortOrder = Math.floor(Date.now() / 1000 - EPOCH_2024);
+    const optimisticMetadata: Record<string, unknown> = {
+      plan: {},
+      act: {},
+      review: {},
+      brain_dump: {
+        raw_text: '',
+        extracted_urls: [],
+        extracted_people: [],
+        extracted_topics: [],
+        created_at: nowIso,
+      },
+      // Marks the title as an auto-generated placeholder so RaceSummaryCard
+      // can render the "Tap to name this step" hint. Cleared on first edit.
+      _placeholder_title: true,
+    };
+    const optimisticStep: TimelineStepRecord = {
+      id: tempId,
+      user_id: user.id,
+      interest_id: interestId,
+      organization_id: null,
+      program_session_id: null,
+      source_type: 'manual',
+      source_id: null,
+      title: 'Untitled',
+      description: null,
+      category: 'general',
+      status: 'pending',
+      starts_at: null,
+      ends_at: null,
+      location_name: null,
+      location_lat: null,
+      location_lng: null,
+      location_place_id: null,
+      visibility: 'followers',
+      share_approximate_location: false,
+      copied_from_user_id: null,
+      source_blueprint_id: null,
+      sort_order: optimisticSortOrder,
+      metadata: optimisticMetadata,
+      collaborator_user_ids: [],
+      completed_at: null,
+      due_at: null,
+      created_at: nowIso,
+      updated_at: nowIso,
+    };
+
+    const matchesMineQuery = (query: { queryKey: readonly unknown[] }) => {
+      const key = query.queryKey;
+      if (!Array.isArray(key) || key.length < 3) return false;
+      if (key[0] !== 'timeline-steps' || key[1] !== 'mine') return false;
+      const interestParam = key[2];
+      if (interestParam === 'all') return true;
+      if (typeof interestParam === 'string') {
+        return interestParam.split(',').includes(interestId);
+      }
+      return false;
+    };
+
+    // Insert the synthetic row into every matching list cache, prime the
+    // detail cache, and select the card — all before the network call.
+    queryClient.setQueriesData<TimelineStepRecord[]>(
+      { predicate: matchesMineQuery },
+      (old) => {
+        if (!old) return old;
+        if (old.some((s) => s.id === tempId)) return old;
+        // Append, not prepend: undated steps sort to the tail of the
+        // carousel (next to TODAY), and the auto-scroll target derives
+        // its index from this same list.
+        return [...old, optimisticStep];
+      },
+    );
+    queryClient.setQueryData(['timeline-steps', 'detail', tempId], optimisticStep);
+
+    skipFetchForStepRef.current = tempId;
+    setSelectedRaceId(tempId);
+    setSelectedRaceData({
+      id: tempId,
+      name: optimisticStep.title,
+      date: undefined,
+      isTimelineStep: true,
+      stepStatus: 'pending',
+      status: 'pending',
+      metadata: optimisticMetadata,
+    });
+    setHasManuallySelected(true);
+    setIsGridView(false);
+    pendingNewStepIdRef.current = tempId;
+
     try {
       const newStep = await createTimelineStep({
         user_id: user.id,
-        interest_id: currentInterest.id,
-        title: 'New Step',
+        interest_id: interestId,
+        title: 'Untitled',
         category: 'general',
         status: 'pending',
+        metadata: optimisticMetadata,
+      });
+
+      // Swap temp row → server row in list caches (by id).
+      queryClient.setQueriesData<TimelineStepRecord[]>(
+        { predicate: matchesMineQuery },
+        (old) => {
+          if (!old) return old;
+          const hasTemp = old.some((s) => s.id === tempId);
+          const hasReal = old.some((s) => s.id === newStep.id);
+          if (!hasTemp) return hasReal ? old : [...old, newStep];
+          return old.map((s) => (s.id === tempId ? newStep : s));
+        },
+      );
+      queryClient.removeQueries({ queryKey: ['timeline-steps', 'detail', tempId] });
+      queryClient.setQueryData(['timeline-steps', 'detail', newStep.id], newStep);
+
+      // Re-point selection and scroll refs to the real id — but only if the
+      // user hasn't manually navigated away from the temp card in the meantime.
+      setSelectedRaceId((prev) => (prev === tempId ? newStep.id : prev));
+      setSelectedRaceData((prev) =>
+        prev?.id === tempId
+          ? {
+              id: newStep.id,
+              name: newStep.title,
+              date: newStep.due_at || undefined,
+              isTimelineStep: true,
+              stepStatus: 'pending',
+              status: 'pending',
+              metadata: newStep.metadata,
+            }
+          : prev,
+      );
+      if (pendingNewStepIdRef.current === tempId) {
+        pendingNewStepIdRef.current = newStep.id;
+      }
+      if (skipFetchForStepRef.current === tempId) {
+        skipFetchForStepRef.current = newStep.id;
+      }
+    } catch (err) {
+      console.error('Failed to create step:', err);
+      // Roll back optimistic insert so the ghost card disappears.
+      queryClient.setQueriesData<TimelineStepRecord[]>(
+        { predicate: matchesMineQuery },
+        (old) => (old ? old.filter((s) => s.id !== tempId) : old),
+      );
+      queryClient.removeQueries({ queryKey: ['timeline-steps', 'detail', tempId] });
+      setSelectedRaceId((prev) => (prev === tempId ? null : prev));
+      setSelectedRaceData((prev) => (prev?.id === tempId ? null : prev));
+      if (pendingNewStepIdRef.current === tempId) {
+        pendingNewStepIdRef.current = null;
+      }
+      if (skipFetchForStepRef.current === tempId) {
+        skipFetchForStepRef.current = null;
+      }
+      showAlert('Error', 'Failed to create step. Please try again.');
+    }
+  }, [user?.id, currentInterest?.id, vocab, queryClient]);
+
+  // Quick-create a race day checklist step, auto-dated from the nearest upcoming race
+  const handleAddRaceDayChecklist = useCallback(async () => {
+    if (!user?.id || !currentInterest?.id) return;
+
+    try {
+      // Find nearest upcoming race for date/name context
+      const now = new Date();
+      const upcomingRace = (liveRaces ?? []).find(
+        (r: any) => r.date && new Date(r.date) > now,
+      );
+
+      const newStep = await createTimelineStep({
+        user_id: user.id,
+        interest_id: currentInterest.id,
+        title: upcomingRace?.name
+          ? `Race Day Checks — ${upcomingRace.name}`
+          : 'Race Day Checklist',
+        category: 'race_day_check',
+        status: 'pending',
+        starts_at: upcomingRace?.date ?? null,
         metadata: {
           plan: {},
           act: {},
@@ -1697,14 +1942,12 @@ export default function RacesScreen() {
         },
       });
 
-      // Set step data directly so StepDetailContent renders immediately
-      // Mark the ref so the fetch effect doesn't overwrite our data
       skipFetchForStepRef.current = newStep.id;
       setSelectedRaceId(newStep.id);
       setSelectedRaceData({
         id: newStep.id,
         name: newStep.title,
-        date: newStep.starts_at || undefined,
+        date: newStep.due_at || undefined,
         isTimelineStep: true,
         stepStatus: 'pending',
         status: 'pending',
@@ -1712,17 +1955,51 @@ export default function RacesScreen() {
       });
       setHasManuallySelected(true);
       setIsGridView(false);
-
-      // Track the new step ID so we scroll to it once it appears in the card list
       pendingNewStepIdRef.current = newStep.id;
-
-      // Refetch in background so the step appears in the card grid
       queryClient.refetchQueries({ queryKey: ['timeline-steps'] });
+
+      // Offer to share with race crew if crew exists on the upcoming race
+      if (upcomingRace?.id) {
+        try {
+          const crewList = await RaceCollaborationService.getCollaborators(upcomingRace.id);
+          const acceptedCrew = crewList.filter(
+            (c) => c.status === 'accepted' && c.userId,
+          );
+          if (acceptedCrew.length > 0) {
+            const names = acceptedCrew
+              .map((c) => c.displayName || 'crew member')
+              .join(' & ');
+            showConfirm(
+              'Share with crew?',
+              `Share this checklist with ${names}?`,
+              async () => {
+                try {
+                  await updateStepMetadata(newStep.id, {
+                    plan: {
+                      collaborators: acceptedCrew.map((c) => ({
+                        id: `platform_${c.userId}`,
+                        type: 'platform' as const,
+                        user_id: c.userId!,
+                        display_name: c.displayName || 'Crew',
+                      })),
+                    },
+                  });
+                  queryClient.refetchQueries({ queryKey: ['timeline-steps'] });
+                } catch (shareErr) {
+                  console.error('Failed to share with crew:', shareErr);
+                }
+              },
+            );
+          }
+        } catch {
+          // Non-critical — skip crew sharing if lookup fails
+        }
+      }
     } catch (err) {
-      console.error('Failed to create step:', err);
-      showAlert('Error', 'Failed to create step. Please try again.');
+      console.error('Failed to create race day checklist:', err);
+      showAlert('Error', 'Failed to create checklist. Please try again.');
     }
-  }, [user?.id, currentInterest?.id, vocab, queryClient]);
+  }, [user?.id, currentInterest?.id, liveRaces, queryClient]);
 
   // Quick-create a step with a specific event subtype (e.g. Nutrition, Strength)
   const handleAddStepWithSubtype = useCallback(async (subtypeId: string, subtypeLabel: string) => {
@@ -1754,7 +2031,7 @@ export default function RacesScreen() {
       setSelectedRaceData({
         id: newStep.id,
         name: newStep.title,
-        date: newStep.starts_at || undefined,
+        date: newStep.due_at || undefined,
         isTimelineStep: true,
         stepStatus: 'pending',
         status: 'pending',
@@ -1772,12 +2049,34 @@ export default function RacesScreen() {
 
   // Navigate to the next upcoming item when "X upcoming" is tapped
   const handleUpcomingPress = useCallback(() => {
-    if (safeNextRace?.id) {
-      setSelectedRaceId(safeNextRace.id);
+    if (nextActionItem?.id) {
+      setSelectedRaceId(nextActionItem.id);
       setHasManuallySelected(true);
       if (isGridView) setIsGridView(false); // switch to card view to show detail
     }
-  }, [safeNextRace?.id, isGridView]);
+  }, [nextActionItem?.id, isGridView]);
+
+  // Toggle grid/card view.
+  // Android's slowness on this toggle is dominated by (1) React re-rendering
+  // the whole races screen tree and (2) the Grid remount animation. We defer
+  // the state flip by one frame on Android so the Pressable's press feedback
+  // paints immediately instead of being starved by the re-render work.
+  const handleToggleGridView = useCallback(() => {
+    const apply = () => {
+      // Pre-select the Next item when zooming in from grid so the card view
+      // lands on something sensible (formerly done inside the setter).
+      if (isGridView && !selectedRaceId && nextActionItem?.id) {
+        setSelectedRaceId(nextActionItem.id);
+        setHasManuallySelected(true);
+      }
+      setIsGridView(v => !v);
+    };
+    if (Platform.OS === 'android') {
+      requestAnimationFrame(apply);
+    } else {
+      apply();
+    }
+  }, [isGridView, selectedRaceId, nextActionItem?.id]);
 
   // Open boat class selector modal
   const handleSetBoatClass = useCallback(() => {
@@ -1926,40 +2225,108 @@ export default function RacesScreen() {
     const friendlyName = raceName || 'this step';
     const race = orderedBaseCardGridRaces.find((row) => row.id === raceId) as any;
     const isStep = race?.isTimelineStep;
-    const confirmationMessage = `Are you sure you want to delete "${friendlyName}"? This action cannot be undone.`;
 
-    showConfirm(
-      isStep ? 'Delete step?' : 'Delete race?',
-      confirmationMessage,
-      () => {
-        if (isStep) {
-          void (async () => {
-            setDeletingRaceId(raceId);
-            try {
-              await deleteTimelineStep(raceId);
-              if (selectedRaceId === raceId) {
-                setSelectedRaceId(null);
-                setSelectedRaceData(null);
-                setSelectedRaceMarks([]);
-                setHasManuallySelected(false);
-                saveLastViewState({ selectedStepId: null });
-              }
-              await queryClient.invalidateQueries({ queryKey: ['timeline-steps'] });
-              await refetchRaces();
-              toast.show(`"${friendlyName}" deleted`, 'success');
-            } catch (error: any) {
-              toast.show(error?.message || 'Unable to delete step', 'error');
-            } finally {
-              setDeletingRaceId(prev => (prev === raceId ? null : prev));
-            }
-          })();
-        } else {
+    // Races still get the modal — they're higher-stakes (crew, results,
+    // attached docs) and rarely deleted by accident.
+    if (!isStep) {
+      const confirmationMessage = `Are you sure you want to delete "${friendlyName}"? This action cannot be undone.`;
+      showConfirm(
+        'Delete race?',
+        confirmationMessage,
+        () => {
           void deleteRaceById(raceId, friendlyName);
+        },
+        { destructive: true, confirmText: 'Delete' }
+      );
+      return;
+    }
+
+    // Steps always use the optimistic-delete + Undo toast flow — no modal.
+    // The Undo window IS the safety net. Pattern matches Mail, Linear,
+    // Notion: instant action, easy reversal, network call deferred until
+    // the toast expires so Undo is a pure cache restore.
+    const snapshot = queryClient.getQueriesData<TimelineStepRecord[]>({
+      queryKey: ['timeline-steps', 'mine'],
+    });
+    const detailSnapshot = queryClient.getQueryData<TimelineStepRecord>(
+      ['timeline-steps', 'detail', raceId],
+    );
+    const wasSelected = selectedRaceId === raceId;
+    const prevSelectedData = wasSelected ? selectedRaceData : null;
+
+    // Optimistic removal — card disappears instantly
+    queryClient.setQueriesData<TimelineStepRecord[]>(
+      { queryKey: ['timeline-steps', 'mine'] },
+      (old) => (old ? old.filter((s) => s.id !== raceId) : old),
+    );
+    queryClient.removeQueries({ queryKey: ['timeline-steps', 'detail', raceId] });
+
+    if (wasSelected) {
+      // Focus the next chronological step, falling back to the previous one.
+      // orderedBaseCardGridRaces is captured pre-optimistic-update, so the
+      // deleted row is still at `idx` — idx+1/idx-1 are safe siblings.
+      const visible = orderedBaseCardGridRaces;
+      const idx = visible.findIndex((row) => row.id === raceId);
+      const candidate = idx >= 0 ? (visible[idx + 1] ?? visible[idx - 1] ?? null) : null;
+
+      if (candidate && candidate.id !== raceId) {
+        // setSelectedRaceId triggers the effect that loads selectedRaceData
+        // and persists selectedStepId via saveLastViewState.
+        setSelectedRaceId(candidate.id);
+        setSelectedRaceData(null);
+        setSelectedRaceMarks([]);
+        setHasManuallySelected(true);
+      } else {
+        setSelectedRaceId(null);
+        setSelectedRaceData(null);
+        setSelectedRaceMarks([]);
+        setHasManuallySelected(false);
+        saveLastViewState({ selectedStepId: null });
+      }
+    }
+
+    let undone = false;
+    const restore = () => {
+      undone = true;
+      snapshot.forEach(([key, value]) => {
+        queryClient.setQueryData(key, value);
+      });
+      if (detailSnapshot) {
+        queryClient.setQueryData(['timeline-steps', 'detail', raceId], detailSnapshot);
+      }
+      if (wasSelected && prevSelectedData) {
+        setSelectedRaceId(raceId);
+        setSelectedRaceData(prevSelectedData);
+      }
+    };
+
+    const commit = async () => {
+      setDeletingRaceId(raceId);
+      try {
+        await deleteTimelineStep(raceId);
+        void queryClient.invalidateQueries({ queryKey: ['timeline-steps'] });
+        void refetchRaces();
+      } catch (error: any) {
+        restore();
+        toast.show(error?.message || 'Unable to delete step', 'error');
+      } finally {
+        setDeletingRaceId(prev => (prev === raceId ? null : prev));
+      }
+    };
+
+    toast.show('Step deleted', 'success', {
+      duration: 6000,
+      action: {
+        label: 'Undo',
+        onPress: restore,
+      },
+      onDismiss: () => {
+        if (!undone) {
+          void commit();
         }
       },
-      { destructive: true, confirmText: 'Delete' }
-    );
-  }, [deleteRaceById, isDeletingRace, orderedBaseCardGridRaces, refetchRaces, selectedRaceId, queryClient]);
+    });
+  }, [deleteRaceById, isDeletingRace, orderedBaseCardGridRaces, refetchRaces, selectedRaceId, selectedRaceData, queryClient]);
 
   const handleTimelineGridBulkDelete = useCallback((raceIds: string[]) => {
     const uniqueIds = [...new Set(raceIds)];
@@ -1967,31 +2334,89 @@ export default function RacesScreen() {
 
     const count = uniqueIds.length;
     const noun = count === 1 ? 'step' : 'steps';
+    const stepIds = new Set(
+      uniqueIds.filter((raceId) => {
+        const race = orderedBaseCardGridRaces.find((row) => row.id === raceId) as any;
+        return race?.isTimelineStep;
+      }),
+    );
+
+    const deletedIdSet = new Set(uniqueIds);
+
     showConfirm(
       'Delete selected?',
       `Delete ${count} selected ${noun}? This cannot be undone.`,
       () => {
         void (async () => {
+          // If the currently selected step is in the delete set, shift focus
+          // to the nearest visible step that is NOT being deleted — next
+          // chronologically, falling back to previous.
+          if (selectedRaceId && deletedIdSet.has(selectedRaceId)) {
+            const visible = orderedBaseCardGridRaces;
+            const selectedIdx = visible.findIndex((row) => row.id === selectedRaceId);
+            let candidate: (typeof visible)[number] | null = null;
+            if (selectedIdx >= 0) {
+              for (let i = selectedIdx + 1; i < visible.length; i++) {
+                if (!deletedIdSet.has(visible[i].id)) { candidate = visible[i]; break; }
+              }
+              if (!candidate) {
+                for (let i = selectedIdx - 1; i >= 0; i--) {
+                  if (!deletedIdSet.has(visible[i].id)) { candidate = visible[i]; break; }
+                }
+              }
+            }
+            if (candidate) {
+              setSelectedRaceId(candidate.id);
+              setSelectedRaceData(null);
+              setSelectedRaceMarks([]);
+              setHasManuallySelected(true);
+            } else {
+              setSelectedRaceId(null);
+              setSelectedRaceData(null);
+              setSelectedRaceMarks([]);
+              setHasManuallySelected(false);
+              saveLastViewState({ selectedStepId: null });
+            }
+          }
+
+          // Snapshot + optimistic bulk removal so all cards disappear at once
+          const snapshot = queryClient.getQueriesData<TimelineStepRecord[]>({
+            queryKey: ['timeline-steps', 'mine'],
+          });
+          if (stepIds.size > 0) {
+            queryClient.setQueriesData<TimelineStepRecord[]>(
+              { queryKey: ['timeline-steps', 'mine'] },
+              (old) => (old ? old.filter((s) => !stepIds.has(s.id)) : old),
+            );
+            stepIds.forEach((id) => {
+              queryClient.removeQueries({ queryKey: ['timeline-steps', 'detail', id] });
+            });
+          }
+
           try {
             for (const raceId of uniqueIds) {
-              const race = orderedBaseCardGridRaces.find((row) => row.id === raceId) as any;
-              if (race?.isTimelineStep) {
+              if (stepIds.has(raceId)) {
                 await deleteTimelineStep(raceId);
               } else {
+                const race = orderedBaseCardGridRaces.find((row) => row.id === raceId) as any;
                 await deleteRaceById(raceId, race?.name, { showSuccessAlert: false, skipRefetch: true });
               }
             }
-            await queryClient.invalidateQueries({ queryKey: ['timeline-steps'] });
-            await refetchRacesRef.current?.();
             toast.show(`${count} ${noun} deleted`, 'success');
+            void queryClient.invalidateQueries({ queryKey: ['timeline-steps'] });
+            void refetchRacesRef.current?.();
           } catch (error: any) {
+            // Restore cache on failure
+            snapshot.forEach(([key, value]) => {
+              queryClient.setQueryData(key, value);
+            });
             toast.show(error?.message || 'Could not delete selected steps', 'error');
           }
         })();
       },
       { destructive: true, confirmText: 'Delete' }
     );
-  }, [orderedBaseCardGridRaces, deleteRaceById, queryClient]);
+  }, [orderedBaseCardGridRaces, deleteRaceById, queryClient, selectedRaceId]);
 
   // Delete the currently selected race with confirmation
   const handleDeleteSelectedRace = useCallback(() => {
@@ -2264,7 +2689,7 @@ export default function RacesScreen() {
     const routeTargetId = initialSelectedRaceParam.current;
     const raceToSelect =
       (routeTargetId && safeRecentRaces.find((race: any) => race?.id === routeTargetId)) ||
-      (safeNextRace?.id && safeRecentRaces.find((race: any) => race?.id === safeNextRace.id)) ||
+      (nextActionItem?.id && safeRecentRaces.find((race: any) => race?.id === nextActionItem.id)) ||
       safeRecentRaces[0];
 
     const targetId = raceToSelect?.id ?? null;
@@ -2673,7 +3098,7 @@ export default function RacesScreen() {
       setSelectedRaceData({
         id: adopted.id,
         name: adopted.title,
-        date: adopted.starts_at || undefined,
+        date: adopted.due_at || undefined,
         isTimelineStep: true,
         stepStatus: 'pending',
         status: 'pending',
@@ -3418,13 +3843,21 @@ export default function RacesScreen() {
     [cardGridRaces],
   );
 
-  // Apply step filters to cardGridRaces
+  // Apply step filters to cardGridRaces.
+  // Demo entries are dropped the moment the user has any real entry — we don't
+  // want the app to keep looking like a demo once they've created their first
+  // real Learning Event.
   const filteredCardGridRaces = useMemo(() => {
-    if (!hasTimelineSteps || isSailingInterest) return cardGridRaces;
-    const { status, capabilityGoal } = stepFilters;
-    if (status === null && capabilityGoal === null) return cardGridRaces;
+    const hasRealEntry = cardGridRaces.some((r: any) => !r.isDemo);
+    const baseList = hasRealEntry
+      ? cardGridRaces.filter((r: any) => !r.isDemo)
+      : cardGridRaces;
 
-    return cardGridRaces.filter((race: any) => {
+    if (!hasTimelineSteps || isSailingInterest) return baseList;
+    const { status, capabilityGoal } = stepFilters;
+    if (status === null && capabilityGoal === null) return baseList;
+
+    return baseList.filter((race: any) => {
       // Non-timeline items always pass through
       if (!race.isTimelineStep) return true;
 
@@ -3447,14 +3880,26 @@ export default function RacesScreen() {
     });
   }, [cardGridRaces, stepFilters, hasTimelineSteps, isSailingInterest]);
 
+  // True when the timeline has only demo/sample content — used to hide power-user
+  // chrome (filters, bulk edit, reorder, season label) that adds noise for new guests.
+  const isShowingOnlyDemos = filteredCardGridRaces.length > 0 && filteredCardGridRaces.every((r: any) => r.isDemo);
+
+  // Header counter — uses filteredCardGridRaces so position reflects sorted card order.
+  const headerTotalRaces = filteredCardGridRaces.length;
+  const headerCurrentRaceIndex = useMemo(() => {
+    if (!selectedRaceId || headerTotalRaces <= 0) return undefined;
+    const idx = filteredCardGridRaces.findIndex((r: any) => r.id === selectedRaceId);
+    return idx >= 0 ? idx + 1 : undefined;
+  }, [selectedRaceId, headerTotalRaces, filteredCardGridRaces]);
+
   // Stable initial card index — only changes when the target race actually moves
   // in the array, NOT on every data refetch that produces a new array reference.
   const initialCardIndex = useMemo(() => {
-    const targetId = selectedRaceId || safeNextRace?.id;
+    const targetId = selectedRaceId || nextActionItem?.id;
     if (!targetId || cardGridRaces.length === 0) return 0;
     const idx = cardGridRaces.findIndex(r => r.id === targetId);
     return idx >= 0 ? idx : 0;
-  }, [selectedRaceId, safeNextRace?.id, cardGridRaces]);
+  }, [selectedRaceId, nextActionItem?.id, cardGridRaces]);
 
   // Next race index — falls back to demo-aware calculation when safeNextRace is empty
   const effectiveNextRaceIndex = useMemo((): number | null => {
@@ -3474,6 +3919,25 @@ export default function RacesScreen() {
     }
     return null;
   }, [isViewingOtherTimeline, safeNextRace?.id, cardGridRaces, isShowingDemoRace]);
+
+  // Carousel-space versions of the indices above.
+  // The carousel renders `filteredCardGridRaces` (same array the grid receives),
+  // which can differ from `cardGridRaces` when demos are filtered out. Translating
+  // by id keeps both views pointed at the same race even when indices diverge.
+  const carouselInitialCardIndex = useMemo(() => {
+    const target = cardGridRaces[initialCardIndex];
+    if (!target) return 0;
+    const idx = filteredCardGridRaces.findIndex((r: any) => r.id === target.id);
+    return idx >= 0 ? idx : 0;
+  }, [cardGridRaces, filteredCardGridRaces, initialCardIndex]);
+
+  const carouselNextRaceIndex = useMemo(() => {
+    if (effectiveNextRaceIndex == null) return null;
+    const target = cardGridRaces[effectiveNextRaceIndex];
+    if (!target) return null;
+    const idx = filteredCardGridRaces.findIndex((r: any) => r.id === target.id);
+    return idx >= 0 ? idx : null;
+  }, [cardGridRaces, filteredCardGridRaces, effectiveNextRaceIndex]);
 
   const profileOnboardingStep = (profile as { onboarding_step?: string } | null | undefined)?.onboarding_step;
 
@@ -3654,6 +4118,19 @@ export default function RacesScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: TUFTE_BACKGROUND }}>
+      {/* Fixed status bar background — keeps safe area opaque when toolbar hides */}
+      <View
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: insets.top,
+          zIndex: 99,
+          backgroundColor: 'rgba(242, 242, 247, 0.94)',
+        }}
+      />
+
       {/* Main Content first — flows behind absolutely-positioned toolbar */}
       {FEATURE_FLAGS.USE_RACE_LIST_VIEW ? (
         // Grouped vertical list view — progressive disclosure design
@@ -3704,39 +4181,43 @@ export default function RacesScreen() {
               alignItems: 'center',
               paddingHorizontal: 16,
               paddingVertical: 10,
-              backgroundColor: 'rgba(255,255,255,0.95)',
+              backgroundColor: '#EFF6FF',
               borderBottomWidth: StyleSheet.hairlineWidth,
-              borderBottomColor: '#E2E8F0',
+              borderBottomColor: '#BFDBFE',
             }}>
               <View style={{
-                width: 36,
-                height: 36,
-                borderRadius: 18,
+                width: 32,
+                height: 32,
+                borderRadius: 16,
                 backgroundColor: currentTimeline?.user?.avatar?.color || '#3B82F6',
                 alignItems: 'center',
                 justifyContent: 'center',
                 marginRight: 10,
               }}>
-                <Text style={{ fontSize: 18 }}>{currentTimeline?.user?.avatar?.emoji || '⛵'}</Text>
+                <Text style={{ fontSize: 16 }}>{currentTimeline?.user?.avatar?.emoji || '⛵'}</Text>
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 15, fontWeight: '600', color: '#1E293B' }}>
-                  {currentTimeline?.user?.name || 'Timeline'}'s Timeline
+                <Text style={{ fontSize: 14, fontWeight: '600', color: '#1E40AF' }}>
+                  Viewing {currentTimeline?.user?.name || 'someone'}'s timeline
                 </Text>
-                <Text style={{ fontSize: 12, color: '#64748B' }}>
-                  {currentTimeline?.races?.length || 0} {(currentTimeline?.races?.length || 0) === 1 ? 'race' : 'races'}
+                <Text style={{ fontSize: 11, color: '#3B82F6' }}>
+                  {currentTimeline?.races?.length || 0} {(currentTimeline?.races?.length || 0) === 1 ? 'item' : 'items'} · Read only
                 </Text>
               </View>
               <TouchableOpacity
                 onPress={() => setCurrentTimelineIndex(0)}
                 style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 4,
                   paddingHorizontal: 12,
                   paddingVertical: 6,
-                  backgroundColor: '#F1F5F9',
+                  backgroundColor: '#3B82F6',
                   borderRadius: 16,
                 }}
               >
-                <Text style={{ fontSize: 13, color: '#3B82F6', fontWeight: '500' }}>Back to Mine</Text>
+                <Ionicons name="arrow-back" size={14} color="#FFFFFF" />
+                <Text style={{ fontSize: 13, color: '#FFFFFF', fontWeight: '600' }}>My Timeline</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -3781,7 +4262,15 @@ export default function RacesScreen() {
 
           {isGridView ? (
             <View style={{ flex: 1 }}>
+
               {!isSailingInterest && hasTimelineSteps && (
+                <Reanimated.View
+                  onLayout={(e) => {
+                    const h = e.nativeEvent.layout.height;
+                    if (h > 0 && h !== filterBarHeight) setFilterBarHeight(h);
+                  }}
+                  style={animatedFilterBarStyle}
+                >
                 <View style={{ paddingTop: totalHeaderHeight + 8 }}>
                   {/* Faculty banner: nudge to publish blueprint */}
                   {showFacultyBanner && (
@@ -3822,12 +4311,101 @@ export default function RacesScreen() {
                       </TouchableOpacity>
                     </View>
                   )}
+                  {/* First-run sample banner: shown when every visible step is a sample */}
+                  {isShowingOnlyDemos && (
+                    <View style={{
+                      marginHorizontal: 16,
+                      marginBottom: 10,
+                      paddingVertical: 12,
+                      paddingHorizontal: 14,
+                      borderRadius: 12,
+                      backgroundColor: 'rgba(37, 99, 235, 0.06)',
+                      borderWidth: 1,
+                      borderColor: 'rgba(37, 99, 235, 0.18)',
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 12,
+                    }}>
+                      <View style={{
+                        width: 28, height: 28, borderRadius: 14,
+                        backgroundColor: 'rgba(37, 99, 235, 0.12)',
+                        alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        <Ionicons name="sparkles-outline" size={15} color="#2563EB" />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 13.5, fontWeight: '600', color: '#0B1A33', marginBottom: 1 }}>
+                          {isReturningGuest
+                            ? `Welcome back — ready for your first ${vocab('Learning Event').toLowerCase()}?`
+                            : `Here's what a ${vocab('Learning Event').toLowerCase()} looks like`}
+                        </Text>
+                        <Text style={{ fontSize: 12.5, color: '#64748B', lineHeight: 17 }}>
+                          {isReturningGuest
+                            ? 'Add yours to start tracking real progress.'
+                            : 'Tap any sample to explore, or add your own to get started.'}
+                        </Text>
+                        {/* Escape hatch for guests who picked the wrong interest in the welcome flow */}
+                        {isGuest && (
+                          <Pressable
+                            onPress={openInterestSwitcher}
+                            hitSlop={6}
+                            style={({ pressed }) => ({
+                              marginTop: 6,
+                              alignSelf: 'flex-start',
+                              opacity: pressed ? 0.6 : 1,
+                            })}
+                            accessibilityRole="button"
+                            accessibilityLabel="Pick a different interest"
+                          >
+                            <Text style={{ fontSize: 12, color: '#2563EB', fontWeight: '600' }}>
+                              Wrong interest?{' '}
+                              <Text style={{ textDecorationLine: 'underline' }}>
+                                Pick a different one
+                              </Text>
+                            </Text>
+                          </Pressable>
+                        )}
+                      </View>
+                      <Pressable
+                        onPress={() => {
+                          if (isSailingInterest) {
+                            handleShowAddRaceSheet();
+                          } else {
+                            setShowAddStepSheet(true);
+                          }
+                        }}
+                        style={({ pressed }) => ({
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 5,
+                          paddingVertical: 8,
+                          paddingHorizontal: 12,
+                          borderRadius: 999,
+                          backgroundColor: 'rgba(37, 99, 235, 0.10)',
+                          borderWidth: 1,
+                          borderColor: 'rgba(37, 99, 235, 0.25)',
+                          opacity: pressed ? 0.7 : 1,
+                        })}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Add your first ${vocab('Learning Event').toLowerCase()}`}
+                      >
+                        <Ionicons name="add" size={16} color="#2563EB" />
+                        <Text style={{ fontSize: 12.5, fontWeight: '700', color: '#2563EB', letterSpacing: 0.1 }}>
+                          Add yours
+                        </Text>
+                      </Pressable>
+                    </View>
+                  )}
+                  {/* Hide filter bar when showing only sample content — reduces visual noise */}
+                  {!isShowingOnlyDemos && (
                   <StepFilterBar
                     filters={stepFilters}
                     onFiltersChange={setStepFilters}
                     availableGoals={availableCapabilityGoals}
                   />
+                  )}
                 </View>
+                </Reanimated.View>
               )}
               {/* Nutrition tracking is handled per-step via nutrition category steps */}
               <TimelineGridView
@@ -3838,6 +4416,55 @@ export default function RacesScreen() {
                   setSelectedRaceId(race.id);
                   setHasManuallySelected(true);
                   setIsGridView(false); // zoom back in
+
+                  // First-run signup nudge: if a guest taps a sample to explore it,
+                  // give them a moment to see the detail, then offer to save their work.
+                  // - One-shot per session
+                  // - 24h cross-session cooldown (no nagging on every cold launch)
+                  // - Tap counter trips after N sample taps even within cooldown,
+                  //   so high-engagement guests see the prompt sooner
+                  // - Marks "first session done" so the banner copy switches on
+                  //   subsequent visits
+                  if (
+                    isGuest &&
+                    (race as any).isDemo &&
+                    !sampleSignupShownRef.current
+                  ) {
+                    const lastShown = signupModalLastShownRef.current;
+                    const withinCooldown =
+                      lastShown != null && Date.now() - lastShown < SIGNUP_MODAL_COOLDOWN_MS;
+                    const newTapCount = sampleTapCountRef.current + 1;
+                    const tapTriggered = newTapCount >= SIGNUP_MODAL_TAP_THRESHOLD;
+
+                    if (!withinCooldown || tapTriggered) {
+                      // Fire the modal — either cooldown elapsed or high intent
+                      sampleSignupShownRef.current = true;
+                      const now = Date.now();
+                      signupModalLastShownRef.current = now;
+                      sampleTapCountRef.current = 0;
+                      // Persist async — we don't await; failures are non-fatal
+                      AsyncStorage.setItem(
+                        SIGNUP_MODAL_LAST_SHOWN_KEY,
+                        String(now),
+                      ).catch(() => {});
+                      AsyncStorage.setItem(
+                        GUEST_FIRST_SESSION_DONE_KEY,
+                        'true',
+                      ).catch(() => {});
+                      AsyncStorage.setItem(
+                        SIGNUP_MODAL_TAPS_KEY,
+                        '0',
+                      ).catch(() => {});
+                      setTimeout(() => setShowSampleSignupPrompt(true), 1800);
+                    } else {
+                      // Cooldown active and threshold not yet reached — count and wait
+                      sampleTapCountRef.current = newTapCount;
+                      AsyncStorage.setItem(
+                        SIGNUP_MODAL_TAPS_KEY,
+                        String(newTapCount),
+                      ).catch(() => {});
+                    }
+                  }
                 }}
                 userId={user?.id}
                 onEditRace={isViewingOtherTimeline ? undefined : handleEditRace}
@@ -3845,12 +4472,16 @@ export default function RacesScreen() {
                 onHideRace={isViewingOtherTimeline ? undefined : handleHideRace}
                 onMarkDone={isViewingOtherTimeline ? undefined : handleMoveStepToCompletedMostRecent}
                 onMarkNotDone={isViewingOtherTimeline ? undefined : handleMoveStepToPlannedNext}
-                onBulkUpdateStatus={isViewingOtherTimeline ? undefined : handleTimelineGridBulkStatusUpdate}
-                onBulkDeleteRaces={isViewingOtherTimeline ? undefined : handleTimelineGridBulkDelete}
-                onReorderRaces={isViewingOtherTimeline ? undefined : handleTimelineGridReorder}
+                onBulkUpdateStatus={isViewingOtherTimeline || isShowingOnlyDemos ? undefined : handleTimelineGridBulkStatusUpdate}
+                onBulkDeleteRaces={isViewingOtherTimeline || isShowingOnlyDemos ? undefined : handleTimelineGridBulkDelete}
+                onReorderRaces={isViewingOtherTimeline || isShowingOnlyDemos ? undefined : handleTimelineGridReorder}
                 topInset={!isSailingInterest && hasTimelineSteps ? 0 : totalHeaderHeight}
-                blueprintTitle={timelineBlueprintTitle}
-                blueprintSlug={timelineBlueprintSlug}
+                onContentScroll={handleToolbarScroll}
+                // Auto-scroll the grid to a freshly-created step so the user
+                // never has to hunt for it — mirrors the carousel's existing
+                // pendingNewStepIdRef scroll target.
+                pendingNewStepId={pendingNewStepIdRef.current}
+                onPendingScrollConsumed={() => { pendingNewStepIdRef.current = null; }}
                 renderFooter={!isViewingOtherTimeline ? () => (
                   <BlueprintPanelsStack
                     interestId={currentInterest?.id}
@@ -3862,12 +4493,12 @@ export default function RacesScreen() {
             </View>
           ) : (
             <CardGrid
-              races={cardGridRaces}
+              races={filteredCardGridRaces}
               renderCardContent={renderCardGridContent}
               onRaceChange={handleCardGridRaceChange}
               onCardChange={handleCardGridCardChange}
-              initialRaceIndex={initialCardIndex}
-              nextRaceIndex={effectiveNextRaceIndex}
+              initialRaceIndex={carouselInitialCardIndex}
+              nextRaceIndex={carouselNextRaceIndex}
               enableHaptics={FEATURE_FLAGS.ENABLE_CARD_HAPTICS}
               persistState={FEATURE_FLAGS.PERSIST_CARD_NAVIGATION && !isViewingOtherTimeline}
               style={{ flex: 1 }}
@@ -3953,7 +4584,7 @@ export default function RacesScreen() {
             // Legacy carousel with detail zone
             <>
               <RealRacesCarousel
-                races={safeRecentRaces}
+                races={orderedBaseCardGridRaces}
                 practiceSessions={practiceSessions}
                 onSelectPractice={handleSelectPractice}
                 nextRace={safeNextRace}
@@ -4318,30 +4949,49 @@ export default function RacesScreen() {
           weatherLoading={weatherLoading}
           isOnline={isOnline}
           isGridView={isGridView}
-          onToggleGridView={() => setIsGridView(v => !v)}
+          onToggleGridView={handleToggleGridView}
           onAddPress={() => setShowAddStepSheet(true)}
           onAddRace={isSailingInterest ? handleShowAddRaceSheet : handleAddStep}
           onAddStep={isSailingInterest ? handleAddStep : undefined}
-          onAddPractice={isSailingInterest ? handleAddPractice : undefined}
-          onNewSeason={isSailingInterest ? () => setShowSeasonSettings(true) : undefined}
-          onBrowseCatalog={() => router.push(eventConfig.catalogRoute ?? '/(tabs)/learn')}
-          onPublishBlueprint={currentInterest?.id ? () => setShowBlueprintSheet(true) : undefined}
-          blueprintLabel={hasPublishedBlueprint ? 'Manage Blueprints' : existingBlueprintsForInterest.length > 0 ? 'Manage Blueprints' : 'Publish as Blueprint'}
-          isBlueprintPublished={hasPublishedBlueprint}
           onAddButtonLayout={setAddButtonLayout}
           totalRaces={headerTotalRaces}
           upcomingRaces={seasonUpcomingRacesCount}
           currentRaceIndex={headerCurrentRaceIndex}
           onUpcomingPress={handleUpcomingPress}
-          seasonLabel={seasonToolbarLabel}
-          onSeasonPress={() => setShowSeasonPicker(true)}
-          onStepPickerPress={sortedTimelineSteps.length > 0 ? () => setShowStepPicker(true) : undefined}
+          seasonLabel={isShowingOnlyDemos ? undefined : seasonToolbarLabel}
+          onSeasonPress={isShowingOnlyDemos ? undefined : () => setShowSeasonPicker(true)}
+          onStepPickerPress={orderedBaseCardGridRaces.length > 0 ? () => setShowStepPicker(true) : undefined}
           onMeasuredHeight={setToolbarHeight}
           hidden={toolbarHidden}
           isDomainView={viewMode === 'domain'}
           onToggleDomainView={hasSiblingInterests ? toggleDomainView : undefined}
           domainLabel={currentDomain ? `All ${currentDomain.name}` : undefined}
+          onPublishBlueprint={currentInterest?.id ? () => setShowBlueprintSheet(true) : undefined}
+          blueprintLabel={existingBlueprintsForInterest && existingBlueprintsForInterest.length > 0 ? 'Manage Blueprint' : 'Publish as Blueprint'}
+          isBlueprintPublished={existingBlueprintsForInterest?.some(bp => bp.is_published)}
         />
+
+        {/* One-shot pulse ring drawn on top of the toolbar + button after the
+            sample-signup nudge is dismissed. Pure visual hint, ignores touches. */}
+        {showAddPulse && addButtonLayout && (
+          <Reanimated.View
+            pointerEvents="none"
+            style={[
+              {
+                position: 'absolute',
+                left: addButtonLayout.x - 6,
+                top: addButtonLayout.y - 6,
+                width: addButtonLayout.width + 12,
+                height: addButtonLayout.height + 12,
+                borderRadius: (addButtonLayout.width + 12) / 2,
+                borderWidth: 2,
+                borderColor: '#7C3AED',
+                backgroundColor: 'rgba(124, 58, 237, 0.18)',
+              },
+              addPulseRingStyle,
+            ]}
+          />
+        )}
       </View>
 
       <RaceModalsSection
@@ -4398,13 +5048,9 @@ export default function RacesScreen() {
         onAdoptSuggestion={handleAdoptSuggestion}
         onDismissSuggestion={handleDismissSuggestion}
         onAddStep={isSailingInterest ? handleAddStep : handleAddStep}
-        onAddStepWithSubtype={handleAddStepWithSubtype}
         onAddRace={isSailingInterest ? handleShowAddRaceSheet : undefined}
-        onAddPractice={isSailingInterest ? handleAddPractice : undefined}
-        onNewSeason={isSailingInterest ? () => setShowSeasonSettings(true) : undefined}
-        onBrowseCatalog={() => router.push(eventConfig.catalogRoute ?? '/(tabs)/learn')}
         onPublishBlueprint={currentInterest?.id ? () => setShowBlueprintSheet(true) : undefined}
-        blueprintLabel={hasPublishedBlueprint ? 'Manage Blueprints' : existingBlueprintsForInterest.length > 0 ? 'Manage Blueprints' : 'Publish as Blueprint'}
+        blueprintLabel={existingBlueprintsForInterest && existingBlueprintsForInterest.length > 0 ? 'Manage Blueprint' : 'Publish as Blueprint'}
       />
 
       {/* Season Picker Modal - Select which season to filter by */}
@@ -4420,7 +5066,7 @@ export default function RacesScreen() {
           setFilterSeasonId(seasonId);
         }}
         onManageSeasons={() => setShowSeasonSettings(true)}
-        eventNounPlural={`${eventConfig.eventNoun}s`}
+        eventNounPlural={pluralize(eventConfig.eventNoun)}
         periodTerm={vocab('Period')}
       />
 
@@ -4439,58 +5085,81 @@ export default function RacesScreen() {
             onPress={(e) => e.stopPropagation()}
             style={{ backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, maxHeight: '60%' }}
           >
-            <View className="px-5 pt-4 pb-2 flex-row items-center justify-between" style={{ borderBottomWidth: 1, borderBottomColor: '#F3F4F6' }}>
-              <Text className="text-base font-bold text-gray-900">Timeline Steps</Text>
+            {/* Handle bar */}
+            <View style={{ alignItems: 'center', paddingTop: 8, paddingBottom: 4 }}>
+              <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: '#D1D5DB' }} />
+            </View>
+            <View style={{ paddingHorizontal: 20, paddingTop: 4, paddingBottom: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#E5E7EB' }}>
+              <Text style={{ fontSize: 16, fontWeight: '700', color: '#111827' }}>Jump to</Text>
               <Pressable onPress={() => setShowStepPicker(false)} hitSlop={12}>
-                <Ionicons name="close" size={22} color="#9CA3AF" />
+                <Ionicons name="close-circle" size={24} color="#D1D5DB" />
               </Pressable>
             </View>
-            <ScrollView style={{ paddingHorizontal: 20, paddingVertical: 8 }}>
-              {sortedTimelineSteps.map((step: any, i: number) => {
-                const isSelected = step.id === selectedRaceId;
-                const isCompleted = step.stepStatus === 'completed' || step.status === 'completed';
-                const isInProgress = step.stepStatus === 'in_progress' || step.status === 'in_progress';
+            <ScrollView style={{ paddingHorizontal: 16, paddingVertical: 8 }}>
+              {orderedBaseCardGridRaces.map((item: any, i: number) => {
+                const isSelected = item.id === selectedRaceId;
+                const isCompleted = item.stepStatus === 'completed' || item.status === 'completed';
+                const isNext = effectiveNextRaceIndex != null && effectiveNextRaceIndex >= 0 && cardGridRaces[effectiveNextRaceIndex]?.id === item.id;
+                const isStep = item.isTimelineStep === true;
+                const itemDate = item.date || item.start_date;
+                const itemTitle = item.name && item.name !== String(i + 1) ? item.name : (isStep ? `Step ${i + 1}` : `Race ${i + 1}`);
+                const statusLabel = isCompleted ? 'Done' : isSelected ? 'Viewing' : isNext ? 'Up Next' : 'Planned';
+                const statusColor = isCompleted ? '#16A34A' : isSelected ? '#2563EB' : '#9CA3AF';
                 return (
                   <Pressable
-                    key={step.id}
+                    key={item.id}
                     onPress={() => {
-                      handleGoToStep(step.id);
+                      handleGoToStep(item.id);
                       if (isGridView) setIsGridView(false);
                       setShowStepPicker(false);
                     }}
-                    className="flex-row items-center py-3"
                     style={[
-                      { borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
-                      isSelected && { backgroundColor: '#EFF6FF', marginHorizontal: -20, paddingHorizontal: 20, borderRadius: 8 },
+                      {
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        paddingVertical: 12,
+                        paddingHorizontal: 12,
+                        marginBottom: 4,
+                        borderRadius: 10,
+                      },
+                      isSelected && { backgroundColor: '#EFF6FF' },
                     ]}
                   >
+                    {/* Item indicator: numbered circle for steps, flag icon for regattas */}
                     <View style={{
-                      width: 24, height: 24, borderRadius: 12, marginRight: 12,
-                      backgroundColor: isCompleted ? '#16A34A' : isInProgress ? '#2563EB' : '#E5E7EB',
+                      width: 28, height: 28, borderRadius: 14, marginRight: 12,
+                      backgroundColor: isCompleted ? '#16A34A' : isSelected ? '#2563EB' : '#F3F4F6',
+                      borderWidth: !isCompleted && !isSelected ? 1.5 : 0,
+                      borderColor: '#D1D5DB',
                       alignItems: 'center', justifyContent: 'center',
                     }}>
                       {isCompleted ? (
-                        <Ionicons name="checkmark" size={14} color="#fff" />
-                      ) : (
-                        <Text style={{ fontSize: 11, fontWeight: '700', color: isInProgress ? '#fff' : '#9CA3AF' }}>
+                        <Ionicons name="checkmark" size={16} color="#fff" />
+                      ) : isStep ? (
+                        <Text style={{ fontSize: 12, fontWeight: '700', color: isSelected ? '#fff' : '#6B7280' }}>
                           {i + 1}
                         </Text>
+                      ) : (
+                        <Ionicons
+                          name="flag-outline"
+                          size={14}
+                          color={isSelected ? '#fff' : '#6B7280'}
+                        />
                       )}
                     </View>
+                    {/* Title and date */}
                     <View style={{ flex: 1 }}>
-                      <Text className="text-sm font-medium" style={{ color: isSelected ? '#2563EB' : '#111827' }}>
-                        {step.name}
+                      <Text style={{ fontSize: 15, fontWeight: isSelected ? '600' : '500', color: isSelected ? '#1E40AF' : '#111827' }} numberOfLines={1}>
+                        {itemTitle}
                       </Text>
-                      {step.date && (
-                        <Text className="text-xs text-gray-400">
-                          {new Date(step.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                        </Text>
-                      )}
+                      <Text style={{ fontSize: 12, color: statusColor, fontWeight: '500', marginTop: 1 }}>
+                        {statusLabel}
+                        {itemDate ? ` · ${new Date(itemDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : ''}
+                      </Text>
                     </View>
+                    {/* Selection indicator */}
                     {isSelected && (
-                      <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: '#DBEAFE' }}>
-                        <Text className="text-xs font-semibold" style={{ color: '#2563EB' }}>Current</Text>
-                      </View>
+                      <Ionicons name="radio-button-on" size={18} color="#2563EB" />
                     )}
                   </Pressable>
                 );
@@ -4552,6 +5221,21 @@ export default function RacesScreen() {
         visible={showSignupPrompt}
         onClose={() => setShowSignupPrompt(false)}
         feature="multiple_races"
+      />
+
+      {/* Signup Prompt Modal - shown after a guest taps a sample to explore it */}
+      <SignupPromptModal
+        visible={showSampleSignupPrompt}
+        onClose={() => {
+          setShowSampleSignupPrompt(false);
+          // After dismissing the soft signup nudge, briefly pulse the toolbar +
+          // button so guests know exactly where to add their own work next.
+          if (addButtonLayout) {
+            triggerAddButtonPulse();
+          }
+        }}
+        title={`Like what you see?`}
+        message={`Sign up free to start your own ${vocab('Learning Event').toLowerCase()}s and keep your progress.`}
       />
 
       {/* </PlanModeLayout> - temporarily removed */}
