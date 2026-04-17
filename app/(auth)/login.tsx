@@ -1,6 +1,6 @@
 import { Link, router } from 'expo-router';
 import React, { useState, useEffect } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { showAlert, showConfirm, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 import { Ionicons } from '@expo/vector-icons';
 import type { ViewStyle } from 'react-native';
@@ -247,6 +247,13 @@ export default function Login() {
             </TouchableOpacity>
           </View>
 
+          <Image
+            source={require('@/assets/images/brand-mark-large.png')}
+            style={styles.logo}
+            resizeMode="contain"
+            accessibilityLabel="BetterAt logo"
+          />
+
           <Text testID="login-title" accessibilityRole="header" style={styles.title}>Welcome back</Text>
           <Text style={styles.subtitle}>Sign in to continue to BetterAt</Text>
 
@@ -418,15 +425,23 @@ const styles = StyleSheet.create({
     borderColor: '#E5E7EB',
     ...cardShadowStyle
   },
+  logo: {
+    width: 56,
+    height: 56,
+    marginBottom: 16,
+    alignSelf: 'center',
+  },
   title: {
     fontSize: 24,
     fontWeight: '700',
     color: '#0F172A',
+    textAlign: 'center',
     marginBottom: 4
   },
   subtitle: {
     fontSize: 14,
     color: '#64748B',
+    textAlign: 'center',
     marginBottom: 16
   },
   socialButtonsContainer: {
@@ -518,9 +533,9 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   primaryButton: {
-    backgroundColor: '#3B82F6',
-    borderRadius: 8,
-    paddingVertical: 12,
+    backgroundColor: '#2563EB',
+    borderRadius: 12,
+    paddingVertical: 14,
     alignItems: 'center',
     marginTop: 8
   },
@@ -539,9 +554,9 @@ const styles = StyleSheet.create({
     marginTop: 12
   },
   footerText: { color: '#64748B' },
-  linkText: { color: '#3B82F6', fontWeight: '600', marginLeft: 6 },
+  linkText: { color: '#2563EB', fontWeight: '600', marginLeft: 6 },
   forgotPasswordText: {
-    color: '#3B82F6',
+    color: '#2563EB',
     fontSize: 14,
     textAlign: 'right',
     marginBottom: 8,

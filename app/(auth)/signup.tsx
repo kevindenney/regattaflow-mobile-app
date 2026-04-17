@@ -10,6 +10,8 @@ import { normalizePersonaParam, type PersonaRole } from '@/lib/auth/signupPerson
 import { getOnboardingContext } from '@/lib/onboarding/interestContext';
 import { SAMPLE_INTERESTS } from '@/lib/landing/sampleData';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { OnboardingStateService } from '@/services/onboarding/OnboardingStateService';
+import { FeatureTourService } from '@/services/onboarding/FeatureTourService';
 
 // Helper to get user-friendly error messages for signup
 const getSignupErrorMessage = (error: any): string => {
@@ -42,11 +44,13 @@ export default function SignUp() {
     plan?: string;
     org?: string;
     orgName?: string;
+    returnTo?: string;
   }>();
 
   // If interest comes from URL, skip the interest picker step
   const paramInterest = params.interest || undefined;
   const inviteToken = params.inviteToken || undefined;
+  const returnTo = params.returnTo || undefined;
 
   const [selectedInterest, setSelectedInterest] = useState<string | undefined>(paramInterest);
   const [step, setStep] = useState<SignupStep>(paramInterest ? 'persona' : 'interest');
@@ -147,10 +151,26 @@ export default function SignUp() {
       }
 
       if (persona === 'sailor') {
-        // All new users go through name-only onboarding, then get 14-day Pro trial
-        router.replace('/onboarding/profile/name-photo');
-      } else if (persona === 'coach') {
-        router.replace('/(auth)/coach-onboarding-welcome');
+        // Profile, trial, and onboarding_completed are all set in the AuthProvider's
+        // upsert (same DB call that creates the user row) to avoid race conditions.
+        // Here we just handle AsyncStorage-based state and navigation.
+        const userId = result?.user?.id;
+        if (userId) {
+          try {
+            await OnboardingStateService.setUserInfo(userId, trimmedUsername);
+            await OnboardingStateService.completeStep('profile-setup');
+
+            // Suppress the duplicate pricing prompt — user will see trial-activation next.
+            await FeatureTourService.markPricingPromptSeen();
+          } catch (profileErr) {
+            console.warn('[Signup] Post-signup state save failed, continuing:', profileErr);
+          }
+        }
+        // If coming from a blueprint page, store returnTo so post-onboarding can redirect back
+        if (returnTo) {
+          await AsyncStorage.setItem('post_onboarding_return_to', returnTo);
+        }
+        router.replace('/onboarding/trial-activation');
       } else if (persona === 'club') {
         const chatRoute = selectedInterest
           ? `/(auth)/club-onboarding-chat?interest=${selectedInterest}`
@@ -180,11 +200,13 @@ export default function SignUp() {
       if (inviteToken) {
         await AsyncStorage.setItem('pending_invite_token', inviteToken);
       }
+      if (returnTo) {
+        await AsyncStorage.setItem('post_onboarding_return_to', returnTo);
+      }
     } catch (error: any) {
       console.error('[Signup] Google sign-up error:', error);
       const friendlyMessage = getSignupErrorMessage(error);
       setErrorMessage(friendlyMessage);
-      showAlert('Google sign-up failed', friendlyMessage);
     }
   };
 
@@ -201,11 +223,13 @@ export default function SignUp() {
       if (inviteToken) {
         await AsyncStorage.setItem('pending_invite_token', inviteToken);
       }
+      if (returnTo) {
+        await AsyncStorage.setItem('post_onboarding_return_to', returnTo);
+      }
     } catch (error: any) {
       console.error('[Signup] Apple sign-up error:', error);
       const friendlyMessage = getSignupErrorMessage(error);
       setErrorMessage(friendlyMessage);
-      showAlert('Apple sign-up failed', friendlyMessage);
     }
   };
 
@@ -314,8 +338,8 @@ export default function SignUp() {
           {/* Interest badge */}
           {selectedInterest && (
             <View style={styles.interestBadgeRow}>
-              <View style={[styles.interestBadge, { backgroundColor: interestCtx.color + '18', borderColor: interestCtx.color + '40' }]}>
-                <Text style={[styles.interestBadgeText, { color: interestCtx.color }]}>
+              <View style={[styles.interestBadge, { backgroundColor: 'rgba(37, 99, 235, 0.08)', borderColor: 'rgba(37, 99, 235, 0.25)' }]}>
+                <Text style={[styles.interestBadgeText, { color: '#2563EB' }]}>
                   {interestCtx.interestName}
                 </Text>
               </View>
@@ -326,8 +350,8 @@ export default function SignUp() {
           {params.orgName && (
             <View style={styles.orgContextRow}>
               <View style={styles.orgContextBadge}>
-                <Ionicons name="business-outline" size={14} color={interestCtx.color} />
-                <Text style={[styles.orgContextText, { color: interestCtx.color }]}>
+                <Ionicons name="business-outline" size={14} color="#2563EB" />
+                <Text style={[styles.orgContextText, { color: '#2563EB' }]}>
                   Joining {params.orgName}
                 </Text>
               </View>
@@ -335,11 +359,11 @@ export default function SignUp() {
           )}
 
           <Text testID="signup-title" style={styles.title}>Create your account</Text>
-          <Text style={styles.subtitle}>{getSubtitle()}</Text>
+          <Text key={persona} style={styles.subtitle}>{getSubtitle()}</Text>
 
           {/* Persona Picker */}
           <View style={styles.personaPicker}>
-            {(['sailor', 'coach', 'club'] as PersonaRole[]).map((p) => (
+            {(['sailor', 'club'] as PersonaRole[]).map((p) => (
               <TouchableOpacity
                 key={p}
                 style={[

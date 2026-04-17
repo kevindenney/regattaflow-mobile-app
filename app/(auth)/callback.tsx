@@ -9,6 +9,7 @@ import {ActivityIndicator, Image, View, Text,
 import {createLogger} from '@/lib/utils/logger'
 // Sample data is created in profile-setup.tsx or races.tsx fallback
 import {GuestStorageService} from '@/services/GuestStorageService'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 
 const logger = createLogger('OAuthCallback')
 
@@ -227,11 +228,9 @@ export default function Callback(){
           setStatus('Almost there...')
 
           let onboardingRoute: string
-          if (personaForOnboarding === 'sailor') {
-            // Sailors go through name-only onboarding, then get 14-day Pro trial
+          if (personaForOnboarding === 'sailor' || personaForOnboarding === 'coach') {
+            // Sailors (and legacy coach signups) go through name-only onboarding
             onboardingRoute = '/onboarding/profile/name-photo'
-          } else if (personaForOnboarding === 'coach') {
-            onboardingRoute = '/(auth)/coach-onboarding-welcome'
           } else if (personaForOnboarding === 'club') {
             onboardingRoute = '/(auth)/club-onboarding-chat'
           } else {
@@ -242,12 +241,23 @@ export default function Callback(){
             router.replace(onboardingRoute as any)
           }, 100)
         } else {
-          const dest = getDashboardRoute(effectiveUserType ?? null)
-          logger.info('Redirecting to dashboard:', dest)
-          setStatus('Almost there...')
-          setTimeout(() => {
-            router.replace(dest as any)
-          }, 100)
+          // Check if user was redirected from a blueprint page (or similar)
+          const returnTo = await AsyncStorage.getItem('post_onboarding_return_to')
+          if (returnTo) {
+            await AsyncStorage.removeItem('post_onboarding_return_to')
+            logger.info('Redirecting to returnTo:', returnTo)
+            setStatus('Almost there...')
+            setTimeout(() => {
+              router.replace(returnTo as any)
+            }, 100)
+          } else {
+            const dest = getDashboardRoute(effectiveUserType ?? null)
+            logger.info('Redirecting to dashboard:', dest)
+            setStatus('Almost there...')
+            setTimeout(() => {
+              router.replace(dest as any)
+            }, 100)
+          }
         }
       } catch (e) {
         logger.error('Profile fetch error:', e)
