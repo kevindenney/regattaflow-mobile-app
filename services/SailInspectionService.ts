@@ -197,7 +197,7 @@ export class SailInspectionService {
         photo_url: photoUrl,
         zone,
         ai_analysis: result,
-        ai_model_used: 'claude-3-haiku-20240307',
+        ai_model_used: 'claude-3-5-haiku-20241022',
         analysis_timestamp: new Date().toISOString(),
       });
 
@@ -329,7 +329,7 @@ export class SailInspectionService {
         photo_url: photoUrl,
         zone: 'overview',
         ai_analysis: result,
-        ai_model_used: 'claude-3-haiku-20240307',
+        ai_model_used: 'claude-3-5-haiku-20241022',
         analysis_timestamp: new Date().toISOString(),
       });
 

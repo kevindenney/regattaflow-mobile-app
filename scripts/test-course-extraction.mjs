@@ -101,7 +101,7 @@ If you cannot identify marks clearly, still provide your best interpretation wit
 
   try {
     const message = await client.messages.create({
-      model: 'claude-3-haiku-20240307',
+      model: 'claude-3-5-haiku-20241022',
       max_tokens: 4096,
       temperature: 0.2,
       messages: [

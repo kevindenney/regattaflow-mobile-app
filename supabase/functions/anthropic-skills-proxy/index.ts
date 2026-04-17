@@ -89,7 +89,7 @@ Deno.serve(async (req: Request) => {
         };
 
         // Add container with skills if provided
-        // Note: skills and code_execution are not supported by claude-3-haiku-20240307
+        // Note: skills and code_execution are not supported by claude-3-5-haiku-20241022
         const modelSupportsSkills = !params.model?.includes('haiku');
         if (params.skills && params.skills.length > 0 && modelSupportsSkills) {
           requestBody.container = {

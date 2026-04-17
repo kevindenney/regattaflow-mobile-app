@@ -1061,7 +1061,7 @@ export default function RaceDetailScreen() {
                   conditions: generatedStrategyView.conditions,
                 },
                 ai_generated: true,
-                ai_model: 'claude-3-haiku-20240307',
+                ai_model: 'claude-3-5-haiku-20241022',
                 generated_at: new Date().toISOString(),
               },
               { onConflict: 'regatta_id,user_id' }
