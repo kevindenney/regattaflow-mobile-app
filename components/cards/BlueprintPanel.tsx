@@ -263,13 +263,16 @@ export function BlueprintPanel({
           blueprintId,
           alreadyAdoptedStepId,
           adoptedMapSize: adoptedStepIdBySourceId.size,
-          adoptedMapEntries: Array.from(adoptedStepIdBySourceId.entries()).slice(0, 5),
-          myAdoptedStepsCount: myAdoptedSteps?.length ?? 0,
+          selectedPeerStepIsTruthy: !!selectedPeerStep,
         });
         return (
           <PeerStepSheet
             visible
-            onClose={() => setSelectedPeerStep(null)}
+            onClose={() => {
+              // eslint-disable-next-line no-console
+              console.log('[BlueprintPanel] onClose invoked → setSelectedPeerStep(null)');
+              setSelectedPeerStep(null);
+            }}
             peer={selectedPeerStep.peer}
             peerStep={selectedPeerStep.peerStep}
             curriculumStep={selectedPeerStep.curriculumStep}
