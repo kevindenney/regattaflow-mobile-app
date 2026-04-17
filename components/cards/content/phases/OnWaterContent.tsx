@@ -9,29 +9,23 @@
  * - GPS tracking (when active)
  */
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { StyleSheet, Text, View, Pressable, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { StyleSheet, Text, View, Pressable, TouchableOpacity, TextInput } from 'react-native';
 import {
-  AlertCircle,
   Anchor,
-  Award,
   BarChart2,
   BookOpen,
   Car,
-  Check,
   CheckCircle,
   ChevronDown,
   ChevronRight,
   ChevronUp,
   ClipboardList,
-  Clock,
   CloudSun,
   Compass,
-  Eye,
   FileText,
   Flag,
   ListChecks,
-  Map,
   Navigation,
   Radio,
   Route,
@@ -41,41 +35,14 @@ import {
   Trophy,
   Users,
   Wind,
+  Sailboat,
   Wrench,
   Zap,
 } from 'lucide-react-native';
 
 import { CardRaceData, getTimeUntilRace } from '../../types';
-import { TileGrid } from '../TileGrid';
-import { useAcceptedSuggestions } from '@/hooks/useAcceptedSuggestions';
-import { AcceptedSuggestionBannerList } from '@/components/races/suggestions/AcceptedSuggestionBanner';
 import { useRacePreparation } from '@/hooks/useRacePreparation';
 import type { ChecklistCompletion } from '@/types/checklists';
-import type { PreStartSpecification } from '@/types/raceIntentions';
-import { CheckCircle2 } from 'lucide-react-native';
-import {
-  PreDepSailsTile,
-  PreDepRigTile,
-  RaceCommitteeTile,
-  StartLineTile,
-  CourseReconTile,
-  CrewRolesTile,
-  FinalCheckTile,
-  RacePlanStartTile,
-  RacePlanUpwindTile,
-} from '@/components/races/prep/OnWaterTiles';
-import { EnhancedPreStartItem } from '@/components/races/EnhancedPreStartItem';
-import {
-  derivePreDepartureItems,
-  deriveRacingStrategyItems,
-  groupRacingStrategyByCategory,
-  hasPreDepartureItems,
-  hasRacingStrategyItems,
-  getNonEmptyCategories,
-  CATEGORY_DISPLAY_CONFIG,
-  type PreDepartureItem,
-  type StrategyCategory,
-} from '@/lib/checklists/onWaterHelpers';
 import { RaceCountdownTimer, type RaceType as TimerRaceType } from '@/components/races/RaceCountdownTimer';
 import { HistoricalSummaryCard, DataStatement } from './historical';
 import { getItemsGroupedByCategory, getCategoriesForPhase } from '@/lib/checklists/checklistConfig';
@@ -1111,6 +1078,15 @@ interface OnWaterContentProps {
   onRaceComplete?: (sessionId: string) => void;
   onSwitchToReview?: () => void;
   isExpanded?: boolean;
+  /** Forecast data from parent (RaceSummaryCard) */
+  forecastData?: import('@/hooks/useRaceWeatherForecast').RaceWeatherForecastData | null;
+  /** Start order data from parent (RaceSummaryCard) */
+  startOrderData?: {
+    startOrder?: number;
+    totalFleets?: number;
+    classFlag?: string;
+    plannedStartTime?: string;
+  } | null;
 }
 
 /**
@@ -1155,6 +1131,8 @@ export function OnWaterContent({
   onRaceComplete,
   onSwitchToReview,
   isExpanded = true,
+  forecastData,
+  startOrderData,
 }: OnWaterContentProps) {
   // Live countdown
   const [timeUntilRace, setTimeUntilRace] = useState(() => getTimeUntilRace(race.date ?? '', race.startTime));
@@ -1162,10 +1140,7 @@ export function OnWaterContent({
   // Start sequence timer state
   const [showStartSequence, setShowStartSequence] = useState(false);
 
-  // Accepted follower suggestions for inline banners
-  const { forCategory: acceptedForCategory, dismissSuggestion } = useAcceptedSuggestions(race.id);
-
-  // Race preparation data (for strategy surface and checklist persistence)
+  // Race preparation data (for strategy surface)
   const { intentions, updateIntentions } = useRacePreparation({
     regattaId: race.id,
   });
@@ -1173,144 +1148,94 @@ export function OnWaterContent({
   // Extract strategy data from intentions
   const strategyNotes = intentions?.strategyNotes || {};
   const raceIntention = intentions?.strategyBrief?.raceIntention;
-  const checklistCompletions = intentions?.checklistCompletions;
 
   // Build strategy summaries
-  const startStrategyDetails = {
-    'start.lineBias': strategyNotes['start.lineBias'],
-    'start.favoredEnd': strategyNotes['start.favoredEnd'],
-    'start.timingApproach': strategyNotes['start.timingApproach'],
-  };
-  const hasStartStrategy = Object.values(startStrategyDetails).some(Boolean);
-  const startStrategySummary = hasStartStrategy
-    ? [strategyNotes['start.favoredEnd'], strategyNotes['start.timingApproach']]
-        .filter(Boolean)
-        .join(', ')
-    : null;
-
-  const firstBeatDetails = {
-    'upwind.favoredTack': strategyNotes['upwind.favoredTack'],
-    'upwind.shiftStrategy': strategyNotes['upwind.shiftStrategy'],
-    'upwind.laylineApproach': strategyNotes['upwind.laylineApproach'],
-  };
-  const hasFirstBeatStrategy = Object.values(firstBeatDetails).some(Boolean);
-  const firstBeatSummary = hasFirstBeatStrategy
-    ? [strategyNotes['upwind.favoredTack'], strategyNotes['upwind.shiftStrategy']]
-        .filter(Boolean)
-        .join(' - ')
-    : null;
-
-  const downwindDetails = {
-    'downwind.favoredGybe': strategyNotes['downwind.favoredGybe'],
-    'downwind.pressureStrategy': strategyNotes['downwind.pressureStrategy'],
-    'downwind.vmgApproach': strategyNotes['downwind.vmgApproach'],
-  };
-  const hasDownwindStrategy = Object.values(downwindDetails).some(Boolean);
-  const downwindSummary = hasDownwindStrategy
-    ? [strategyNotes['downwind.favoredGybe'], strategyNotes['downwind.pressureStrategy']]
-        .filter(Boolean)
-        .join(' - ')
-    : null;
-
-  const markRoundingDetails = {
-    'markRounding.approach': strategyNotes['markRounding.approach'],
-    'markRounding.exitStrategy': strategyNotes['markRounding.exitStrategy'],
-    'markRounding.tacticalPosition': strategyNotes['markRounding.tacticalPosition'],
-  };
-  const hasMarkRoundingStrategy = Object.values(markRoundingDetails).some(Boolean);
-  const markRoundingSummary = hasMarkRoundingStrategy
-    ? [strategyNotes['markRounding.approach'], strategyNotes['markRounding.exitStrategy']]
-        .filter(Boolean)
-        .join(' - ')
-    : null;
-
-  const finishDetails = {
-    'finish.lineBias': strategyNotes['finish.lineBias'],
-    'finish.finalApproach': strategyNotes['finish.finalApproach'],
-  };
-  const hasFinishStrategy = Object.values(finishDetails).some(Boolean);
-  const finishSummary = hasFinishStrategy
-    ? [strategyNotes['finish.lineBias'], strategyNotes['finish.finalApproach']]
-        .filter(Boolean)
-        .join(' - ')
-    : null;
-
-  // Handle checklist item toggle with persistence
-  const handleToggleChecklistItem = useCallback(
-    (itemId: string) => {
-      const currentCompletions = intentions?.checklistCompletions || {};
-      const isCompleted = !!currentCompletions[itemId];
-
-      let updatedCompletions: Record<string, ChecklistCompletion>;
-      if (isCompleted) {
-        // Remove the completion
-        const { [itemId]: _, ...rest } = currentCompletions;
-        updatedCompletions = rest;
-      } else {
-        // Add the completion
-        updatedCompletions = {
-          ...currentCompletions,
-          [itemId]: {
-            itemId,
-            completedAt: new Date().toISOString(),
-            completedBy: 'current-user',
-          },
-        };
-      }
-
-      updateIntentions({ checklistCompletions: updatedCompletions });
-    },
-    [intentions?.checklistCompletions, updateIntentions]
+  const hasStartStrategy = !!(
+    strategyNotes['start.lineBias'] ||
+    strategyNotes['start.favoredEnd'] ||
+    strategyNotes['start.timingApproach']
   );
 
-  // Handle pre-start specification update
-  const handleUpdateSpecification = useCallback(
-    (itemId: string, specification: string) => {
-      const currentSpecs = intentions?.preStartSpecifications || {};
-
-      let updatedSpecs: Record<string, PreStartSpecification>;
-      if (!specification.trim()) {
-        // Remove the specification
-        const { [itemId]: _, ...rest } = currentSpecs;
-        updatedSpecs = rest;
-      } else {
-        // Add/update the specification
-        updatedSpecs = {
-          ...currentSpecs,
-          [itemId]: {
-            itemId,
-            specification: specification.trim(),
-            specifiedAt: new Date().toISOString(),
-          },
-        };
-      }
-
-      updateIntentions({ preStartSpecifications: updatedSpecs });
-    },
-    [intentions?.preStartSpecifications, updateIntentions]
+  const hasFirstBeatStrategy = !!(
+    strategyNotes['upwind.favoredTack'] ||
+    strategyNotes['upwind.shiftStrategy'] ||
+    strategyNotes['upwind.laylineApproach']
   );
 
-  // Derive pre-departure items from intentions
-  const preDepartureItems = useMemo(
-    () => derivePreDepartureItems(intentions),
-    [intentions]
+  const hasDownwindStrategy = !!(
+    strategyNotes['downwind.favoredGybe'] ||
+    strategyNotes['downwind.pressureStrategy'] ||
+    strategyNotes['downwind.vmgApproach']
   );
 
-  // Derive and group racing strategy items
-  const racingStrategyItems = useMemo(
-    () => deriveRacingStrategyItems(strategyNotes),
-    [strategyNotes]
-  );
+  // Extract sail selection + rig tuning from intentions
+  const sailSelection = intentions?.sailSelection;
+  const hasSailSelection = !!(sailSelection?.mainsailName || sailSelection?.jibName || sailSelection?.spinnakerName);
+  const rigIntentions = intentions?.rigIntentions;
+  const hasRigSettings = !!(rigIntentions?.settings && Object.keys(rigIntentions.settings).length > 0);
+  const hasEquipment = hasSailSelection || hasRigSettings;
 
-  const groupedStrategy = useMemo(
-    () => groupRacingStrategyByCategory(racingStrategyItems),
-    [racingStrategyItems]
-  );
+  // ==========================================================================
+  // EDITABLE RACE INFO — resolve from SI data or user-entered intentions
+  // ==========================================================================
+  const [editingField, setEditingField] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
 
-  const nonEmptyCategories = useMemo(
-    () => getNonEmptyCategories(groupedStrategy),
-    [groupedStrategy]
-  );
+  // Resolve race info: prefer SI-extracted data, fallback to user-entered intentions
+  const briefingComms = intentions?.briefingComms;
+  const briefingSchedule = intentions?.briefingSchedule;
+
+  const vhfChannel = race.vhf_channel || briefingComms?.safetyChannel || null;
+  const totalStarts = startOrderData?.totalFleets || briefingSchedule?.numberOfClasses || null;
+  const ourStart = startOrderData?.startOrder || briefingSchedule?.myClassStartNumber || null;
+  const classFlag = startOrderData?.classFlag || briefingSchedule?.classFlag || null;
+
+  const handleEditStart = useCallback((field: string, currentValue: string | number | null) => {
+    setEditingField(field);
+    setEditValue(currentValue != null ? String(currentValue) : '');
+  }, []);
+
+  // Use refs to avoid stale closures and prevent double-save from onBlur + onSubmitEditing
+  const editingFieldRef = useRef<string | null>(null);
+  const editValueRef = useRef('');
+  editingFieldRef.current = editingField;
+  editValueRef.current = editValue;
+
+  const handleEditSave = useCallback(() => {
+    const field = editingFieldRef.current;
+    const val = editValueRef.current.trim();
+
+    if (!field) return;
+
+    // Clear immediately to prevent double-fire from onBlur + onSubmitEditing
+    setEditingField(null);
+    setEditValue('');
+
+    if (!val) return;
+
+    switch (field) {
+      case 'vhf':
+        updateIntentions({
+          briefingComms: { safetyChannel: val },
+        });
+        break;
+      case 'starts':
+        updateIntentions({
+          briefingSchedule: { numberOfClasses: parseInt(val, 10) || undefined },
+        });
+        break;
+      case 'ourStart':
+        updateIntentions({
+          briefingSchedule: { myClassStartNumber: parseInt(val, 10) || undefined },
+        });
+        break;
+      case 'flag':
+        updateIntentions({
+          briefingSchedule: { classFlag: val },
+        });
+        break;
+    }
+  }, [updateIntentions]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -1321,9 +1246,6 @@ export function OnWaterContent({
 
   const countdown = useMemo(() => formatCountdown(timeUntilRace), [timeUntilRace]);
 
-  // Race info
-  const vhfChannel = race.vhf_channel;
-  const courseNumber = (race as any).course_number || (race as any).course_code;
   const raceType: RaceType = race.race_type || 'fleet';
 
   // Handle starting the timer
@@ -1337,6 +1259,24 @@ export function OnWaterContent({
     setShowStartSequence(false);
     onRaceComplete?.(sessionId);
   };
+
+  // ==========================================================================
+  // FORECAST DATA
+  // ==========================================================================
+  const raceWindow = forecastData?.raceWindow;
+  const windSpeed = raceWindow?.windAtStart;
+  const windDir = raceWindow?.windDirectionAtStart;
+  const windEnd = raceWindow?.windAtEnd;
+  const currentDir = raceWindow?.currentDirectionAtStart;
+  const currentSpeed = raceWindow?.currentSpeedAtStart;
+  const windTrend = forecastData?.windTrend;
+
+  // Format current direction as cardinal for display
+  const currentDirCardinal = useMemo(() => {
+    if (currentDir == null) return null;
+    const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+    return dirs[Math.round(currentDir / 45) % 8];
+  }, [currentDir]);
 
   // ==========================================================================
   // RENDER
@@ -1387,183 +1327,620 @@ export function OnWaterContent({
         </TouchableOpacity>
       )}
 
-      {/* Race Info Grid */}
-      {(vhfChannel || courseNumber) && (
-        <View style={styles.infoGrid}>
-          {vhfChannel && (
-            <View style={styles.infoItem}>
-              <Radio size={18} color={IOS_COLORS.blue} />
-              <View>
-                <Text style={styles.infoLabel}>VHF</Text>
-                <Text style={styles.infoValue}>Ch {vhfChannel}</Text>
+      {/* ================================================================ */}
+      {/* RACE INFO — always visible, tappable to edit                    */}
+      {/* ================================================================ */}
+      <View style={briefStyles.raceInfoGrid}>
+        {/* VHF Channel */}
+        {editingField === 'vhf' ? (
+          <View style={briefStyles.raceInfoChipEditing}>
+            <Radio size={14} color={IOS_COLORS.blue} />
+            <Text style={briefStyles.raceInfoLabel}>VHF</Text>
+            <TextInput
+              style={briefStyles.raceInfoInput}
+              value={editValue}
+              onChangeText={setEditValue}
+              placeholder="Ch #"
+              keyboardType="number-pad"
+              autoFocus
+              onSubmitEditing={handleEditSave}
+              onBlur={handleEditSave}
+              returnKeyType="done"
+            />
+            <Pressable onPress={handleEditSave} hitSlop={8}>
+              <CheckCircle size={16} color={IOS_COLORS.blue} />
+            </Pressable>
+          </View>
+        ) : (
+          <Pressable
+            style={[briefStyles.raceInfoChip, !vhfChannel && briefStyles.raceInfoChipEmpty]}
+            onPress={() => handleEditStart('vhf', vhfChannel)}
+          >
+            <Radio size={14} color={vhfChannel ? IOS_COLORS.blue : IOS_COLORS.gray} />
+            <Text style={briefStyles.raceInfoLabel}>VHF</Text>
+            <Text style={[briefStyles.raceInfoValue, !vhfChannel && briefStyles.raceInfoValueEmpty]}>
+              {vhfChannel ? `Ch ${vhfChannel}` : 'Set'}
+            </Text>
+          </Pressable>
+        )}
+
+        {/* Total Starts */}
+        {editingField === 'starts' ? (
+          <View style={briefStyles.raceInfoChipEditing}>
+            <Flag size={14} color={IOS_COLORS.green} />
+            <Text style={briefStyles.raceInfoLabel}>Starts</Text>
+            <TextInput
+              style={briefStyles.raceInfoInput}
+              value={editValue}
+              onChangeText={setEditValue}
+              placeholder="#"
+              keyboardType="number-pad"
+              autoFocus
+              onSubmitEditing={handleEditSave}
+              onBlur={handleEditSave}
+              returnKeyType="done"
+            />
+            <Pressable onPress={handleEditSave} hitSlop={8}>
+              <CheckCircle size={16} color={IOS_COLORS.blue} />
+            </Pressable>
+          </View>
+        ) : (
+          <Pressable
+            style={[briefStyles.raceInfoChip, !totalStarts && briefStyles.raceInfoChipEmpty]}
+            onPress={() => handleEditStart('starts', totalStarts)}
+          >
+            <Flag size={14} color={totalStarts ? IOS_COLORS.green : IOS_COLORS.gray} />
+            <Text style={briefStyles.raceInfoLabel}>Starts</Text>
+            <Text style={[briefStyles.raceInfoValue, !totalStarts && briefStyles.raceInfoValueEmpty]}>
+              {totalStarts ?? 'Set'}
+            </Text>
+          </Pressable>
+        )}
+
+        {/* Our Start Number */}
+        {editingField === 'ourStart' ? (
+          <View style={briefStyles.raceInfoChipEditing}>
+            <Target size={14} color={IOS_COLORS.orange} />
+            <Text style={briefStyles.raceInfoLabel}>Our Start</Text>
+            <TextInput
+              style={briefStyles.raceInfoInput}
+              value={editValue}
+              onChangeText={setEditValue}
+              placeholder="#"
+              keyboardType="number-pad"
+              autoFocus
+              onSubmitEditing={handleEditSave}
+              onBlur={handleEditSave}
+              returnKeyType="done"
+            />
+            <Pressable onPress={handleEditSave} hitSlop={8}>
+              <CheckCircle size={16} color={IOS_COLORS.blue} />
+            </Pressable>
+          </View>
+        ) : (
+          <Pressable
+            style={[briefStyles.raceInfoChip, !ourStart && briefStyles.raceInfoChipEmpty]}
+            onPress={() => handleEditStart('ourStart', ourStart)}
+          >
+            <Target size={14} color={ourStart ? IOS_COLORS.orange : IOS_COLORS.gray} />
+            <Text style={briefStyles.raceInfoLabel}>Our Start</Text>
+            <Text style={[briefStyles.raceInfoValue, !ourStart && briefStyles.raceInfoValueEmpty]}>
+              {ourStart ? `#${ourStart}${totalStarts ? ` of ${totalStarts}` : ''}` : 'Set'}
+            </Text>
+          </Pressable>
+        )}
+
+        {/* Class Flag */}
+        {editingField === 'flag' ? (
+          <View style={briefStyles.raceInfoChipEditing}>
+            <Flag size={14} color={IOS_COLORS.red} />
+            <Text style={briefStyles.raceInfoLabel}>Flag</Text>
+            <TextInput
+              style={briefStyles.raceInfoInput}
+              value={editValue}
+              onChangeText={setEditValue}
+              placeholder="e.g. Blue"
+              autoFocus
+              onSubmitEditing={handleEditSave}
+              onBlur={handleEditSave}
+              returnKeyType="done"
+            />
+            <Pressable onPress={handleEditSave} hitSlop={8}>
+              <CheckCircle size={16} color={IOS_COLORS.blue} />
+            </Pressable>
+          </View>
+        ) : (
+          <Pressable
+            style={[briefStyles.raceInfoChip, !classFlag && briefStyles.raceInfoChipEmpty]}
+            onPress={() => handleEditStart('flag', classFlag)}
+          >
+            <Flag size={14} color={classFlag ? IOS_COLORS.red : IOS_COLORS.gray} />
+            <Text style={briefStyles.raceInfoLabel}>Flag</Text>
+            <Text style={[briefStyles.raceInfoValue, !classFlag && briefStyles.raceInfoValueEmpty]}>
+              {classFlag ?? 'Set'}
+            </Text>
+          </Pressable>
+        )}
+      </View>
+
+      {/* ================================================================ */}
+      {/* FOCUS CONCEPTS — Playbook concepts linked for this race         */}
+      {/* ================================================================ */}
+      {intentions?.raceFocusConcepts && intentions.raceFocusConcepts.length > 0 && (
+        <View style={briefStyles.section}>
+          <Text style={briefStyles.sectionLabel}>FOCUS</Text>
+          <View style={briefStyles.focusConceptsList}>
+            {intentions.raceFocusConcepts.map((fc) => (
+              <View key={fc.conceptId} style={briefStyles.focusConceptCard}>
+                <View style={briefStyles.focusConceptHeader}>
+                  <BookOpen size={14} color={IOS_COLORS.blue} />
+                  <Text style={briefStyles.focusConceptTitle} numberOfLines={1}>
+                    {fc.title}
+                  </Text>
+                </View>
+                {fc.reminder && (
+                  <Text style={briefStyles.focusConceptReminder}>
+                    {fc.reminder}
+                  </Text>
+                )}
               </View>
-            </View>
-          )}
-          {courseNumber && (
-            <View style={styles.infoItem}>
-              <Map size={18} color={IOS_COLORS.green} />
-              <View>
-                <Text style={styles.infoLabel}>Course</Text>
-                <Text style={styles.infoValue}>{courseNumber}</Text>
+            ))}
+          </View>
+        </View>
+      )}
+
+      {/* ================================================================ */}
+      {/* CONDITIONS FORECAST                                             */}
+      {/* ================================================================ */}
+      {(windSpeed != null || currentSpeed != null) && (
+        <View style={briefStyles.section}>
+          <Text style={briefStyles.sectionLabel}>CONDITIONS</Text>
+          <View style={briefStyles.conditionsGrid}>
+            {/* Wind */}
+            {windSpeed != null && (
+              <View style={briefStyles.conditionCard}>
+                <View style={briefStyles.conditionIconRow}>
+                  <Wind size={16} color={IOS_COLORS.blue} />
+                  <Text style={briefStyles.conditionTitle}>Wind</Text>
+                </View>
+                <Text style={briefStyles.conditionValue}>
+                  {windDir} {Math.round(windSpeed)}kt
+                  {windEnd != null && windEnd !== windSpeed
+                    ? ` → ${Math.round(windEnd)}kt`
+                    : ''}
+                </Text>
+                {windTrend && (
+                  <Text style={briefStyles.conditionNote}>
+                    {windTrend === 'building' ? 'Building' : windTrend === 'easing' ? 'Easing' : 'Steady'}
+                  </Text>
+                )}
               </View>
-            </View>
-          )}
+            )}
+
+            {/* Current */}
+            {currentSpeed != null && currentSpeed > 0 && (
+              <View style={briefStyles.conditionCard}>
+                <View style={briefStyles.conditionIconRow}>
+                  <Navigation size={16} color={IOS_COLORS.orange} />
+                  <Text style={briefStyles.conditionTitle}>Current</Text>
+                </View>
+                <Text style={briefStyles.conditionValue}>
+                  {currentDirCardinal ? `${currentDirCardinal} ` : ''}{currentSpeed.toFixed(1)}kt
+                </Text>
+                {raceWindow?.hasTurnDuringRace && raceWindow.turnTimeDuringRace && (
+                  <Text style={briefStyles.conditionNote}>
+                    Turn at {raceWindow.turnTimeDuringRace}
+                  </Text>
+                )}
+              </View>
+            )}
+          </View>
         </View>
       )}
 
       {/* ================================================================ */}
-      {/* SECTION: PRE-DEPARTURE (from prep)                              */}
+      {/* EQUIPMENT — Sails & Rig                                         */}
       {/* ================================================================ */}
-      {isExpanded && (
-        <View style={styles.tileSectionContainer}>
-          <View style={styles.tileSectionHeader}>
-            <View style={styles.tileSectionTitleRow}>
-              <Text style={styles.tileSectionTitle}>Pre-Departure</Text>
-              {preDepartureItems.length > 0 &&
-                preDepartureItems.every(item => !!checklistCompletions?.[`predep_${item.id}`]) && (
-                <CheckCircle2 size={16} color={IOS_COLORS.green} />
-              )}
-            </View>
-            <Text style={styles.tileSectionSubtitle}>Equipment setup from prep phase</Text>
+      {hasEquipment && (
+        <View style={briefStyles.section}>
+          <Text style={briefStyles.sectionLabel}>EQUIPMENT</Text>
+          <View style={briefStyles.equipmentGrid}>
+            {/* Sails */}
+            {hasSailSelection && (
+              <View style={briefStyles.equipmentCard}>
+                <View style={briefStyles.equipmentCardHeader}>
+                  <Sailboat size={14} color={IOS_COLORS.blue} />
+                  <Text style={briefStyles.equipmentCardTitle}>Sails</Text>
+                </View>
+                {sailSelection?.mainsailName && (
+                  <Text style={briefStyles.equipmentItem}>
+                    Main: {sailSelection.mainsailName}
+                  </Text>
+                )}
+                {sailSelection?.jibName && (
+                  <Text style={briefStyles.equipmentItem}>
+                    Jib: {sailSelection.jibName}
+                  </Text>
+                )}
+                {sailSelection?.spinnakerName && (
+                  <Text style={briefStyles.equipmentItem}>
+                    Spi: {sailSelection.spinnakerName}
+                  </Text>
+                )}
+                {sailSelection?.windRangeContext && (
+                  <Text style={briefStyles.equipmentNote}>
+                    {sailSelection.windRangeContext}
+                  </Text>
+                )}
+              </View>
+            )}
+
+            {/* Rig Tuning */}
+            {hasRigSettings && (
+              <View style={briefStyles.equipmentCard}>
+                <View style={briefStyles.equipmentCardHeader}>
+                  <Wrench size={14} color={IOS_COLORS.orange} />
+                  <Text style={briefStyles.equipmentCardTitle}>Rig</Text>
+                </View>
+                {Object.entries(rigIntentions!.settings)
+                  .filter(([, setting]) => setting.value)
+                  .slice(0, 4)
+                  .map(([key, setting]) => (
+                  <Text key={key} style={briefStyles.equipmentItem}>
+                    {key.replace(/_/g, ' ')}: {setting.value}
+                  </Text>
+                ))}
+                {rigIntentions?.overallNotes && (
+                  <Text style={briefStyles.equipmentNote}>
+                    {rigIntentions.overallNotes}
+                  </Text>
+                )}
+              </View>
+            )}
           </View>
-          <TileGrid>
-            <PreDepSailsTile
-              isComplete={preDepartureItems
-                .filter(i => i.type === 'sail')
-                .every(i => !!checklistCompletions?.[`predep_${i.id}`])}
-              onPress={() => {
-                const sailItems = preDepartureItems.filter(i => i.type === 'sail');
-                const nextUnchecked = sailItems.find(i => !checklistCompletions?.[`predep_${i.id}`]);
-                if (nextUnchecked) handleToggleChecklistItem(`predep_${nextUnchecked.id}`);
-              }}
-              selectedSails={
-                preDepartureItems
-                  .filter(i => i.type === 'sail')
-                  .map(i => i.label) || undefined
-              }
-            />
-            <PreDepRigTile
-              isComplete={preDepartureItems
-                .filter(i => i.type === 'rig')
-                .every(i => !!checklistCompletions?.[`predep_${i.id}`])}
-              onPress={() => {
-                const rigItems = preDepartureItems.filter(i => i.type === 'rig');
-                const nextUnchecked = rigItems.find(i => !checklistCompletions?.[`predep_${i.id}`]);
-                if (nextUnchecked) handleToggleChecklistItem(`predep_${nextUnchecked.id}`);
-              }}
-              tuningSummary={
-                preDepartureItems
-                  .filter(i => i.type === 'rig')
-                  .map(i => i.detail)
-                  .filter(Boolean)
-                  .join(', ') || undefined
-              }
-            />
-          </TileGrid>
         </View>
       )}
 
       {/* ================================================================ */}
-      {/* SECTION: PRE-START CHECKS                                       */}
+      {/* STRATEGY BRIEFING                                               */}
       {/* ================================================================ */}
-      {isExpanded && (
-        <View style={styles.tileSectionContainer}>
-          <View style={styles.tileSectionHeader}>
-            <View style={styles.tileSectionTitleRow}>
-              <Text style={styles.tileSectionTitle}>Pre-Start Checks</Text>
-              {PRE_START_CHECK_ITEMS.every(item => !!checklistCompletions?.[item.id]) && (
-                <CheckCircle2 size={16} color={IOS_COLORS.green} />
-              )}
-            </View>
-            <Text style={styles.tileSectionSubtitle}>On-water observations before the gun</Text>
+      {(hasStartStrategy || hasFirstBeatStrategy || hasDownwindStrategy) && (
+        <View style={briefStyles.section}>
+          <Text style={briefStyles.sectionLabel}>RACE PLAN</Text>
+          <View style={briefStyles.strategyList}>
+            {/* Start Strategy */}
+            {hasStartStrategy && (
+              <View style={briefStyles.strategyCard}>
+                <View style={briefStyles.strategyHeader}>
+                  <Flag size={14} color={IOS_COLORS.green} />
+                  <Text style={briefStyles.strategyTitle}>Start</Text>
+                </View>
+                {strategyNotes['start.favoredEnd'] && (
+                  <Text style={briefStyles.strategyValue}>
+                    {strategyNotes['start.favoredEnd']}
+                  </Text>
+                )}
+                {strategyNotes['start.timingApproach'] && (
+                  <Text style={briefStyles.strategyDetail}>
+                    {strategyNotes['start.timingApproach']}
+                  </Text>
+                )}
+                {strategyNotes['start.lineBias'] && (
+                  <Text style={briefStyles.strategyDetail}>
+                    {strategyNotes['start.lineBias']}
+                  </Text>
+                )}
+              </View>
+            )}
+
+            {/* First Beat / Upwind Strategy */}
+            {hasFirstBeatStrategy && (
+              <View style={briefStyles.strategyCard}>
+                <View style={briefStyles.strategyHeader}>
+                  <Route size={14} color={IOS_COLORS.blue} />
+                  <Text style={briefStyles.strategyTitle}>First Beat</Text>
+                </View>
+                {strategyNotes['upwind.favoredTack'] && (
+                  <Text style={briefStyles.strategyValue}>
+                    {strategyNotes['upwind.favoredTack']}
+                  </Text>
+                )}
+                {strategyNotes['upwind.shiftStrategy'] && (
+                  <Text style={briefStyles.strategyDetail}>
+                    {strategyNotes['upwind.shiftStrategy']}
+                  </Text>
+                )}
+                {strategyNotes['upwind.laylineApproach'] && (
+                  <Text style={briefStyles.strategyDetail}>
+                    {strategyNotes['upwind.laylineApproach']}
+                  </Text>
+                )}
+              </View>
+            )}
+
+            {/* Downwind Strategy */}
+            {hasDownwindStrategy && (
+              <View style={briefStyles.strategyCard}>
+                <View style={briefStyles.strategyHeader}>
+                  <ChevronDown size={14} color={IOS_COLORS.orange} />
+                  <Text style={briefStyles.strategyTitle}>Downwind</Text>
+                </View>
+                {strategyNotes['downwind.favoredGybe'] && (
+                  <Text style={briefStyles.strategyValue}>
+                    {strategyNotes['downwind.favoredGybe']}
+                  </Text>
+                )}
+                {strategyNotes['downwind.pressureStrategy'] && (
+                  <Text style={briefStyles.strategyDetail}>
+                    {strategyNotes['downwind.pressureStrategy']}
+                  </Text>
+                )}
+                {strategyNotes['downwind.vmgApproach'] && (
+                  <Text style={briefStyles.strategyDetail}>
+                    {strategyNotes['downwind.vmgApproach']}
+                  </Text>
+                )}
+              </View>
+            )}
           </View>
-          <TileGrid>
-            <RaceCommitteeTile
-              isComplete={
-                !!checklistCompletions?.['prestart_checkin']
-              }
-              onPress={() => handleToggleChecklistItem('prestart_checkin')}
-              checkedIn={!!checklistCompletions?.['prestart_checkin']}
-              courseCode={intentions?.preStartSpecifications?.['prestart_checkin']?.specification}
-            />
-            <StartLineTile
-              isComplete={
-                !!checklistCompletions?.['prestart_sailed_line'] &&
-                !!checklistCompletions?.['prestart_favored_end']
-              }
-              onPress={() => {
-                if (!checklistCompletions?.['prestart_sailed_line']) handleToggleChecklistItem('prestart_sailed_line');
-                else if (!checklistCompletions?.['prestart_favored_end']) handleToggleChecklistItem('prestart_favored_end');
-              }}
-              favoredEnd={intentions?.preStartSpecifications?.['prestart_favored_end']?.specification}
-              lineTime={intentions?.preStartSpecifications?.['prestart_sailed_line']?.specification}
-            />
-            <CourseReconTile
-              isComplete={
-                !!checklistCompletions?.['prestart_miniature_course'] &&
-                !!checklistCompletions?.['prestart_laylines'] &&
-                !!checklistCompletions?.['prestart_wind_patterns'] &&
-                !!checklistCompletions?.['prestart_current']
-              }
-              onPress={() => {
-                const reconItems = ['prestart_miniature_course', 'prestart_laylines', 'prestart_wind_patterns', 'prestart_current'];
-                const nextUnchecked = reconItems.find(id => !checklistCompletions?.[id]);
-                if (nextUnchecked) handleToggleChecklistItem(nextUnchecked);
-              }}
-              progress={{
-                current: ['prestart_miniature_course', 'prestart_laylines', 'prestart_wind_patterns', 'prestart_current']
-                  .filter(id => !!checklistCompletions?.[id]).length,
-                total: 4,
-              }}
-            />
-            <CrewRolesTile
-              isComplete={!!checklistCompletions?.['prestart_crew_roles']}
-              onPress={() => handleToggleChecklistItem('prestart_crew_roles')}
-            />
-            <FinalCheckTile
-              isComplete={!!checklistCompletions?.['prestart_boat_check']}
-              onPress={() => handleToggleChecklistItem('prestart_boat_check')}
-            />
-          </TileGrid>
-          <AcceptedSuggestionBannerList
-            suggestions={acceptedForCategory('tactics')}
-            onDismiss={dismissSuggestion}
-          />
         </View>
       )}
 
-      {/* ================================================================ */}
-      {/* SECTION: YOUR RACE PLAN (read-only reference)                   */}
-      {/* ================================================================ */}
-      {isExpanded && (hasStartStrategy || hasFirstBeatStrategy) && (
-        <View style={styles.tileSectionContainer}>
-          <View style={styles.tileSectionHeader}>
-            <View style={styles.tileSectionTitleRow}>
-              <Text style={styles.tileSectionTitle}>Your Race Plan</Text>
-              {hasStartStrategy && hasFirstBeatStrategy && (
-                <CheckCircle2 size={16} color={IOS_COLORS.green} />
-              )}
-            </View>
-            <Text style={styles.tileSectionSubtitle}>Strategy from prep phase</Text>
-          </View>
-          <TileGrid>
-            <RacePlanStartTile
-              isComplete={hasStartStrategy}
-              onPress={() => {}}
-              summary={startStrategySummary || undefined}
-            />
-            <RacePlanUpwindTile
-              isComplete={hasFirstBeatStrategy}
-              onPress={() => {}}
-              summary={firstBeatSummary || undefined}
-            />
-          </TileGrid>
+      {/* Empty state when no strategy set */}
+      {!hasStartStrategy && !hasFirstBeatStrategy && !hasDownwindStrategy && (
+        <View style={briefStyles.emptyState}>
+          <Target size={20} color={IOS_COLORS.gray} />
+          <Text style={briefStyles.emptyText}>
+            Complete your race plan in the Prep tab
+          </Text>
         </View>
       )}
 
     </View>
   );
 }
+
+// =============================================================================
+// BRIEFING STYLES (simplified Racing tab)
+// =============================================================================
+
+const briefStyles = StyleSheet.create({
+  raceInfoGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  raceInfoChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  raceInfoLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: IOS_COLORS.gray,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  raceInfoValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+  },
+  raceInfoValueEmpty: {
+    color: IOS_COLORS.gray,
+    fontWeight: '400',
+    fontStyle: 'italic',
+  },
+  raceInfoChipEmpty: {
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: IOS_COLORS.gray3,
+    backgroundColor: IOS_COLORS.gray6,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  raceInfoChipEditing: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderWidth: 1.5,
+    borderColor: IOS_COLORS.blue,
+  },
+  raceInfoInput: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+    minWidth: 40,
+    paddingVertical: 4,
+    paddingHorizontal: 0,
+  },
+  section: {
+    gap: 8,
+  },
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: IOS_COLORS.gray,
+    letterSpacing: 1,
+  },
+  conditionsGrid: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  conditionCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 12,
+    gap: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  conditionIconRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 2,
+  },
+  conditionTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  conditionValue: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+  },
+  conditionNote: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: IOS_COLORS.gray,
+  },
+  strategyList: {
+    gap: 8,
+  },
+  strategyCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 12,
+    gap: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  strategyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 2,
+  },
+  strategyTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  strategyValue: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+    lineHeight: 20,
+  },
+  strategyDetail: {
+    fontSize: 14,
+    fontWeight: '400',
+    color: IOS_COLORS.secondaryLabel,
+    lineHeight: 19,
+  },
+  emptyState: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: IOS_COLORS.gray6,
+    borderRadius: 12,
+    padding: 16,
+  },
+  emptyText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.gray,
+    flex: 1,
+  },
+  focusConceptsList: {
+    gap: 8,
+  },
+  focusConceptCard: {
+    backgroundColor: '#EFF6FF',
+    borderRadius: 12,
+    padding: 12,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  focusConceptHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  focusConceptTitle: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+  },
+  focusConceptReminder: {
+    fontSize: 14,
+    fontStyle: 'italic',
+    color: IOS_COLORS.secondaryLabel,
+    marginLeft: 20,
+    lineHeight: 19,
+  },
+  equipmentGrid: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  equipmentCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 12,
+    gap: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  equipmentCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  equipmentCardTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  equipmentItem: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.label,
+    lineHeight: 19,
+  },
+  equipmentNote: {
+    fontSize: 12,
+    fontWeight: '400',
+    color: IOS_COLORS.gray,
+    lineHeight: 16,
+    marginTop: 2,
+  },
+});
 
 const styles = StyleSheet.create({
   container: {
