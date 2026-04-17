@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useLocalSearchParams, router } from 'expo-router';
+import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { TabScreenToolbar } from '@/components/ui/TabScreenToolbar';
 import { supabase } from '@/services/supabase';
@@ -104,6 +104,19 @@ function DbUserProfile({ userId }: { userId: string }) {
   // Follow state
   const [following, setFollowing] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
+
+  // Refetch profile data when screen regains focus (e.g. after editing settings)
+  const focusCount = useRef(0);
+  const [refreshKey, setRefreshKey] = useState(0);
+  useFocusEffect(
+    useCallback(() => {
+      // Skip the initial mount — only refetch on subsequent focuses
+      if (focusCount.current > 0) {
+        setRefreshKey((k) => k + 1);
+      }
+      focusCount.current += 1;
+    }, [])
+  );
 
   useEffect(() => {
     if (!isSignedIn || isOwner || !user?.id) return;
@@ -264,7 +277,7 @@ function DbUserProfile({ userId }: { userId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [userId]);
+  }, [userId, refreshKey]);
 
   const orgRows = useMemo(
     () =>

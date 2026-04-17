@@ -54,6 +54,7 @@ const TAB_SWEEP_META: Record<(typeof TAB_SWEEP_REQUIRED_TABS)[number], { label: 
 const ROUTES_WITH_CUSTOM_TOOLBAR = [
   '/discover',
   '/learn',
+  '/playbook',
   '/race-browser',
   '/races',
   '/reflect',
@@ -356,6 +357,7 @@ function TabLayoutInner() {
   const connectTab = findTab('connect');
   const discoverTab = findTab('discover');
   const searchTab = findTab('search');
+  const playbookTab = findTab('playbook');
   const followTab = findTab('follow');
   const communityTab = findTab('community');
   const strategyTab = findTab('strategy');
@@ -454,7 +456,26 @@ function TabLayoutInner() {
                 : undefined,
           }}
         />
-        {/* Tab 2: Discover (replaces Connect) */}
+        {/* Tab 2: Playbook */}
+        <Tabs.Screen
+          name="playbook"
+          options={{
+            title: playbookTab?.title ?? 'Playbook',
+            tabBarIcon: isSailorUser ? () => null : ({ color, size, focused }) => (
+              <Ionicons
+                name={getIconName(playbookTab, focused, playbookTab?.iconFocused ?? 'book', playbookTab?.icon ?? 'book-outline') as any}
+                size={size}
+                color={color}
+              />
+            ),
+            tabBarButton: !isTabVisible('playbook')
+              ? () => null
+              : isSailorUser
+                ? renderSailorTabButton('playbook', playbookTab?.title ?? 'Playbook', playbookTab)
+                : undefined,
+          }}
+        />
+        {/* Tab 3: Discover (replaces Connect) */}
         <Tabs.Screen
           name="discover"
           options={{
@@ -610,17 +631,6 @@ function TabLayoutInner() {
               />
             ),
             tabBarButton: isTabVisible('fleet') ? undefined : () => null,
-          }}
-        />
-        {/* Hidden: Playbook (secondary nav item, nested stack with sub-routes) */}
-        <Tabs.Screen
-          name="playbook"
-          options={{
-            title: 'Playbook',
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="book-outline" size={size} color={color} />
-            ),
-            tabBarButton: () => null,
           }}
         />
         <Tabs.Screen
@@ -971,6 +981,7 @@ function TabLayoutInner() {
         onSkip={skipTour}
         onNavigate={(route) => router.push(route as any)}
         interestSlug={currentInterest?.slug}
+        userName={user?.user_metadata?.full_name || user?.user_metadata?.name}
       />
       <TabSweepCard
         visible={isTourActive && shouldShowTour && currentStep === 'tab_sweep'}

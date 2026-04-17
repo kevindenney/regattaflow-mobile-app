@@ -12,6 +12,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { createSailorSampleData } from '@/services/onboarding/SailorSampleDataService';
 import { supabase } from '@/services/supabase';
 import { showAlert, showConfirm, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
+import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
 import { router, Redirect } from 'expo-router';
 import { useMemo, useState, useEffect } from 'react';
@@ -66,7 +67,7 @@ export default function SettingsScreen() {
   }, [user?.id]);
 
   // Save follower sharing setting
-  const handleFollowerSharingChange = async (value: boolean) => {
+  const applyFollowerSharing = async (value: boolean) => {
     setAllowFollowerSharing(value);
     setSharingSettingLoading(true);
 
@@ -78,7 +79,6 @@ export default function SettingsScreen() {
 
       if (error) {
         console.error('[Settings] Error saving follower sharing setting:', error);
-        // Revert on error
         setAllowFollowerSharing(!value);
         showAlert('Error', 'Failed to save privacy setting. Please try again.');
       }
@@ -87,6 +87,18 @@ export default function SettingsScreen() {
       setAllowFollowerSharing(!value);
     } finally {
       setSharingSettingLoading(false);
+    }
+  };
+
+  const handleFollowerSharingChange = (value: boolean) => {
+    if (value) {
+      showConfirm(
+        'Share with Followers',
+        'Your preparation notes will be visible to people who follow you.',
+        () => applyFollowerSharing(true),
+      );
+    } else {
+      applyFollowerSharing(false);
     }
   };
 
@@ -290,12 +302,14 @@ export default function SettingsScreen() {
             <Ionicons name="boat" size={24} color="#FFFFFF" />
           </View>
           <View style={styles.subscriptionInfo}>
-            <Text style={styles.subscriptionTitle}>Your RegattaFlow Subscription</Text>
+            <Text style={styles.subscriptionTitle}>Your BetterAt Plan</Text>
             <Text style={styles.subscriptionSubtitle}>Explore and manage your subscription</Text>
           </View>
           <View style={styles.subscriptionBadge}>
             <Text style={styles.subscriptionBadgeText}>
-              {userProfile?.subscription_tier?.charAt(0).toUpperCase() + userProfile?.subscription_tier?.slice(1) || 'Free'}
+              {userProfile?.subscription_status === 'trialing' ? 'Pro Trial'
+                : userProfile?.subscription_tier === 'individual' ? 'Pro'
+                : userProfile?.subscription_tier?.charAt(0).toUpperCase() + userProfile?.subscription_tier?.slice(1) || 'Free'}
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
@@ -308,6 +322,7 @@ export default function SettingsScreen() {
               title="Complete Onboarding"
               subtitle="Finish setting up your sailing profile"
               onPress={() => router.push('/(auth)/sailor-onboarding-comprehensive')}
+              showArrow
             />
           )}
           {isDemoProfile && (
@@ -316,6 +331,7 @@ export default function SettingsScreen() {
               title="Claim Workspace"
               subtitle="Set a password and keep your data"
               onPress={() => setClaimVisible(true)}
+              showArrow
             />
           )}
           <SettingItem
@@ -323,12 +339,14 @@ export default function SettingsScreen() {
             title="Edit Profile"
             subtitle="Update your personal information"
             onPress={() => router.push('/settings/edit-profile')}
+            showArrow
           />
           <SettingItem
             icon="key-outline"
             title="Change Password"
             subtitle="Update your password"
             onPress={() => router.push('/settings/change-password')}
+            showArrow
           />
           {isTeamSubscriber && (
             <SettingItem
@@ -336,6 +354,7 @@ export default function SettingsScreen() {
               title="Manage Team"
               subtitle="Invite members and manage your team"
               onPress={() => setTeamManagerVisible(true)}
+              showArrow
             />
           )}
           <SettingItem
@@ -343,6 +362,7 @@ export default function SettingsScreen() {
             title="Connected Devices"
             subtitle="GPS, sensors, and wearable integrations"
             onPress={() => router.push('/settings/connected-devices')}
+            showArrow
           />
           {userProfile?.user_type === 'sailor' && (
             <SettingItem
@@ -365,6 +385,7 @@ export default function SettingsScreen() {
                 title="Race Learning Insights"
                 subtitle="View personalized coaching and practice recommendations"
                 onPress={() => router.push('/my-learning')}
+                showArrow
               />
             </View>
           </>
@@ -379,12 +400,14 @@ export default function SettingsScreen() {
             subtitle="Distance and speed display format"
             rightValue={UNIT_SHORT_LABELS[userSettings.units]}
             onPress={() => router.push('/settings/units')}
+            showArrow
           />
           <SettingItem
             icon="notifications-outline"
             title="Notifications"
             subtitle="Configure your notification preferences"
             onPress={() => router.push('/settings/notifications')}
+            showArrow
           />
         </View>
 
@@ -446,12 +469,14 @@ export default function SettingsScreen() {
             title="Privacy Policy"
             subtitle="Read our privacy policy"
             onPress={() => router.push('/privacy')}
+            showArrow
           />
           <SettingItem
             icon="shield-checkmark-outline"
             title="Terms of Service"
             subtitle="Read our terms of service"
             onPress={() => router.push('/terms')}
+            showArrow
           />
         </View>
 
@@ -470,8 +495,8 @@ export default function SettingsScreen() {
 
         {/* App Info */}
         <View style={styles.appInfo}>
-          <Text style={styles.appInfoText}>RegattaFlow v1.0.0</Text>
-          <Text style={styles.appInfoText}>© 2024 RegattaFlow Inc.</Text>
+          <Text style={styles.appInfoText}>BetterAt v{Constants.expoConfig?.version ?? '1.0.0'}</Text>
+          <Text style={styles.appInfoText}>© {new Date().getFullYear()} BetterAt Inc.</Text>
         </View>
       </ScrollView>
 

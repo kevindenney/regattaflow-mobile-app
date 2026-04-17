@@ -15,7 +15,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 
 import { DiscoverInterestsContent } from '@/components/discover/DiscoverInterestsContent';
 import { DiscoverOrgsContent } from '@/components/discover/DiscoverOrgsContent';
@@ -178,7 +178,14 @@ export default function DiscoverTab() {
       <TabScreenToolbar
         title="Discover"
         topInset={insets.top}
-        actions={[]}
+        actions={[
+          {
+            icon: 'notifications-outline',
+            sfSymbol: 'bell',
+            label: 'Notifications',
+            onPress: () => router.push('/social-notifications'),
+          },
+        ]}
         onMeasuredHeight={setToolbarHeight}
         hidden={toolbarHidden}
         backgroundColor="rgba(242, 242, 247, 0.94)"

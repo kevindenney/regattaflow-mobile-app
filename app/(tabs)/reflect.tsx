@@ -32,14 +32,14 @@ import { useScrollToolbarHide } from '@/hooks/useScrollToolbarHide';
 import { useReflectData, type RaceLogEntry } from '@/hooks/useReflectData';
 import { useReflectProfile } from '@/hooks/useReflectProfile';
 import { useCoachingInsights } from '@/hooks/useCoachingInsights';
+import { useVocabulary } from '@/hooks/useVocabulary';
 import { useAuth } from '@/providers/AuthProvider';
 import { useInterest } from '@/providers/InterestProvider';
 import { useInterestEventConfig } from '@/hooks/useInterestEventConfig';
 import { supabase } from '@/services/supabase';
 import { showAlert, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 
-import { PersonalAchievementMatrix } from '@/components/competency';
-import { useAllInterestCompetencies } from '@/hooks/useAllInterestCompetencies';
+import { CompetencyProgressSection } from '@/components/competency';
 import {
   WeeklyCalendar,
   MonthlyStatsCard,
@@ -106,7 +106,6 @@ function ProgressView({ toolbarHeight, onScroll, isDesktop }: ProgressViewProps)
   const progressEventConfig = useInterestEventConfig();
   const labels = progressEventConfig.reflectConfig?.progressLabels;
   const pStats = progressEventConfig.reflectConfig?.progressStats;
-  const { data: allCompetencyData, aggregate: competencyAggregate, isLoading: competencyLoading } = useAllInterestCompetencies();
   const [refreshing, setRefreshing] = useState(false);
 
   const handleRefresh = useCallback(async () => {
@@ -131,7 +130,7 @@ function ProgressView({ toolbarHeight, onScroll, isDesktop }: ProgressViewProps)
     router.push('/(tabs)/my-learning');
   };
 
-  if (loading || competencyLoading) {
+  if (loading) {
     return (
       <View style={[styles.loadingContainer, { paddingTop: toolbarHeight + 20 }]}>
         <Text style={styles.loadingText}>Loading your data...</Text>
@@ -139,7 +138,7 @@ function ProgressView({ toolbarHeight, onScroll, isDesktop }: ProgressViewProps)
     );
   }
 
-  if (!data && allCompetencyData.length === 0) {
+  if (!data) {
     return (
       <View style={[styles.emptyContainer, { paddingTop: toolbarHeight + 20 }]}>
         <Ionicons name={(labels?.emptyIcon ?? 'boat-outline') as any} size={48} color={IOS_COLORS.systemGray3} />
@@ -173,11 +172,8 @@ function ProgressView({ toolbarHeight, onScroll, isDesktop }: ProgressViewProps)
       }
     >
       <View style={[styles.content, isDesktop && styles.contentDesktop]}>
-        {/* Capability Achievement Matrix — across all interests */}
-        <PersonalAchievementMatrix
-          data={allCompetencyData}
-          aggregate={competencyAggregate}
-        />
+        {/* Capability Progress — Working On / All / Needs Attention */}
+        <CompetencyProgressSection />
 
         {/* Weekly Activity Calendar */}
         <WeeklyCalendar
@@ -273,6 +269,7 @@ interface ProfileViewProps {
 function ProfileView({ toolbarHeight, onScroll, isDesktop }: ProfileViewProps) {
   const { data, loading, refresh } = useReflectProfile();
   const { userProfile } = useAuth();
+  const { vocab } = useVocabulary();
   const {
     insights: coachingInsights,
     coachingData,
@@ -608,6 +605,7 @@ function ProfileView({ toolbarHeight, onScroll, isDesktop }: ProfileViewProps) {
           profile={data.profile}
           stats={data.stats}
           onEditProfile={handleEditProfile}
+          vocab={vocab}
         />
 
         {/* Upgrade Plan Card for free users */}
@@ -959,9 +957,16 @@ export default function ReflectScreen() {
       <TabScreenToolbar
         title="Reflect"
         topInset={insets.top}
-        showProfileAvatar={false}
         onMeasuredHeight={setToolbarHeight}
         hidden={toolbarHidden}
+        actions={[
+          {
+            icon: 'share-outline',
+            sfSymbol: 'square.and.arrow.up',
+            label: 'Export progress',
+            onPress: () => router.push('/account'),
+          },
+        ]}
       >
         {/* Segmented Control */}
         <View style={styles.segmentedControlContainer}>

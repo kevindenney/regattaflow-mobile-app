@@ -158,7 +158,9 @@ if (typeof window !== 'undefined' && Platform.OS === 'web') {
        args[0].includes('"shadow*" style props are deprecated') ||
        args[0].includes('"textShadow*" style props are deprecated') ||
        args[0].includes('A text node cannot be a child of a <View>') ||
-       args[0].includes('Invalid DOM property `transform-origin`'))
+       // React passes the property name as a separate %s arg, not inlined in args[0].
+       // Match the template + check the substituted prop name in args[1].
+       (args[0].includes('Invalid DOM property') && args[1] === 'transform-origin'))
     ) {
       return;
     }
@@ -331,25 +333,36 @@ function FirebaseBridgeHandler() {
 }
 
 /**
- * Shows the InterestSelection modal for first-time users who haven't chosen an interest.
- * The modal is only displayed when the user is authenticated (or guest) and the
- * InterestProvider has finished loading but no preferred interest was found in DB or cache.
+ * Recovery net for signed-in users whose preferred interest is missing.
+ *
+ * This used to fire for guests too, but first-time guests now go through the
+ * `/welcome` flow (see `app/index.tsx`), and returning guests already have an
+ * interest cached in AsyncStorage. So the modal is reserved for the edge case
+ * where a signed-in account ends up with no interest (data loss / new account
+ * with incomplete onboarding).
  */
 function InterestSelectionGate() {
-  const { user, isGuest } = useAuth();
-  const { currentInterest, loading: interestLoading } = useInterest();
+  const { user } = useAuth();
+  const { currentInterest, loading: interestLoading, userInterests } = useInterest();
   const [dismissed, setDismissed] = useState(false);
+  const segments = useSegments();
 
-  // Show the selection modal when:
-  // 1. User is authenticated or guest (not on landing page)
-  // 2. Interest resolution is complete (not loading)
-  // 3. No current interest was resolved (null)
-  // 4. User hasn't already dismissed the modal this session
+  // Suppress during onboarding, auth, welcome, and public content flows
+  const firstSegment = segments[0] ?? '';
+  const suppressRoutes = ['onboarding', '(auth)', 'welcome', 'blueprint', 'org', 'person'];
+  const isSuppressedRoute = suppressRoutes.includes(firstSegment);
+
+  // Also suppress while user interests are still loading / being resolved
+  // (avoids flash of the picker before interests populate)
+  const interestsStillResolving = !!user && userInterests.length === 0 && interestLoading;
+
   const shouldShow =
-    (!!user || isGuest) &&
+    !!user &&
     !interestLoading &&
     !currentInterest &&
-    !dismissed;
+    !dismissed &&
+    !isSuppressedRoute &&
+    !interestsStillResolving;
 
   return (
     <InterestSelection
