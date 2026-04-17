@@ -15,6 +15,7 @@ const PHASES = [
     bullets: {
       'Sail Racing': 'Study the weather, set your race strategy, prepare your boat',
       Nursing: 'Review patient assignments, prep medications, plan your shift',
+      'Lac Craft': 'List documents needed, find the nearest bank branch, set a deadline',
       Drawing: 'Choose your subject, gather references, set session goals',
       Fitness: 'Design your training block, plan warm-up routines',
     },
@@ -26,6 +27,7 @@ const PHASES = [
     bullets: {
       'Sail Racing': 'Log wind shifts, tactical decisions, mark roundings',
       Nursing: 'Document assessments, skills performed, patient interactions',
+      'Lac Craft': 'Visit the bank, submit forms, photograph receipts via Telegram',
       Drawing: 'Record techniques used, time spent, reference materials',
       Fitness: 'Track sets, reps, weights, heart rate, and effort',
     },
@@ -37,6 +39,7 @@ const PHASES = [
     bullets: {
       'Sail Racing': 'Debrief each race, review performance trends across the season',
       Nursing: 'Reflect on patient encounters, track competency progress',
+      'Lac Craft': 'Review loan status, track income vs expenses, plan next product',
       Drawing: 'Critique your work, compare to references, note growth areas',
       Fitness: 'Analyze training volume, recovery metrics, performance gains',
     },
@@ -46,6 +49,7 @@ const PHASES = [
 const INTEREST_COLORS: Record<string, string> = {
   'Sail Racing': '#003DA5',
   Nursing: '#0097A7',
+  'Lac Craft': '#E67E22',
   Drawing: '#E64A19',
   Fitness: '#2E7D32',
 };
