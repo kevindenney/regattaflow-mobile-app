@@ -104,7 +104,10 @@ export function PeerStepSheet({
   const handleOpenMyStep = () => {
     if (!alreadyAdoptedStepId) return;
     onClose();
-    router.push(`/step/${alreadyAdoptedStepId}` as any);
+    // Open the step *inside the timeline* (races tab), not on a dedicated
+    // detail screen — timeline steps are always rendered in-place via
+    // RaceSummaryCard (StepPlanQuestions / StepDrawContent).
+    router.push(`/(tabs)/races?selected=${alreadyAdoptedStepId}` as any);
   };
 
   const handleViewProfile = () => {
