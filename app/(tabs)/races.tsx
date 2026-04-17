@@ -4496,9 +4496,14 @@ export default function RacesScreen() {
                     subscribedBlueprints={subscribedBlueprints ?? []}
                     myTimelineSteps={myTimelineSteps}
                     onOpenAdoptedStep={(stepId) => {
-                      // Directly select the step in-place — avoids a router
-                      // round-trip that desyncs expo-router's searchParams
-                      // when the same id is pushed twice in a row.
+                      // eslint-disable-next-line no-console
+                      console.log('[races.tsx] onOpenAdoptedStep fired', { stepId });
+                      // Directly select + scroll to the step in-place. We set
+                      // the pending-scroll ref so TimelineGridView's scroll
+                      // effect triggers; otherwise selectedRaceId only
+                      // highlights the tile and the user sees no change if
+                      // the step is below the fold.
+                      pendingNewStepIdRef.current = stepId;
                       setSelectedRaceId(stepId);
                       setHasManuallySelected(true);
                     }}
