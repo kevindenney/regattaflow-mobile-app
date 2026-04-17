@@ -1,9 +1,7 @@
 /**
- * RecentDebriefs — lists the last 5 timeline_steps for this interest that have
- * a populated `metadata.review` object. Each row shows title + relative date
- * and an "AI read this" badge when at least one `playbook_suggestions` row
- * cites that step in its `provenance` (future signal — currently always off
- * until Phase 7 edge functions start writing provenance).
+ * RecentDebriefs — enriched session log feed matching the Playbook mockup.
+ * Shows date column, title, conditions chip, review excerpt, and crew/venue
+ * metadata from timeline_steps.
  */
 
 import React, { useMemo } from 'react';
@@ -22,18 +20,71 @@ interface RecentDebriefsProps {
   playbookId: string | undefined;
 }
 
-function relativeDate(iso: string | null): string {
-  if (!iso) return '';
-  const ms = Date.now() - new Date(iso).getTime();
-  const days = Math.floor(ms / (1000 * 60 * 60 * 24));
-  if (days <= 0) return 'Today';
-  if (days === 1) return 'Yesterday';
-  if (days < 7) return `${days}d ago`;
-  if (days < 30) return `${Math.floor(days / 7)}w ago`;
-  return `${Math.floor(days / 30)}mo ago`;
+function formatMonth(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
 }
 
-/** Collect step ids referenced by any suggestion's `provenance.step_ids`. */
+function formatDay(iso: string): string {
+  return new Date(iso).getDate().toString().padStart(2, '0');
+}
+
+/** Extract a short weather/conditions string from step metadata. */
+function extractConditions(meta: Record<string, unknown> | null): string | null {
+  if (!meta) return null;
+  const act = meta.act as Record<string, unknown> | undefined;
+  const plan = meta.plan as Record<string, unknown> | undefined;
+
+  // Try act (actual conditions) first, then plan
+  const windSpeed = act?.wind_speed ?? plan?.wind_speed ?? act?.windSpeed ?? plan?.windSpeed;
+  const seaState = act?.sea_state ?? plan?.sea_state ?? act?.seaState ?? plan?.seaState;
+  const conditions = act?.conditions ?? plan?.conditions;
+
+  const parts: string[] = [];
+  if (windSpeed) parts.push(`${windSpeed} kn`);
+  if (seaState) parts.push(String(seaState));
+  if (parts.length === 0 && conditions) parts.push(String(conditions));
+
+  return parts.length > 0 ? parts.join(' · ') : null;
+}
+
+/** Extract a short review excerpt from step metadata. */
+function extractReviewExcerpt(meta: Record<string, unknown> | null): string | null {
+  if (!meta) return null;
+  const review = meta.review as Record<string, unknown> | undefined;
+  if (!review) return null;
+
+  // Common review fields
+  const text =
+    (review.what_i_learned as string) ??
+    (review.what_went_well as string) ??
+    (review.key_takeaway as string) ??
+    (review.notes as string) ??
+    (review.summary as string);
+
+  if (!text || typeof text !== 'string') return null;
+  return text.length > 120 ? text.slice(0, 120) + '…' : text;
+}
+
+/** Extract crew names from step metadata collaborators. */
+function extractCrew(meta: Record<string, unknown> | null): string[] {
+  if (!meta) return [];
+  const plan = meta.plan as Record<string, unknown> | undefined;
+  const collab = plan?.collaborators as Array<{ display_name?: string }> | undefined;
+  if (!Array.isArray(collab)) return [];
+  return collab
+    .map((c) => c.display_name ?? '')
+    .filter(Boolean)
+    .slice(0, 4);
+}
+
+/** Extract venue from step metadata. */
+function extractVenue(meta: Record<string, unknown> | null): string | null {
+  if (!meta) return null;
+  const plan = meta.plan as Record<string, unknown> | undefined;
+  return (plan?.where as string) ?? (meta.venue_name as string) ?? null;
+}
+
+/** Collect step ids referenced by any suggestion's provenance. */
 function extractCitedStepIds(suggestions: PlaybookSuggestionRecord[]): Set<string> {
   const ids = new Set<string>();
   for (const s of suggestions) {
@@ -61,43 +112,90 @@ export function RecentDebriefs({ interestId, playbookId }: RecentDebriefsProps) 
   );
 
   return (
-    <View style={styles.card}>
-      <View style={styles.header}>
-        <Ionicons name="time-outline" size={16} color={IOS_COLORS.systemTeal} />
-        <Text style={styles.title}>Recent debriefs</Text>
+    <View style={styles.section}>
+      <View style={styles.headerRow}>
+        <View>
+          <Text style={styles.heading}>Recent sessions</Text>
+          <Text style={styles.subheading}>The raw material your Playbook learns from.</Text>
+        </View>
       </View>
       {debriefs.length === 0 ? (
-        <Text style={styles.empty}>
-          When you write a reflection on a step, it shows up here and feeds the
-          AI suggestions queue.
-        </Text>
+        <View style={styles.emptyCard}>
+          <Text style={styles.empty}>
+            When you write a reflection on a step, it shows up here and feeds the
+            AI suggestions queue.
+          </Text>
+          <Pressable
+            style={styles.emptyAction}
+            onPress={() => router.push('/(tabs)/races' as any)}
+          >
+            <Text style={styles.emptyActionText}>Go to Timeline</Text>
+          </Pressable>
+        </View>
       ) : (
-        <View style={styles.list}>
-          {debriefs.map((d) => {
+        <View style={styles.card}>
+          {debriefs.map((d, i) => {
             const wasRead = citedStepIds.has(d.id);
+            const dateStr = d.step_date ?? d.created_at;
+            const conditions = extractConditions(d.metadata);
+            const excerpt = extractReviewExcerpt(d.metadata);
+            const crew = extractCrew(d.metadata);
+            const venue = extractVenue(d.metadata);
+
             return (
               <Pressable
                 key={d.id}
                 onPress={() => router.push(`/step/${d.id}` as any)}
-                style={({ pressed }) => [styles.item, pressed && styles.itemPressed]}
+                style={({ pressed }) => [
+                  styles.item,
+                  i > 0 && styles.itemBorder,
+                  pressed && styles.itemPressed,
+                ]}
               >
-                <View style={styles.itemBody}>
-                  <Text style={styles.itemTitle} numberOfLines={1}>
-                    {d.title ?? 'Untitled step'}
-                  </Text>
-                  <Text style={styles.itemMeta}>{relativeDate(d.step_date ?? d.created_at)}</Text>
+                {/* Date column */}
+                <View style={styles.dateCol}>
+                  <Text style={styles.dateMonth}>{formatMonth(dateStr)}</Text>
+                  <Text style={styles.dateDay}>{formatDay(dateStr)}</Text>
                 </View>
-                {wasRead ? (
-                  <View style={styles.tag}>
-                    <Ionicons name="sparkles" size={10} color={IOS_COLORS.systemPurple} />
-                    <Text style={styles.tagText}>AI read this</Text>
+
+                {/* Content */}
+                <View style={styles.itemBody}>
+                  <View style={styles.titleRow}>
+                    <Text style={styles.itemTitle} numberOfLines={1}>
+                      {d.title ?? 'Untitled step'}
+                    </Text>
+                    {conditions ? (
+                      <View style={styles.conditionsChip}>
+                        <Text style={styles.conditionsText}>{conditions}</Text>
+                      </View>
+                    ) : null}
                   </View>
-                ) : null}
-                <Ionicons
-                  name="chevron-forward"
-                  size={16}
-                  color={IOS_COLORS.tertiaryLabel}
-                />
+
+                  {excerpt ? (
+                    <Text style={styles.excerpt} numberOfLines={2}>{excerpt}</Text>
+                  ) : null}
+
+                  <View style={styles.metaRow}>
+                    {venue ? (
+                      <View style={styles.metaItem}>
+                        <Ionicons name="location-outline" size={11} color={IOS_COLORS.tertiaryLabel} />
+                        <Text style={styles.metaText}>{venue}</Text>
+                      </View>
+                    ) : null}
+                    {crew.length > 0 ? (
+                      <View style={styles.metaItem}>
+                        <Ionicons name="people-outline" size={11} color={IOS_COLORS.tertiaryLabel} />
+                        <Text style={styles.metaText}>{crew.join(' · ')}</Text>
+                      </View>
+                    ) : null}
+                    {wasRead ? (
+                      <View style={styles.aiTag}>
+                        <Ionicons name="sparkles" size={10} color={IOS_COLORS.systemPurple} />
+                        <Text style={styles.aiTagText}>AI read this</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                </View>
               </Pressable>
             );
           })}
@@ -108,56 +206,134 @@ export function RecentDebriefs({ interestId, playbookId }: RecentDebriefsProps) 
 }
 
 const styles = StyleSheet.create({
+  section: {
+    gap: IOS_SPACING.md,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+  },
+  heading: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: IOS_COLORS.label,
+  },
+  subheading: {
+    fontSize: 13,
+    color: IOS_COLORS.secondaryLabel,
+    marginTop: 2,
+  },
   card: {
     backgroundColor: IOS_COLORS.secondarySystemGroupedBackground,
     borderRadius: 14,
+    overflow: 'hidden',
+  },
+  emptyCard: {
+    backgroundColor: IOS_COLORS.secondarySystemGroupedBackground,
+    borderRadius: 14,
     padding: IOS_SPACING.lg,
-    gap: IOS_SPACING.md,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: IOS_SPACING.sm,
-  },
-  title: {
-    flex: 1,
-    fontSize: 17,
-    fontWeight: '700',
-    color: IOS_COLORS.label,
   },
   empty: {
     fontSize: 13,
     color: IOS_COLORS.secondaryLabel,
     lineHeight: 18,
   },
-  list: {
-    gap: IOS_SPACING.sm,
+  emptyAction: {
+    marginTop: IOS_SPACING.md,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: IOS_COLORS.systemBlue,
+    borderRadius: 8,
+  },
+  emptyActionText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
   item: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: IOS_SPACING.sm,
-    padding: IOS_SPACING.md,
-    borderRadius: 10,
-    backgroundColor: IOS_COLORS.tertiarySystemGroupedBackground,
+    gap: IOS_SPACING.md,
+    padding: IOS_SPACING.lg,
+  },
+  itemBorder: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: IOS_COLORS.separator,
   },
   itemPressed: {
     opacity: 0.6,
   },
+  dateCol: {
+    width: 44,
+    alignItems: 'center',
+    flexShrink: 0,
+  },
+  dateMonth: {
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    color: IOS_COLORS.secondaryLabel,
+  },
+  dateDay: {
+    fontSize: 26,
+    fontWeight: '700',
+    color: IOS_COLORS.label,
+    lineHeight: 30,
+  },
   itemBody: {
     flex: 1,
+    gap: 4,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
   },
   itemTitle: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 15,
+    fontWeight: '700',
     color: IOS_COLORS.label,
+    flexShrink: 1,
   },
-  itemMeta: {
-    fontSize: 11,
+  conditionsChip: {
+    backgroundColor: IOS_COLORS.tertiarySystemGroupedBackground,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  conditionsText: {
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
     color: IOS_COLORS.secondaryLabel,
+  },
+  excerpt: {
+    fontSize: 13,
+    color: IOS_COLORS.secondaryLabel,
+    lineHeight: 18,
     marginTop: 2,
   },
-  tag: {
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 4,
+    flexWrap: 'wrap',
+  },
+  metaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  metaText: {
+    fontSize: 11,
+    color: IOS_COLORS.tertiaryLabel,
+  },
+  aiTag: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
@@ -166,7 +342,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: 'rgba(175, 82, 222, 0.12)',
   },
-  tagText: {
+  aiTagText: {
     fontSize: 10,
     fontWeight: '700',
     color: IOS_COLORS.systemPurple,

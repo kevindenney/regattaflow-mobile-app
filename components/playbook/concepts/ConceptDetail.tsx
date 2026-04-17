@@ -201,6 +201,37 @@ export function ConceptDetail({ slug }: ConceptDetailProps) {
     }
   };
 
+  /** Create a timeline step directly from this concept (no Q&A needed) */
+  const handleCreateStepFromConcept = async () => {
+    if (!concept || !user?.id || !interestId) return;
+    setCreatingStep(true);
+    try {
+      const bodyPreview = (concept.body_md || '').slice(0, 500);
+      const step = await createStep({
+        user_id: user.id,
+        interest_id: interestId,
+        title: `Practice: ${concept.title}`.slice(0, 100),
+        description: bodyPreview,
+        category: 'reading_study',
+        source_type: 'manual',
+        status: 'pending',
+        metadata: {
+          plan: {
+            what_will_you_do: bodyPreview,
+          },
+          source_concept_id: concept.id,
+          source_concept_title: concept.title,
+        },
+      });
+      showAlert('Step created', 'Added to your timeline.');
+      router.push(`/(tabs)/races?selected=${step.id}` as any);
+    } catch (err) {
+      showAlert('Step creation failed', (err as Error).message);
+    } finally {
+      setCreatingStep(false);
+    }
+  };
+
   useEffect(() => {
     let cancelled = false;
     if (concept?.source_concept_id) {
@@ -392,6 +423,16 @@ export function ConceptDetail({ slug }: ConceptDetailProps) {
             </Text>
           </Pressable>
         ) : null}
+        <Pressable
+          onPress={handleCreateStepFromConcept}
+          disabled={creatingStep}
+          style={({ pressed }) => [styles.action, pressed && styles.pressed]}
+        >
+          <Ionicons name="add-circle-outline" size={16} color={IOS_COLORS.systemGreen} />
+          <Text style={[styles.actionText, { color: IOS_COLORS.systemGreen }]}>
+            {creatingStep ? 'Creating…' : 'Create step'}
+          </Text>
+        </Pressable>
       </View>
 
       {concept.body_md ? (
@@ -442,7 +483,7 @@ export function ConceptDetail({ slug }: ConceptDetailProps) {
             onChangeText={setAskQuestion}
             placeholder={`e.g. "Why does this matter?" or "How do I apply this?"`}
             placeholderTextColor={IOS_COLORS.tertiaryLabel}
-            style={styles.askInput}
+            style={[styles.askInput, asking && { opacity: 0.5 }]}
             editable={!asking}
             onSubmitEditing={handleAsk}
           />

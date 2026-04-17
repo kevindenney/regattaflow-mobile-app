@@ -18,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { IOS_COLORS, IOS_SPACING } from '@/lib/design-tokens-ios';
 import { TabScreenToolbar } from '@/components/ui/TabScreenToolbar';
+import { useScrollToolbarHide } from '@/hooks/useScrollToolbarHide';
 import { useInterest } from '@/providers/InterestProvider';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -33,6 +34,8 @@ import { AskYourPlaybook } from './AskYourPlaybook';
 import { SuggestionsBar } from './SuggestionsBar';
 import { SectionTabs } from './SectionTabs';
 import { RecentDebriefs } from './RecentDebriefs';
+import { ThisWeekFocusCard } from './ThisWeekFocusCard';
+import { WeeklyReviewsPreview } from './WeeklyReviewsPreview';
 import { QueuedSuggestionsPreview } from './sidebar/QueuedSuggestionsPreview';
 import { RawInboxCard } from './sidebar/RawInboxCard';
 import { SharedWithCard } from './sidebar/SharedWithCard';
@@ -41,6 +44,7 @@ import { SharedWithMeCard } from './sidebar/SharedWithMeCard';
 import { SuggestionDrawer } from './suggestions/SuggestionDrawer';
 import { InviteCoachModal } from './shares/InviteCoachModal';
 import { QuickCaptureModal } from './QuickCaptureModal';
+import { InspirationWizard } from '@/components/inspiration/InspirationWizard';
 import { FeatureErrorBoundary } from '@/components/ui/FeatureErrorBoundary';
 
 const SIDEBAR_BREAKPOINT = 1000;
@@ -50,7 +54,10 @@ export function PlaybookHome() {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
-  const [toolbarHeight, setToolbarHeight] = useState(0);
+  // Default to a sensible estimate so content doesn't render behind the
+  // toolbar on the first frame before onMeasuredHeight fires.
+  const [toolbarHeight, setToolbarHeight] = useState(insets.top + 56);
+  const { toolbarHidden, handleScroll } = useScrollToolbarHide();
   const twoColumn = width >= SIDEBAR_BREAKPOINT;
 
   const interestId = currentInterest?.id;
@@ -70,6 +77,7 @@ export function PlaybookHome() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [quickCaptureOpen, setQuickCaptureOpen] = useState(false);
+  const [inspirationWizardOpen, setInspirationWizardOpen] = useState(false);
 
   // Auto-trigger weekly review if >7 days since last review (or none exists)
   // AND no pending/accepted weekly_review suggestion already in the queue.
@@ -108,8 +116,16 @@ export function PlaybookHome() {
 
   if (interestLoading || playbookLoading) {
     return (
-      <View style={styles.fullMessage}>
-        <Text style={styles.messageText}>Loading your Playbook…</Text>
+      <View style={styles.skeletonContainer}>
+        <View style={styles.skeletonHeader}>
+          <View style={[styles.skeletonBlock, { width: '60%', height: 20 }]} />
+          <View style={[styles.skeletonBlock, { width: '40%', height: 14, marginTop: 8 }]} />
+        </View>
+        <View style={styles.skeletonCards}>
+          <View style={[styles.skeletonCard, { height: 120 }]} />
+          <View style={[styles.skeletonCard, { height: 160 }]} />
+          <View style={[styles.skeletonCard, { height: 100 }]} />
+        </View>
       </View>
     );
   }
@@ -143,18 +159,22 @@ export function PlaybookHome() {
     <View style={styles.mainColumn}>
       <SuggestionsBar pendingCount={pendingCount} onPress={() => setDrawerOpen(true)} />
 
+      <ThisWeekFocusCard playbookId={playbookId} interestId={interestId} onOpenDrawer={() => setDrawerOpen(true)} />
+
       <View style={twoColumn ? styles.twoUp : styles.stack}>
         <View style={twoColumn ? styles.half : styles.full}>
           <VisionCard interestId={currentInterest.id} interestName={interestName} />
         </View>
         <View style={twoColumn ? styles.half : styles.full}>
-          <AskYourPlaybook interestName={interestName} playbookId={playbookId} />
+          <AskYourPlaybook interestName={interestName} interestSlug={currentInterest.slug} playbookId={playbookId} />
         </View>
       </View>
 
       <SectionTabs counts={counts} />
 
       <RecentDebriefs interestId={interestId} playbookId={playbookId} />
+
+      <WeeklyReviewsPreview playbookId={playbookId} />
     </View>
   );
 
@@ -178,6 +198,9 @@ export function PlaybookHome() {
   return (
     <FeatureErrorBoundary fallbackMessage="Something went wrong loading your playbook.">
     <View style={styles.container}>
+      {/* Fixed status bar background so content doesn't peek through when toolbar hides */}
+      <View style={[styles.statusBarBackground, { height: insets.top }]} />
+
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={[
@@ -185,6 +208,8 @@ export function PlaybookHome() {
           { paddingTop: toolbarHeight + IOS_SPACING.lg },
         ]}
         showsVerticalScrollIndicator={false}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
       >
         {twoColumn ? (
           <View style={styles.grid}>
@@ -203,6 +228,7 @@ export function PlaybookHome() {
         subtitle={interestName}
         topInset={insets.top}
         onMeasuredHeight={setToolbarHeight}
+        hidden={toolbarHidden}
         actions={[
           {
             icon: 'share-outline',
@@ -216,6 +242,12 @@ export function PlaybookHome() {
             label: 'Quick capture',
             onPress: () => setQuickCaptureOpen(true),
           },
+          {
+            icon: 'sparkles',
+            sfSymbol: 'sparkles',
+            label: 'Get inspired',
+            onPress: () => setInspirationWizardOpen(true),
+          },
         ]}
       />
       <InviteCoachModal
@@ -227,6 +259,11 @@ export function PlaybookHome() {
         visible={quickCaptureOpen}
         playbookId={playbookId}
         onClose={() => setQuickCaptureOpen(false)}
+        onOpenInspiration={() => setInspirationWizardOpen(true)}
+      />
+      <InspirationWizard
+        visible={inspirationWizardOpen}
+        onClose={() => setInspirationWizardOpen(false)}
       />
       <SuggestionDrawer
         visible={drawerOpen}
@@ -242,6 +279,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: IOS_COLORS.systemGroupedBackground,
+  },
+  statusBarBackground: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 99,
+    backgroundColor: 'rgba(242, 242, 247, 0.94)',
   },
   scroll: {
     flex: 1,
@@ -315,5 +360,25 @@ const styles = StyleSheet.create({
     color: IOS_COLORS.secondaryLabel,
     textAlign: 'center',
     maxWidth: 360,
+  },
+  skeletonContainer: {
+    flex: 1,
+    backgroundColor: IOS_COLORS.systemGroupedBackground,
+    padding: IOS_SPACING.lg,
+  },
+  skeletonHeader: {
+    marginBottom: IOS_SPACING.lg,
+  },
+  skeletonBlock: {
+    backgroundColor: IOS_COLORS.systemGray5,
+    borderRadius: 6,
+  },
+  skeletonCards: {
+    gap: IOS_SPACING.md,
+  },
+  skeletonCard: {
+    backgroundColor: IOS_COLORS.systemGray6 ?? '#F2F2F7',
+    borderRadius: 12,
+    width: '100%',
   },
 });
