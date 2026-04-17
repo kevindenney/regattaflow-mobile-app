@@ -49,6 +49,8 @@ export interface BlueprintPanelProps {
   onAdoptStep?: (curriculumStepId: string) => void;
   onOpenPeer?: (peerId: string) => void;
   onOpenBlueprint?: () => void;
+  /** Called when the user taps "Open & ask AI Coach" on an already-adopted step. */
+  onOpenAdoptedStep?: (stepId: string) => void;
 
   tileWidth?: number;
   tileSpacing?: number;
@@ -85,6 +87,7 @@ export function BlueprintPanel({
   onAdoptStep,
   onOpenPeer,
   onOpenBlueprint,
+  onOpenAdoptedStep,
   tileWidth,
   tileSpacing,
   gutterWidth,
@@ -253,36 +256,22 @@ export function BlueprintPanel({
       {/* Bottom sheet that opens when a peer tile is tapped. Only wired if
           we have the interest + subscription context needed by the adopt
           mutation — otherwise taps are no-ops. */}
-      {selectedPeerStep && interestId && subscriptionId ? (() => {
-        const alreadyAdoptedStepId =
-          adoptedStepIdBySourceId.get(selectedPeerStep.curriculumStep.id) ?? null;
-        // eslint-disable-next-line no-console
-        console.log('[BlueprintPanel] rendering PeerStepSheet', {
-          curriculumStepId: selectedPeerStep.curriculumStep.id,
-          curriculumTitle: selectedPeerStep.curriculumStep.title,
-          blueprintId,
-          alreadyAdoptedStepId,
-          adoptedMapSize: adoptedStepIdBySourceId.size,
-          selectedPeerStepIsTruthy: !!selectedPeerStep,
-        });
-        return (
-          <PeerStepSheet
-            visible
-            onClose={() => {
-              // eslint-disable-next-line no-console
-              console.log('[BlueprintPanel] onClose invoked → setSelectedPeerStep(null)');
-              setSelectedPeerStep(null);
-            }}
-            peer={selectedPeerStep.peer}
-            peerStep={selectedPeerStep.peerStep}
-            curriculumStep={selectedPeerStep.curriculumStep}
-            interestId={interestId}
-            subscriptionId={subscriptionId}
-            blueprintId={blueprintId}
-            alreadyAdoptedStepId={alreadyAdoptedStepId}
-          />
-        );
-      })() : null}
+      {selectedPeerStep && interestId && subscriptionId ? (
+        <PeerStepSheet
+          visible
+          onClose={() => setSelectedPeerStep(null)}
+          peer={selectedPeerStep.peer}
+          peerStep={selectedPeerStep.peerStep}
+          curriculumStep={selectedPeerStep.curriculumStep}
+          interestId={interestId}
+          subscriptionId={subscriptionId}
+          blueprintId={blueprintId}
+          alreadyAdoptedStepId={
+            adoptedStepIdBySourceId.get(selectedPeerStep.curriculumStep.id) ?? null
+          }
+          onOpenAdoptedStep={onOpenAdoptedStep}
+        />
+      ) : null}
     </View>
   );
 }

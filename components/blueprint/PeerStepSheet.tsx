@@ -50,6 +50,14 @@ export interface PeerStepSheetProps {
    * adopted timeline step — enables the "Open in my timeline" affordance.
    */
   alreadyAdoptedStepId?: string | null;
+
+  /**
+   * Optional direct callback to select the user's adopted step in the parent
+   * timeline. When provided, this is preferred over router navigation because
+   * we're already on the races tab — router.push to the same tab with
+   * ?selected= doesn't reliably re-trigger the deep-link effect.
+   */
+  onOpenAdoptedStep?: (stepId: string) => void;
 }
 
 function statusLabel(status: string | undefined): { label: string; color: string; icon: React.ComponentProps<typeof Ionicons>['name'] } {
@@ -75,6 +83,7 @@ export function PeerStepSheet({
   subscriptionId,
   blueprintId,
   alreadyAdoptedStepId,
+  onOpenAdoptedStep,
 }: PeerStepSheetProps) {
   const router = useRouter();
   const adoptMutation = useAdoptBlueprintStep();
@@ -102,26 +111,18 @@ export function PeerStepSheet({
   };
 
   const handleOpenMyStep = () => {
-    // eslint-disable-next-line no-console
-    console.log('[PeerStepSheet] handleOpenMyStep fired', {
-      alreadyAdoptedStepId,
-      curriculumStepId: curriculumStep.id,
-      curriculumTitle: curriculumStep.title,
-      peerSubscriberId: peer.subscriber_id,
-    });
-    if (!alreadyAdoptedStepId) {
-      // eslint-disable-next-line no-console
-      console.warn('[PeerStepSheet] bailing — alreadyAdoptedStepId is null');
+    if (!alreadyAdoptedStepId) return;
+    onClose();
+    // Prefer direct callback when parent can select the step in-place —
+    // avoids expo-router desync caused by pushing the same ?selected= value
+    // twice in a row. Falls back to router.push only when no callback is
+    // wired (shouldn't happen in the current tree, but keeps the sheet
+    // usable in isolation).
+    if (onOpenAdoptedStep) {
+      onOpenAdoptedStep(alreadyAdoptedStepId);
       return;
     }
-    onClose();
-    const target = `/(tabs)/races?selected=${alreadyAdoptedStepId}`;
-    // eslint-disable-next-line no-console
-    console.log('[PeerStepSheet] router.push →', target);
-    // Open the step *inside the timeline* (races tab), not on a dedicated
-    // detail screen — timeline steps are always rendered in-place via
-    // RaceSummaryCard (StepPlanQuestions / StepDrawContent).
-    router.push(target as any);
+    router.push(`/(tabs)/races?selected=${alreadyAdoptedStepId}` as any);
   };
 
   const handleViewProfile = () => {

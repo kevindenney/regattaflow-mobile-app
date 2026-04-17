@@ -20,12 +20,15 @@ export interface BlueprintPanelsStackProps {
   interestId?: string | null;
   subscribedBlueprints: SubscribedBlueprintInfo[];
   myTimelineSteps?: TimelineStepRecord[] | null;
+  /** Called when a peer-sheet user taps "Open & ask AI Coach" on an adopted step. */
+  onOpenAdoptedStep?: (stepId: string) => void;
 }
 
 export function BlueprintPanelsStack({
   interestId,
   subscribedBlueprints,
   myTimelineSteps,
+  onOpenAdoptedStep,
 }: BlueprintPanelsStackProps) {
   const { groups } = usePeerTimelines(interestId);
 
@@ -67,6 +70,7 @@ export function BlueprintPanelsStack({
               interestId={interestId}
               peers={peersByBlueprint.get(bp.blueprint_id)}
               myAdoptedSteps={myTimelineSteps ?? undefined}
+              onOpenAdoptedStep={onOpenAdoptedStep}
             />
           ))
         : null}
@@ -84,11 +88,13 @@ function BlueprintPanelRow({
   interestId,
   peers,
   myAdoptedSteps,
+  onOpenAdoptedStep,
 }: {
   info: SubscribedBlueprintInfo;
   interestId?: string | null;
   peers?: import('@/types/blueprint').PeerTimeline[];
   myAdoptedSteps?: TimelineStepRecord[];
+  onOpenAdoptedStep?: (stepId: string) => void;
 }) {
   const router = useRouter();
   const { data: curriculumSteps } = useBlueprintSteps(info.blueprint_id);
@@ -119,6 +125,7 @@ function BlueprintPanelRow({
           : undefined
       }
       onOpenBlueprint={() => router.push(`/blueprint/${info.blueprint_slug}` as any)}
+      onOpenAdoptedStep={onOpenAdoptedStep}
     />
   );
 }

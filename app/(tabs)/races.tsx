@@ -2728,15 +2728,6 @@ export default function RacesScreen() {
   // Also handles subsequent navigations with ?selected= while tab is already mounted
   useEffect(() => {
     const targetId = initialSelectedRaceParam.current || (typeof searchParams?.selected === 'string' ? searchParams.selected : null);
-    // eslint-disable-next-line no-console
-    console.log('[races.tsx deep-link] effect ran', {
-      targetId,
-      loading,
-      searchParamsSelected: searchParams?.selected,
-      initialRef: initialSelectedRaceParam.current,
-      safeRecentRacesCount: safeRecentRaces.length,
-      myTimelineStepsCount: myTimelineSteps?.length ?? 0,
-    });
     if (!targetId || loading) {
       return;
     }
@@ -2748,16 +2739,6 @@ export default function RacesScreen() {
     const matchingRace =
       safeRecentRaces.find((race: any) => race.id === targetId) ??
       myTimelineSteps?.find((s) => s.id === targetId);
-    // eslint-disable-next-line no-console
-    console.log('[races.tsx deep-link] match result', {
-      targetId,
-      matched: !!matchingRace,
-      matchSource: safeRecentRaces.find((r: any) => r.id === targetId)
-        ? 'safeRecentRaces'
-        : myTimelineSteps?.find((s) => s.id === targetId)
-          ? 'myTimelineSteps'
-          : 'none',
-    });
     if (!matchingRace) {
       return;
     }
@@ -2767,12 +2748,14 @@ export default function RacesScreen() {
     setHasManuallySelected(true);
     initialSelectedRaceParam.current = null;
 
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      const url = new URL(window.location.href);
-      url.searchParams.delete('selected');
-      window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+    // Clear the ?selected= param via the router so expo-router's internal
+    // searchParams state stays in sync. Using window.history.replaceState
+    // here desyncs expo-router (the hook still reports the old value), which
+    // breaks subsequent router.push calls that reuse the same id.
+    if (typeof searchParams?.selected === 'string') {
+      router.setParams({ selected: undefined });
     }
-  }, [loading, safeRecentRaces, myTimelineSteps, searchParams?.selected]);
+  }, [loading, safeRecentRaces, myTimelineSteps, searchParams?.selected, router]);
 
   useEffect(() => {
     if (hasRealRaces) {
@@ -4512,6 +4495,13 @@ export default function RacesScreen() {
                     interestId={currentInterest?.id}
                     subscribedBlueprints={subscribedBlueprints ?? []}
                     myTimelineSteps={myTimelineSteps}
+                    onOpenAdoptedStep={(stepId) => {
+                      // Directly select the step in-place — avoids a router
+                      // round-trip that desyncs expo-router's searchParams
+                      // when the same id is pushed twice in a row.
+                      setSelectedRaceId(stepId);
+                      setHasManuallySelected(true);
+                    }}
                   />
                 ) : undefined}
               />
