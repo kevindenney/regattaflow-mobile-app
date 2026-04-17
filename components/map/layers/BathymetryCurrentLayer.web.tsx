@@ -115,6 +115,7 @@ function isMapValid(map: MapLibreMap | null | undefined): map is MapLibreMap {
 // Bathymetry layer IDs
 const DEPTH_SOURCE_ID = `${LAYER_PREFIX}-depth-source`;
 const DEPTH_LABELS_LAYER_ID = `${LAYER_PREFIX}-depth-labels`;
+const DEPTH_CIRCLES_LAYER_ID = `${LAYER_PREFIX}-depth-circles`;
 
 // OpenSeaMap nautical overlay (buoys, beacons, landmarks)
 const SEAMARK_SOURCE_ID = `${LAYER_PREFIX}-seamark-source`;
@@ -214,13 +215,6 @@ export function BathymetryCurrentLayer({
 
   // Fetch elevation grid data (for depth visualization)
   useEffect(() => {
-    logger.debug('[BathymetryCurrentLayer] Depth effect triggered', {
-      visible,
-      showContours,
-      hasCenter: !!center,
-      hasBathymetry: !!bathymetryRef.current,
-    });
-
     if (!visible || !showContours || !center || !bathymetryRef.current) {
       setElevationGrid(null);
       return;
@@ -230,10 +224,6 @@ export function BathymetryCurrentLayer({
 
     const fetchElevation = async () => {
       setIsLoadingDepth(true);
-      logger.debug('[BathymetryCurrentLayer] Fetching elevation grid', {
-        center,
-        radiusKm,
-      });
       try {
         // Use 10x10 grid = 100 points for good coverage
         const result = await bathymetryRef.current!.getElevationGrid(
@@ -242,18 +232,11 @@ export function BathymetryCurrentLayer({
           10 // 10x10 grid = 100 points
         );
         if (!cancelled) {
-          // Log detailed result for debugging
           const waterPoints = result.points.filter(p => p.depth > 0);
-          logger.debug('[BathymetryCurrentLayer] Elevation grid loaded', {
-            totalPoints: result.points.length,
-            waterPoints: waterPoints.length,
-            depthRange: [result.minDepth, result.maxDepth],
-            sampleDepths: result.points.slice(0, 5).map(p => p.depth),
-          });
 
           // Check if all points returned 0 depth (no water data for this location)
           if (waterPoints.length === 0 && result.points.length > 0) {
-            logger.warn('[BathymetryCurrentLayer] All depth values are 0 - location may be on land or API issue, using GEBCO fallback');
+            logger.warn('[BathymetryCurrentLayer] All depth values are 0 - using GEBCO fallback');
             setQuotaExceeded(true);
             setElevationGrid(null);
           } else {
@@ -318,9 +301,11 @@ export function BathymetryCurrentLayer({
     logger.debug('[BathymetryCurrentLayer] OpenSeaMap seamark overlay added');
 
     return () => {
-      if (!isMapValid(map)) return;
-      if (map.getLayer(SEAMARK_LAYER_ID)) map.removeLayer(SEAMARK_LAYER_ID);
-      if (map.getSource(SEAMARK_SOURCE_ID)) map.removeSource(SEAMARK_SOURCE_ID);
+      try {
+        if (!isMapValid(map)) return;
+        if (map.getLayer(SEAMARK_LAYER_ID)) map.removeLayer(SEAMARK_LAYER_ID);
+        if (map.getSource(SEAMARK_SOURCE_ID)) map.removeSource(SEAMARK_SOURCE_ID);
+      } catch { /* map destroyed during cleanup */ }
     };
   }, [map, visible]); // Independent of showContours - nautical overlay always visible
 
@@ -328,26 +313,32 @@ export function BathymetryCurrentLayer({
   useEffect(() => {
     if (!map || !visible || !showContours) {
       // Clean up GEBCO layer
-      if (isMapValid(map)) {
-        if (map.getLayer(GEBCO_LAYER_ID)) map.removeLayer(GEBCO_LAYER_ID);
-        if (map.getSource(GEBCO_SOURCE_ID)) map.removeSource(GEBCO_SOURCE_ID);
-      }
+      try {
+        if (isMapValid(map)) {
+          if (map.getLayer(GEBCO_LAYER_ID)) map.removeLayer(GEBCO_LAYER_ID);
+          if (map.getSource(GEBCO_SOURCE_ID)) map.removeSource(GEBCO_SOURCE_ID);
+        }
+      } catch { /* map destroyed */ }
       return;
     }
 
     // Only show GEBCO when data not available
     if (!quotaExceeded) {
       // Clean up GEBCO layer if data is fine
-      if (map.getLayer(GEBCO_LAYER_ID)) map.removeLayer(GEBCO_LAYER_ID);
-      if (map.getSource(GEBCO_SOURCE_ID)) map.removeSource(GEBCO_SOURCE_ID);
+      try {
+        if (map.getLayer(GEBCO_LAYER_ID)) map.removeLayer(GEBCO_LAYER_ID);
+        if (map.getSource(GEBCO_SOURCE_ID)) map.removeSource(GEBCO_SOURCE_ID);
+      } catch { /* map destroyed */ }
       return;
     }
 
     logger.debug('[BathymetryCurrentLayer] Adding GEBCO bathymetry fallback layer');
 
     // Remove existing if present
-    if (map.getLayer(GEBCO_LAYER_ID)) map.removeLayer(GEBCO_LAYER_ID);
-    if (map.getSource(GEBCO_SOURCE_ID)) map.removeSource(GEBCO_SOURCE_ID);
+    try {
+      if (map.getLayer(GEBCO_LAYER_ID)) map.removeLayer(GEBCO_LAYER_ID);
+      if (map.getSource(GEBCO_SOURCE_ID)) map.removeSource(GEBCO_SOURCE_ID);
+    } catch { /* map destroyed */ }
 
     // Add GEBCO WMS as raster source
     map.addSource(GEBCO_SOURCE_ID, {
@@ -373,24 +364,27 @@ export function BathymetryCurrentLayer({
     logger.debug('[BathymetryCurrentLayer] GEBCO bathymetry fallback layer added');
 
     return () => {
-      if (!isMapValid(map)) return;
-      if (map.getLayer(GEBCO_LAYER_ID)) map.removeLayer(GEBCO_LAYER_ID);
-      if (map.getSource(GEBCO_SOURCE_ID)) map.removeSource(GEBCO_SOURCE_ID);
+      try {
+        if (!isMapValid(map)) return;
+        if (map.getLayer(GEBCO_LAYER_ID)) map.removeLayer(GEBCO_LAYER_ID);
+        if (map.getSource(GEBCO_SOURCE_ID)) map.removeSource(GEBCO_SOURCE_ID);
+      } catch { /* map destroyed during cleanup */ }
     };
   }, [map, visible, showContours, quotaExceeded]);
 
-  // Add/update depth labels (numbers only, no circles)
+  // Add/update depth visualization (circles + text labels)
   useEffect(() => {
     if (!map || !visible || !showContours || !elevationGrid) {
       // Clean up depth layers
       if (isMapValid(map)) {
         if (map.getLayer(DEPTH_LABELS_LAYER_ID)) map.removeLayer(DEPTH_LABELS_LAYER_ID);
+        if (map.getLayer(DEPTH_CIRCLES_LAYER_ID)) map.removeLayer(DEPTH_CIRCLES_LAYER_ID);
         if (map.getSource(DEPTH_SOURCE_ID)) map.removeSource(DEPTH_SOURCE_ID);
       }
       return;
     }
 
-    // Create GeoJSON features for depth points (numbers only)
+    // Create GeoJSON features for depth points
     const features: GeoJSON.Feature[] = elevationGrid.points
       .filter(p => p.depth > 0) // Only show water (depth > 0)
       .map((point) => ({
@@ -401,10 +395,11 @@ export function BathymetryCurrentLayer({
         },
         properties: {
           depth: point.depth,
-          // Show depth as integer, like nautical charts
           label: `${Math.round(point.depth)}`,
         },
       }));
+
+    if (features.length === 0) return;
 
     const geojson: GeoJSON.FeatureCollection = {
       type: 'FeatureCollection',
@@ -413,6 +408,7 @@ export function BathymetryCurrentLayer({
 
     // Remove existing layers/source
     if (map.getLayer(DEPTH_LABELS_LAYER_ID)) map.removeLayer(DEPTH_LABELS_LAYER_ID);
+    if (map.getLayer(DEPTH_CIRCLES_LAYER_ID)) map.removeLayer(DEPTH_CIRCLES_LAYER_ID);
     if (map.getSource(DEPTH_SOURCE_ID)) map.removeSource(DEPTH_SOURCE_ID);
 
     // Add source
@@ -421,43 +417,62 @@ export function BathymetryCurrentLayer({
       data: geojson,
     });
 
-    // Add depth labels only (no circles) - like nautical chart soundings
+    // 1) Circle layer - guaranteed to render (no font dependency)
+    //    Small semi-transparent dots colored by depth
     map.addLayer({
-      id: DEPTH_LABELS_LAYER_ID,
-      type: 'symbol',
+      id: DEPTH_CIRCLES_LAYER_ID,
+      type: 'circle',
       source: DEPTH_SOURCE_ID,
-      layout: {
-        'text-field': ['get', 'label'],
-        'text-size': [
-          'interpolate',
-          ['linear'],
-          ['zoom'],
-          10, 9,   // Small at low zoom
-          12, 11,
-          14, 13,  // Larger at high zoom
-        ],
-        'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
-        'text-allow-overlap': false,
-        'text-padding': 2,
-      },
       paint: {
-        // Blue color like nautical chart depth soundings
-        'text-color': '#1565C0',
-        'text-halo-color': 'rgba(255, 255, 255, 0.95)',
-        'text-halo-width': 1.5,
-        'text-opacity': opacity,
+        'circle-radius': [
+          'interpolate', ['linear'], ['zoom'],
+          10, 10,
+          14, 16,
+        ],
+        'circle-color': 'rgba(21, 101, 192, 0.15)',
+        'circle-stroke-color': 'rgba(21, 101, 192, 0.3)',
+        'circle-stroke-width': 1,
+        'circle-opacity': opacity,
       },
     });
 
-    logger.debug('[BathymetryCurrentLayer] Depth labels added', {
-      featureCount: features.length,
-      depthRange: [elevationGrid.minDepth, elevationGrid.maxDepth],
-    });
+    // 2) Text labels on top - nautical chart style depth soundings
+    //    Use Noto Sans Bold which is guaranteed on openmaptiles font server
+    try {
+      map.addLayer({
+        id: DEPTH_LABELS_LAYER_ID,
+        type: 'symbol',
+        source: DEPTH_SOURCE_ID,
+        layout: {
+          'text-field': ['get', 'label'],
+          'text-size': [
+            'interpolate', ['linear'], ['zoom'],
+            10, 11,
+            12, 13,
+            14, 15,
+          ],
+          'text-font': ['Klokantech Noto Sans Bold'],
+          'text-allow-overlap': true,
+          'text-ignore-placement': true,
+        },
+        paint: {
+          'text-color': '#1565C0',
+          'text-halo-color': 'rgba(255, 255, 255, 0.95)',
+          'text-halo-width': 1.5,
+          'text-opacity': opacity,
+        },
+      });
+    } catch (err) {
+      logger.error('[BathymetryCurrentLayer] Failed to add label layer:', err);
+    }
 
     return () => {
-      if (!isMapValid(map)) return;
-      if (map.getLayer(DEPTH_LABELS_LAYER_ID)) map.removeLayer(DEPTH_LABELS_LAYER_ID);
-      if (map.getSource(DEPTH_SOURCE_ID)) map.removeSource(DEPTH_SOURCE_ID);
+      try {
+        if (!isMapValid(map)) return;
+        if (map.getLayer(DEPTH_LABELS_LAYER_ID)) map.removeLayer(DEPTH_LABELS_LAYER_ID);
+        if (map.getLayer(DEPTH_CIRCLES_LAYER_ID)) map.removeLayer(DEPTH_CIRCLES_LAYER_ID);
+        if (map.getSource(DEPTH_SOURCE_ID)) map.removeSource(DEPTH_SOURCE_ID);
+      } catch { /* map destroyed during cleanup */ }
     };
   }, [map, visible, showContours, elevationGrid, opacity]);
 
@@ -465,10 +480,12 @@ export function BathymetryCurrentLayer({
   useEffect(() => {
     if (!map || !visible || !showArrows || !grid) {
       // Clean up
-      if (isMapValid(map)) {
-        if (map.getLayer(ARROWS_LINE_LAYER_ID)) map.removeLayer(ARROWS_LINE_LAYER_ID);
-        if (map.getSource(ARROWS_SOURCE_ID)) map.removeSource(ARROWS_SOURCE_ID);
-      }
+      try {
+        if (isMapValid(map)) {
+          if (map.getLayer(ARROWS_LINE_LAYER_ID)) map.removeLayer(ARROWS_LINE_LAYER_ID);
+          if (map.getSource(ARROWS_SOURCE_ID)) map.removeSource(ARROWS_SOURCE_ID);
+        }
+      } catch { /* map destroyed */ }
       return;
     }
 
@@ -534,9 +551,11 @@ export function BathymetryCurrentLayer({
     logger.debug('[BathymetryCurrentLayer] Arrow layers added', { featureCount: features.length });
 
     return () => {
-      if (!isMapValid(map)) return;
-      if (map.getLayer(ARROWS_LINE_LAYER_ID)) map.removeLayer(ARROWS_LINE_LAYER_ID);
-      if (map.getSource(ARROWS_SOURCE_ID)) map.removeSource(ARROWS_SOURCE_ID);
+      try {
+        if (!isMapValid(map)) return;
+        if (map.getLayer(ARROWS_LINE_LAYER_ID)) map.removeLayer(ARROWS_LINE_LAYER_ID);
+        if (map.getSource(ARROWS_SOURCE_ID)) map.removeSource(ARROWS_SOURCE_ID);
+      } catch { /* map destroyed during cleanup */ }
     };
   }, [map, visible, showArrows, grid, opacity]);
 

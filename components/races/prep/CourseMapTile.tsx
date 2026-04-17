@@ -12,7 +12,7 @@
  * - Tap to open CourseMapWizard
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   StyleSheet,
   View,
@@ -30,8 +30,9 @@ import { Check, MapPin, Map } from 'lucide-react-native';
 import { triggerHaptic } from '@/lib/haptics';
 import { IOS_ANIMATIONS, IOS_SHADOWS } from '@/lib/design-tokens-ios';
 import type { PositionedCourse } from '@/types/courses';
-import { COURSE_TEMPLATES } from '@/services/CoursePositioningService';
+import { COURSE_TEMPLATES, CoursePositioningService } from '@/services/CoursePositioningService';
 import { WindDirectionIndicator } from '@/components/race-detail/map/WindDirectionIndicator';
+import { NativeCourseOverlayMap } from '@/components/races/NativeCourseOverlayMap';
 import { createLogger } from '@/lib/utils/logger';
 import { ensureMapLibreCss, ensureMapLibreScript } from '@/lib/maplibreWeb';
 
@@ -54,6 +55,7 @@ const MARK_COLORS: Record<string, string> = {
 
 const MAP_STYLE = {
   version: 8,
+  glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
   sources: {
     'raster-tiles': {
       type: 'raster',
@@ -102,6 +104,8 @@ export interface CourseMapTileProps {
   venueName?: string;
   /** Disable the tile */
   disabled?: boolean;
+  /** Expand to fill parent width instead of fixed 322px tile size */
+  fullWidth?: boolean;
   /** Wind direction in degrees (0-360) for animated overlay */
   windDirection?: number;
   /** Wind speed in knots */
@@ -114,6 +118,8 @@ export interface CourseMapTileProps {
   waveHeight?: number;
   /** Wave direction in degrees (0-360) */
   waveDirection?: number;
+  /** Whether current data is estimated (not from a real forecast) */
+  currentEstimated?: boolean;
 }
 
 export function CourseMapTile({
@@ -123,12 +129,14 @@ export function CourseMapTile({
   onPress,
   venueName,
   disabled,
+  fullWidth,
   windDirection,
   windSpeed,
   currentDirection,
   currentSpeed,
   waveHeight,
   waveDirection,
+  currentEstimated,
 }: CourseMapTileProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
@@ -155,10 +163,62 @@ export function CourseMapTile({
     onPress();
   };
 
+  // Stabilize coords to prevent unnecessary map re-inits
+  const stableCoords = useMemo(() => coords, [coords?.lat, coords?.lng]);
+
+  // Re-orient course marks to forecast wind if it differs from saved wind
+  const orientedCourse = useMemo(() => {
+    if (!positionedCourse || windDirection == null) return positionedCourse;
+    const savedWind = positionedCourse.windDirection;
+    if (savedWind == null || Math.abs(savedWind - windDirection) <= 2) return positionedCourse;
+
+    // Calculate center from start line
+    const center = {
+      lat: (positionedCourse.startLine.pin.lat + positionedCourse.startLine.committee.lat) / 2,
+      lng: (positionedCourse.startLine.pin.lng + positionedCourse.startLine.committee.lng) / 2,
+    };
+
+    const newMarks = CoursePositioningService.recalculateForWindChange(
+      positionedCourse.marks,
+      center,
+      savedWind,
+      windDirection,
+      positionedCourse.legLengthNm,
+      positionedCourse.courseType,
+    );
+
+    const newStartLine = CoursePositioningService.calculateStartLine(
+      center,
+      windDirection,
+      positionedCourse.startLineLengthM || 100,
+    );
+
+    return {
+      ...positionedCourse,
+      marks: newMarks,
+      startLine: newStartLine,
+      windDirection,
+    };
+  }, [positionedCourse, windDirection]);
+
+  // Stable key for the map useEffect — only re-init when data actually changes
+  const mapDataKey = useMemo(() => {
+    if (!orientedCourse) return `coords-${stableCoords?.lat}-${stableCoords?.lng}`;
+    const markKey = orientedCourse.marks.map(m => `${m.latitude.toFixed(6)},${m.longitude.toFixed(6)}`).join('|');
+    return `course-${orientedCourse.courseType}-${orientedCourse.windDirection}-${markKey}`;
+  }, [orientedCourse, stableCoords]);
+
   // Initialize map on web
   useEffect(() => {
     if (!isWeb || !mapContainerRef.current) return;
-    if (!coords && !positionedCourse) {
+    console.debug('[CourseMapTile] useEffect triggered:', {
+      hasCoords: !!stableCoords,
+      hasOrientedCourse: !!orientedCourse,
+      orientedCourseMarks: orientedCourse?.marks?.length ?? 0,
+      coordsValue: stableCoords,
+      mapDataKey,
+    });
+    if (!stableCoords && !orientedCourse) {
       setLoading(false);
       return;
     }
@@ -169,6 +229,9 @@ export function CourseMapTile({
       mapRef.current = null;
       setMapLoaded(false);
     }
+
+    // Abort flag to prevent stale async initMap from clobbering a newer one
+    let aborted = false;
 
     const initMap = async () => {
       if (mapInitFailed) {
@@ -198,27 +261,28 @@ export function CourseMapTile({
         if (!MapConstructor || !Marker || !LngLatBounds) {
           throw new Error('MapLibre constructors are unavailable');
         }
+        if (aborted) { console.debug('[CourseMapTile] initMap aborted after import'); return; }
 
         // Calculate center from course marks or coords
         let centerLat: number;
         let centerLng: number;
 
-        if (positionedCourse) {
+        if (orientedCourse) {
           const allLats = [
-            ...positionedCourse.marks.map((m) => m.latitude),
-            positionedCourse.startLine.pin.lat,
-            positionedCourse.startLine.committee.lat,
+            ...orientedCourse.marks.map((m) => m.latitude),
+            orientedCourse.startLine.pin.lat,
+            orientedCourse.startLine.committee.lat,
           ];
           const allLngs = [
-            ...positionedCourse.marks.map((m) => m.longitude),
-            positionedCourse.startLine.pin.lng,
-            positionedCourse.startLine.committee.lng,
+            ...orientedCourse.marks.map((m) => m.longitude),
+            orientedCourse.startLine.pin.lng,
+            orientedCourse.startLine.committee.lng,
           ];
           centerLat = (Math.min(...allLats) + Math.max(...allLats)) / 2;
           centerLng = (Math.min(...allLngs) + Math.max(...allLngs)) / 2;
-        } else if (coords) {
-          centerLat = coords.lat;
-          centerLng = coords.lng;
+        } else if (stableCoords) {
+          centerLat = stableCoords.lat;
+          centerLng = stableCoords.lng;
         } else {
           setLoading(false);
           return;
@@ -228,7 +292,7 @@ export function CourseMapTile({
           container: mapContainerRef.current!,
           style: MAP_STYLE,
           center: [centerLng, centerLat],
-          zoom: positionedCourse ? 13 : 12,
+          zoom: orientedCourse ? 13 : 12,
           interactive: false, // Disable interaction for tile preview
           attributionControl: false,
         });
@@ -263,12 +327,80 @@ export function CourseMapTile({
           map.once('error', onError);
         });
 
+        if (aborted) {
+          console.debug('[CourseMapTile] initMap aborted after map load — removing zombie map');
+          map.remove();
+          return;
+        }
+
         mapRef.current = map;
         setMapLoaded(true);
         setLoading(false);
 
-        if (positionedCourse) {
-            // Add course line
+        if (orientedCourse) {
+            console.debug('[CourseMapTile] Adding course marks to map:', {
+              marksCount: orientedCourse.marks.length,
+              marks: orientedCourse.marks.map(m => ({ type: m.type, lat: m.latitude, lng: m.longitude })),
+              startLine: { pin: orientedCourse.startLine.pin, committee: orientedCourse.startLine.committee },
+              windDirection: orientedCourse.windDirection,
+              courseType: orientedCourse.courseType,
+            });
+            // Build course line along the exact wind axis
+            // Line runs from windward mark straight downwind through gate/leeward
+            const windwardMark = orientedCourse.marks.find(m => m.type === 'windward');
+            const gateMarks = orientedCourse.marks.filter(m => m.type === 'gate');
+            const leewardMark = orientedCourse.marks.find(m => m.type === 'leeward');
+
+            let courseLineCoords: [number, number][] = [];
+            if (windwardMark && orientedCourse.windDirection != null) {
+              const windwardCoord: [number, number] = [windwardMark.longitude, windwardMark.latitude];
+
+              // Calculate downwind endpoint at same distance as gate/leeward
+              // Use wind direction + 180 = downwind bearing
+              const downwindBearing = (orientedCourse.windDirection + 180) % 360;
+              const bearingRad = downwindBearing * (Math.PI / 180);
+              const EARTH_RADIUS_NM = 3440.065;
+
+              // Determine leg distance based on gate or leeward position
+              let legDistanceNm = orientedCourse.legLengthNm || 0.5;
+              if (gateMarks.length >= 2) {
+                // Distance from windward to gate midpoint latitude
+                const gateMidLat = (gateMarks[0].latitude + gateMarks[1].latitude) / 2;
+                const gateMidLng = (gateMarks[0].longitude + gateMarks[1].longitude) / 2;
+                const dLat = (gateMidLat - windwardMark.latitude) * (Math.PI / 180);
+                const dLng = (gateMidLng - windwardMark.longitude) * (Math.PI / 180);
+                const a = Math.sin(dLat / 2) ** 2 +
+                  Math.cos(windwardMark.latitude * Math.PI / 180) *
+                  Math.cos(gateMidLat * Math.PI / 180) *
+                  Math.sin(dLng / 2) ** 2;
+                legDistanceNm = EARTH_RADIUS_NM * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+              }
+
+              // Project downwind from windward mark along exact wind bearing
+              const lat1 = windwardMark.latitude * (Math.PI / 180);
+              const lng1 = windwardMark.longitude * (Math.PI / 180);
+              const angularDist = legDistanceNm / EARTH_RADIUS_NM;
+
+              const lat2 = Math.asin(
+                Math.sin(lat1) * Math.cos(angularDist) +
+                Math.cos(lat1) * Math.sin(angularDist) * Math.cos(bearingRad)
+              );
+              const lng2 = lng1 + Math.atan2(
+                Math.sin(bearingRad) * Math.sin(angularDist) * Math.cos(lat1),
+                Math.cos(angularDist) - Math.sin(lat1) * Math.sin(lat2)
+              );
+
+              const downwindCoord: [number, number] = [lng2 * (180 / Math.PI), lat2 * (180 / Math.PI)];
+              courseLineCoords = [windwardCoord, downwindCoord];
+            }
+
+            // Fallback: connect all marks in sequence if no windward/wind found
+            if (courseLineCoords.length < 2) {
+              courseLineCoords = orientedCourse.marks
+                .sort((a, b) => (a.sequenceOrder ?? 0) - (b.sequenceOrder ?? 0))
+                .map((m) => [m.longitude, m.latitude] as [number, number]);
+            }
+
             map.addSource('tile-course-line', {
               type: 'geojson',
               data: {
@@ -276,9 +408,7 @@ export function CourseMapTile({
                 properties: {},
                 geometry: {
                   type: 'LineString',
-                  coordinates: positionedCourse.marks
-                    .sort((a, b) => (a.sequenceOrder ?? 0) - (b.sequenceOrder ?? 0))
-                    .map((m) => [m.longitude, m.latitude]),
+                  coordinates: courseLineCoords,
                 },
               },
             });
@@ -303,8 +433,8 @@ export function CourseMapTile({
                 geometry: {
                   type: 'LineString',
                   coordinates: [
-                    [positionedCourse.startLine.pin.lng, positionedCourse.startLine.pin.lat],
-                    [positionedCourse.startLine.committee.lng, positionedCourse.startLine.committee.lat],
+                    [orientedCourse.startLine.pin.lng, orientedCourse.startLine.pin.lat],
+                    [orientedCourse.startLine.committee.lng, orientedCourse.startLine.committee.lat],
                   ],
                 },
               },
@@ -320,10 +450,73 @@ export function CourseMapTile({
               },
             });
 
+            // Add committee boat marker (RC)
+            const rcEl = document.createElement('div');
+            rcEl.style.cssText = `
+              width: 18px;
+              height: 18px;
+              background: #22c55e;
+              border: 2px solid white;
+              border-radius: 3px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              color: white;
+              font-weight: bold;
+              font-size: 8px;
+              box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+            `;
+            rcEl.textContent = 'RC';
+            new Marker({ element: rcEl })
+              .setLngLat([orientedCourse.startLine.committee.lng, orientedCourse.startLine.committee.lat])
+              .addTo(map);
+
+            // Add pin end marker
+            const pinEl = document.createElement('div');
+            pinEl.style.cssText = `
+              width: 14px;
+              height: 14px;
+              background: #f97316;
+              border: 2px solid white;
+              border-radius: 50%;
+              box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+            `;
+            new Marker({ element: pinEl })
+              .setLngLat([orientedCourse.startLine.pin.lng, orientedCourse.startLine.pin.lat])
+              .addTo(map);
+
+            // Add gate line (connecting the two gate marks)
+            if (gateMarks.length >= 2) {
+              map.addSource('tile-gate-line', {
+                type: 'geojson',
+                data: {
+                  type: 'Feature',
+                  properties: {},
+                  geometry: {
+                    type: 'LineString',
+                    coordinates: [
+                      [gateMarks[0].longitude, gateMarks[0].latitude],
+                      [gateMarks[1].longitude, gateMarks[1].latitude],
+                    ],
+                  },
+                },
+              });
+
+              map.addLayer({
+                id: 'tile-gate-line-layer',
+                type: 'line',
+                source: 'tile-gate-line',
+                paint: {
+                  'line-color': '#f97316',
+                  'line-width': 2,
+                },
+              });
+            }
+
             // Add mark markers
-            positionedCourse.marks.forEach((mark, index) => {
+            orientedCourse.marks.forEach((mark, index) => {
               const color = MARK_COLORS[mark.type] || '#64748b';
-              const size = 16;
+              const size = 22;
 
               const el = document.createElement('div');
               el.style.cssText = `
@@ -337,7 +530,7 @@ export function CourseMapTile({
                 justify-content: center;
                 color: white;
                 font-weight: bold;
-                font-size: 8px;
+                font-size: 10px;
                 box-shadow: 0 1px 3px rgba(0,0,0,0.3);
               `;
 
@@ -353,25 +546,32 @@ export function CourseMapTile({
                         : (index + 1).toString();
               el.textContent = label;
 
-              new Marker({
+              const marker = new Marker({
                 element: el,
-                offset: [-(size / 2), -(size / 2)],
               })
                 .setLngLat([mark.longitude, mark.latitude])
                 .addTo(map);
+              console.debug(`[CourseMapTile] Added marker ${label} at [${mark.longitude}, ${mark.latitude}]`, marker.getElement()?.style.cssText);
             });
 
             // Fit bounds to show entire course
             const bounds = new LngLatBounds();
-            positionedCourse.marks.forEach((m) => bounds.extend([m.longitude, m.latitude]));
-            bounds.extend([positionedCourse.startLine.pin.lng, positionedCourse.startLine.pin.lat]);
-            bounds.extend([positionedCourse.startLine.committee.lng, positionedCourse.startLine.committee.lat]);
+            orientedCourse.marks.forEach((m) => bounds.extend([m.longitude, m.latitude]));
+            bounds.extend([orientedCourse.startLine.pin.lng, orientedCourse.startLine.pin.lat]);
+            bounds.extend([orientedCourse.startLine.committee.lng, orientedCourse.startLine.committee.lat]);
+
+            // Rotate map so course is upwind-at-bottom orientation
+            const courseWind = orientedCourse.windDirection;
+            const bearing = courseWind !== undefined && Number.isFinite(courseWind)
+              ? courseWind  // Rotate so upwind (windward) is at top
+              : 0;
 
             map.fitBounds(bounds, {
-              padding: 30,
+              padding: 55,
               maxZoom: 15,
+              bearing,
             });
-        } else if (coords) {
+        } else if (stableCoords) {
             // Add a simple location marker
             const el = document.createElement('div');
             el.style.cssText = `
@@ -384,7 +584,7 @@ export function CourseMapTile({
             `;
 
             new Marker({ element: el })
-              .setLngLat([coords.lng, coords.lat])
+              .setLngLat([stableCoords.lng, stableCoords.lat])
               .addTo(map);
         }
       } catch (error) {
@@ -397,13 +597,15 @@ export function CourseMapTile({
     initMap();
 
     return () => {
+      aborted = true; // Signal in-flight initMap to bail out
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
       }
       setMapLoaded(false);
     };
-  }, [coords, positionedCourse]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapDataKey]);
 
   // Add marine overlays when map is loaded
   useEffect(() => {
@@ -493,10 +695,10 @@ export function CourseMapTile({
     };
 
     // Add wind arrows (3x3 grid)
-    // Wind direction is where wind is FROM, but arrows should point where wind is GOING
+    // Wind direction = where wind comes FROM. Arrow points FROM source toward you.
+    // SVG arrow points up at 0°. Rotate by windDirection so it points from the source.
     const windArrows: HTMLDivElement[] = [];
     if (windDirection !== undefined && Number.isFinite(windDirection)) {
-      const windFlowDirection = (windDirection + 180) % 360; // Direction wind is GOING
       const gridPositions = [
         [20, 25], [50, 20], [80, 25],
         [25, 50], [50, 50], [75, 50],
@@ -504,7 +706,7 @@ export function CourseMapTile({
       ];
 
       gridPositions.forEach(([x, y], index) => {
-        const arrow = createWindArrow(windFlowDirection, x, y, 18);
+        const arrow = createWindArrow(windDirection, x, y, 18);
         arrow.dataset.index = String(index);
         arrow.dataset.type = 'wind';
         windArrows.push(arrow);
@@ -598,8 +800,8 @@ export function CourseMapTile({
     };
   }, [mapLoaded, windDirection, currentDirection, currentSpeed, waveHeight, waveDirection]);
 
-  const courseTypeName = positionedCourse
-    ? COURSE_TEMPLATES[positionedCourse.courseType]?.name || 'Custom Course'
+  const courseTypeName = orientedCourse
+    ? COURSE_TEMPLATES[orientedCourse.courseType]?.name || 'Custom Course'
     : null;
 
   // Native fallback
@@ -624,15 +826,26 @@ export function CourseMapTile({
             <Check size={12} color="#FFFFFF" strokeWidth={3} />
           </View>
         )}
-        <View style={styles.nativePlaceholder}>
-          <Map size={32} color={COLORS.purple} />
-          <Text style={styles.nativeText}>
-            {positionedCourse ? courseTypeName : coords ? 'Set course' : 'Set location'}
-          </Text>
-          {venueName && <Text style={styles.venueText}>{venueName}</Text>}
-        </View>
+        {orientedCourse && orientedCourse.marks?.length > 0 && windDirection != null ? (
+          <NativeCourseOverlayMap
+            positionedCourse={orientedCourse}
+            windDirection={windDirection}
+            currentDirection={currentDirection}
+            currentSpeed={currentSpeed}
+            style={styles.nativeMap}
+          />
+        ) : (
+          <View style={styles.nativePlaceholder}>
+            <Map size={32} color={COLORS.purple} />
+            <Text style={styles.nativeText}>
+              {coords ? 'Set course' : 'Set location'}
+            </Text>
+            {venueName && <Text style={styles.venueText}>{venueName}</Text>}
+          </View>
+        )}
         <View style={styles.labelBar}>
           <Text style={styles.labelText}>COURSE</Text>
+          {courseTypeName && <Text style={styles.labelValue}>{courseTypeName}</Text>}
         </View>
       </AnimatedPressable>
     );
@@ -644,6 +857,7 @@ export function CourseMapTile({
       style={[
         styles.tile,
         isComplete && styles.tileComplete,
+        fullWidth && { width: '100%' as any },
         animatedStyle,
       ]}
       onPress={handlePress}
@@ -661,7 +875,7 @@ export function CourseMapTile({
       )}
 
       {/* Map container */}
-      {(coords || positionedCourse) ? (
+      {(stableCoords || orientedCourse) ? (
         <View style={styles.mapWrapper}>
           <div
             ref={mapContainerRef}
@@ -699,43 +913,12 @@ export function CourseMapTile({
               speed={windSpeed ?? 10}
               position="top-right"
               size={56}
+              currentDirection={currentDirection}
+              currentSpeed={currentSpeed}
             />
           )}
 
-          {/* Legend for wind/current arrows */}
-          {!loading && (windDirection !== undefined || currentDirection !== undefined) && (
-            <div
-              style={{
-                position: 'absolute',
-                bottom: 8,
-                left: 8,
-                backgroundColor: 'rgba(15, 23, 42, 0.85)',
-                borderRadius: 6,
-                padding: '4px 8px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 2,
-                zIndex: 10,
-              }}
-            >
-              {windDirection !== undefined && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <svg width="12" height="12" viewBox="0 0 24 24">
-                    <path d="M12 4L12 20M12 4L6 10M12 4L18 10" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" />
-                  </svg>
-                  <span style={{ fontSize: 9, color: '#22c55e', fontWeight: 500 }}>Wind</span>
-                </div>
-              )}
-              {currentDirection !== undefined && currentSpeed !== undefined && currentSpeed > 0.1 && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <svg width="12" height="12" viewBox="0 0 24 24">
-                    <path d="M12 4C14 7 10 10 12 13C14 16 10 19 12 22" stroke="#0ea5e9" strokeWidth="2" strokeLinecap="round" fill="none" />
-                  </svg>
-                  <span style={{ fontSize: 9, color: '#0ea5e9', fontWeight: 500 }}>Current</span>
-                </div>
-              )}
-            </div>
-          )}
+          {/* Wind/current legend removed — info is shown in WindDirectionIndicator */}
         </View>
       ) : (
         <View style={styles.emptyPlaceholder}>
@@ -821,6 +1004,12 @@ const styles = StyleSheet.create({
     color: COLORS.gray,
     marginTop: 8,
   },
+  nativeMap: {
+    flex: 1,
+    width: '100%',
+    height: undefined,
+    borderRadius: 0,
+  },
   nativePlaceholder: {
     flex: 1,
     alignItems: 'center',
@@ -856,6 +1045,11 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   courseTypeText: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: COLORS.blue,
+  },
+  labelValue: {
     fontSize: 11,
     fontWeight: '500',
     color: COLORS.blue,

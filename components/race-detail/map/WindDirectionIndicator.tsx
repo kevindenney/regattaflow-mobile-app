@@ -15,6 +15,10 @@ interface WindDirectionIndicatorProps {
   gusts?: number; // Gust speed in knots
   position?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
   size?: number;
+  /** Current/tide direction in degrees (where current flows TO) */
+  currentDirection?: number;
+  /** Current/tide speed in knots */
+  currentSpeed?: number;
 }
 
 /**
@@ -54,6 +58,8 @@ export const WindDirectionIndicator: React.FC<WindDirectionIndicatorProps> = ({
   gusts,
   position = 'top-right',
   size = 80,
+  currentDirection,
+  currentSpeed,
 }) => {
   // Guard against NaN/undefined values
   const safeDirection = Number.isFinite(direction) ? direction : 0;
@@ -63,8 +69,9 @@ export const WindDirectionIndicator: React.FC<WindDirectionIndicatorProps> = ({
   const compassDirection = formatDirection(safeDirection);
   const windDescription = getWindDescription(safeSpeed);
 
-  // Calculate arrow rotation (arrow points in direction wind is GOING, so add 180)
-  const arrowRotation = (safeDirection + 180) % 360;
+  // Arrow points FROM where wind originates (sailing convention)
+  // SVG arrow points up at 0°; rotate by direction so it points from the source
+  const arrowRotation = safeDirection;
 
   const positionStyle = {
     'top-left': { top: 16, left: 16 },
@@ -101,7 +108,7 @@ export const WindDirectionIndicator: React.FC<WindDirectionIndicatorProps> = ({
             <Line x1="8" y1="50" x2="15" y2="50" stroke="rgba(255,255,255,0.5)" strokeWidth="1" />
           </G>
 
-          {/* Wind arrow - points in direction wind is blowing TO */}
+          {/* Wind arrow - points FROM where wind originates */}
           <G rotation={arrowRotation} origin="50, 50">
             {/* Arrow body */}
             <Path
@@ -142,6 +149,21 @@ export const WindDirectionIndicator: React.FC<WindDirectionIndicatorProps> = ({
           {windDescription}
         </Text>
       </View>
+
+      {/* Current/tide info */}
+      {currentSpeed !== undefined && currentSpeed > 0.1 && (
+        <View style={styles.currentContainer}>
+          <Text style={styles.currentLabel}>Current</Text>
+          <Text style={styles.currentSpeed}>
+            {currentSpeed.toFixed(1)} kt
+          </Text>
+          {currentDirection !== undefined && Number.isFinite(currentDirection) && (
+            <Text style={styles.currentDirection}>
+              {formatDirection(currentDirection)}
+            </Text>
+          )}
+        </View>
+      )}
     </View>
   );
 };
@@ -184,5 +206,30 @@ const styles = StyleSheet.create({
   descriptionText: {
     fontSize: 10,
     color: '#64748b',
+  },
+  currentContainer: {
+    marginTop: 4,
+    alignItems: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.85)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  currentLabel: {
+    fontSize: 9,
+    color: '#0ea5e9',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  currentSpeed: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0ea5e9',
+  },
+  currentDirection: {
+    fontSize: 10,
+    color: '#94a3b8',
+    fontWeight: '500',
   },
 });

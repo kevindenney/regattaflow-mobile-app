@@ -91,13 +91,16 @@ const CurrentArrow: React.FC<CurrentArrowProps> = ({ direction, strength }) => {
         stroke={color}
         strokeWidth={2}
         strokeLinecap="round"
-        transform={`rotate(${direction} 15 15)`}
+        transform={`rotate(${(direction + 180) % 360} 15 15)`}
       />
     </Svg>
   );
 };
 
 export const CurrentOverlay: React.FC<CurrentOverlayProps> = ({ conditions, region }) => {
+  // When native maps aren't available, skip rendering (parent map handles the fallback)
+  if (!mapsAvailable || !Marker) return null;
+
   const currentArrows = generateCurrentArrowGrid(region, conditions);
 
   return (
