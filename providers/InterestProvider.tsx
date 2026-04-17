@@ -59,6 +59,15 @@ export interface DomainWithInterests {
   interests: Interest[]
 }
 
+export interface ProposeInterestInput {
+  name: string
+  slug: string
+  description: string
+  parent_id?: string | null
+  accent_color: string
+  icon_name: string
+}
+
 interface InterestContextValue {
   /** The currently-active interest, or null while loading */
   currentInterest: Interest | null
@@ -80,6 +89,8 @@ interface InterestContextValue {
   groupedInterests: DomainWithInterests[]
   /** Get the parent domain for a given interest id */
   getDomainForInterest: (interestId: string) => Interest | null
+  /** Propose a new user-created interest (inserts with type='user_proposed') */
+  proposeInterest: (input: ProposeInterestInput) => Promise<Interest>
   /** Force re-fetch interests from Supabase */
   refreshInterests: () => Promise<void>
   /** View mode: 'interest' shows only current interest, 'domain' shows all sibling interests */
@@ -142,6 +153,7 @@ const InterestContext = createContext<InterestContextValue>({
   switchInterest: async () => {},
   addInterest: async () => {},
   removeInterest: async () => {},
+  proposeInterest: async () => { throw new Error('InterestProvider not mounted') },
   refreshInterests: async () => {},
   viewMode: 'interest' as const,
   domainInterestIds: [],
@@ -175,22 +187,49 @@ export function InterestProvider({ children }: PropsWithChildren) {
     isLoading: interestsLoading,
     refetch: refetchInterests,
   } = useQuery<Interest[]>({
-    queryKey: INTERESTS_QUERY_KEY,
+    queryKey: [...INTERESTS_QUERY_KEY, user?.id ?? 'anon'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const cols =
+        'id, slug, name, description, parent_id, type, status, visibility, accent_color, icon_name, organization_id, hero_tagline, pricing_text, web_app_url, created_at'
+
+      // Fetch public catalog interests
+      const { data: publicData, error: publicError } = await supabase
         .from('interests')
-        .select(
-          'id, slug, name, description, parent_id, type, status, visibility, accent_color, icon_name, organization_id, hero_tagline, pricing_text, web_app_url, created_at',
-        )
+        .select(cols)
         .eq('status', 'active')
         .in('visibility', ['public'])
         .order('name')
 
-      if (error) {
-        throw error
+      if (publicError) throw publicError
+
+      // Also fetch user-proposed interests (private, owned by current user)
+      let proposedData: Interest[] = []
+      if (user?.id) {
+        const { data, error: proposedError } = await supabase
+          .from('interests')
+          .select(cols)
+          .eq('status', 'active')
+          .eq('type', 'user_proposed')
+          .eq('created_by_user_id', user.id)
+          .order('name')
+
+        if (!proposedError && data) {
+          proposedData = data as Interest[]
+        }
+        logger.debug('Fetched proposed interests:', proposedData.length)
       }
 
-      return (data ?? []) as Interest[]
+      // Merge and deduplicate (in case a proposed interest was promoted to public)
+      const seen = new Set<string>()
+      const merged: Interest[] = []
+      for (const row of [...(publicData ?? []), ...proposedData]) {
+        if (!seen.has(row.id)) {
+          seen.add(row.id)
+          merged.push(row as Interest)
+        }
+      }
+
+      return merged
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
   })
@@ -514,7 +553,21 @@ export function InterestProvider({ children }: PropsWithChildren) {
   const switchInterest = useCallback(
     async (slug: string) => {
       logger.debug('switchInterest called with:', slug, '| current activeSlug:', activeSlug, '| userInterests count:', userInterests.length)
-      const target = interests.find((i) => i.slug === slug)
+      let target = interests.find((i) => i.slug === slug)
+
+      // Cache may be stale after proposeInterest — fall back to direct DB lookup
+      if (!target) {
+        logger.debug('switchInterest: slug not in cache, trying DB lookup')
+        const { data } = await supabase
+          .from('interests')
+          .select('id, slug')
+          .eq('slug', slug)
+          .maybeSingle()
+        if (data) {
+          target = data as Interest
+        }
+      }
+
       if (!target) {
         throw new Error(`Interest with slug "${slug}" not found`)
       }
@@ -553,8 +606,22 @@ export function InterestProvider({ children }: PropsWithChildren) {
     async (slug: string) => {
       const normalized = normalizeSlug(slug)
       if (!normalized) return
-      const target = interests.find((interest) => interest.slug === normalized)
-      if (!target) return
+      let target = interests.find((interest) => interest.slug === normalized)
+
+      // If interests haven't loaded yet (common during onboarding), look up directly from DB
+      if (!target) {
+        const { data } = await supabase
+          .from('interests')
+          .select('id, slug')
+          .eq('slug', normalized)
+          .maybeSingle()
+        if (data) {
+          target = data as any
+        } else {
+          logger.warn('addInterest: interest not found for slug:', normalized)
+          return
+        }
+      }
 
       if (signedIn && user?.id) {
         // Write to DB
@@ -616,6 +683,64 @@ export function InterestProvider({ children }: PropsWithChildren) {
     [interests, userInterests, signedIn, user?.id, activeSlug, queryClient, switchInterest],
   )
 
+  // ---------- proposeInterest (creates a new user_proposed interest) ----------
+
+  const proposeInterest = useCallback(
+    async (input: ProposeInterestInput): Promise<Interest> => {
+      if (!signedIn || !user?.id) {
+        throw new Error('Must be signed in to propose an interest')
+      }
+
+      // Check for slug collision
+      const { data: existing } = await supabase
+        .from('interests')
+        .select('id')
+        .eq('slug', input.slug)
+        .maybeSingle()
+
+      const finalSlug = existing
+        ? `${input.slug}-${Date.now().toString(36).slice(-4)}`
+        : input.slug
+
+      // Insert the new interest
+      const { data: created, error } = await supabase
+        .from('interests')
+        .insert({
+          slug: finalSlug,
+          name: input.name,
+          description: input.description,
+          parent_id: input.parent_id ?? null,
+          type: 'user_proposed',
+          status: 'active',
+          visibility: 'private',
+          accent_color: input.accent_color,
+          icon_name: input.icon_name,
+          created_by_user_id: user.id,
+        })
+        .select('id, slug, name, description, parent_id, type, status, visibility, accent_color, icon_name, organization_id, hero_tagline, pricing_text, web_app_url, created_at')
+        .single()
+
+      if (error) throw error
+
+      const interest = created as Interest
+
+      // Add it to user_interests
+      await supabase
+        .from('user_interests')
+        .upsert(
+          { user_id: user.id, interest_id: interest.id },
+          { onConflict: 'user_id,interest_id' },
+        )
+
+      // Refresh caches
+      await queryClient.invalidateQueries({ queryKey: INTERESTS_QUERY_KEY })
+      await queryClient.invalidateQueries({ queryKey: [...USER_INTERESTS_QUERY_KEY, user.id] })
+
+      return interest
+    },
+    [signedIn, user?.id, queryClient],
+  )
+
   // ---------- refreshInterests ----------
 
   const refreshInterests = useCallback(async () => {
@@ -643,13 +768,14 @@ export function InterestProvider({ children }: PropsWithChildren) {
       switchInterest,
       addInterest,
       removeInterest,
+      proposeInterest,
       refreshInterests,
       viewMode,
       domainInterestIds,
       effectiveInterestIds,
       toggleDomainView,
     }),
-    [currentInterest, interests, userInterests, domains, groupedInterests, getDomainForInterest, loading, switchInterest, addInterest, removeInterest, refreshInterests, viewMode, domainInterestIds, effectiveInterestIds, toggleDomainView],
+    [currentInterest, interests, userInterests, domains, groupedInterests, getDomainForInterest, loading, switchInterest, addInterest, removeInterest, proposeInterest, refreshInterests, viewMode, domainInterestIds, effectiveInterestIds, toggleDomainView],
   )
 
   return (

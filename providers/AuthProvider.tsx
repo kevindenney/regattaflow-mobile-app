@@ -467,6 +467,17 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       setUserProfile(result.data)
       setUserType(result.data?.user_type as UserType)
 
+      // Sync name to profiles table (belt + suspenders with DB trigger)
+      if (updates.full_name) {
+        supabase
+          .from('profiles')
+          .update({ full_name: updates.full_name })
+          .eq('id', uid)
+          .then(({ error: profileErr }) => {
+            if (profileErr) console.warn('Failed to sync name to profiles:', profileErr.message)
+          })
+      }
+
       return result.data
     } catch (error) {
       console.error('Failed to update user profile:', error)
@@ -649,7 +660,12 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
 
   // Detect tokens passed via URL for web→mobile auth handoff (BetterAt dev flow)
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    // This flow only applies on web — `window.location.search` is a browser-only
+    // concept. The previous guard (`typeof window === 'undefined' || !window.location?.search`)
+    // crashed on Android Hermes, which provides a stub `window` where accessing
+    // `location.search` can throw "Cannot read property 'search' of undefined".
+    if (Platform.OS !== 'web') return;
+    if (typeof window === 'undefined' || !window.location || typeof window.location.search !== 'string' || !window.location.search) return;
     const params = new URLSearchParams(window.location.search);
     const accessToken = params.get('access_token');
     const refreshToken = params.get('refresh_token');
@@ -1188,12 +1204,26 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       authDebugLog('✅ [AUTH] Supabase signUp successful:', data)
 
       if (data.user?.id) {
-        const profilePayload = {
+        // For learners, start the 14-day Pro trial in the same upsert
+        // to avoid race conditions with session establishment.
+        const trialEnd = new Date();
+        trialEnd.setDate(trialEnd.getDate() + 14);
+        const isLearner = personaRole === 'sailor';
+
+        const profilePayload: Record<string, any> = {
           id: data.user.id,
           email: trimmedEmail,
           full_name: displayName,
           user_type: personaRole,
-          onboarding_completed: false, // All users go through practical onboarding
+          onboarding_completed: isLearner, // Learners complete onboarding inline during signup
+          ...(isLearner ? {
+            subscription_tier: 'individual',
+            subscription_status: 'trialing',
+            trial_started_at: new Date().toISOString(),
+            trial_ends_at: trialEnd.toISOString(),
+          } : {
+            onboarding_completed: false,
+          }),
         }
 
         authDebugLog('[AUTH] Upserting user profile:', profilePayload)

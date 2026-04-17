@@ -127,7 +127,16 @@ export function FeatureTourProvider({
   const [readySteps, setReadySteps] = useState<Set<TourStep>>(new Set());
   const readyStepsRef = useRef<Set<TourStep>>(new Set());
   const pricingPromptTriggeredRef = useRef(false);
-  const isServerReturningUser = signedIn && userProfile?.onboarding_completed === true;
+  // Detect returning users: if the profile was created more than 2 minutes ago,
+  // they're not a fresh signup — suppress the onboarding tour.
+  // (The original onboarding_completed column was never added to the DB.)
+  const isServerReturningUser = useMemo(() => {
+    if (!signedIn || !userProfile?.created_at) return false;
+    const createdMs = new Date(userProfile.created_at).getTime();
+    const ageMs = Date.now() - createdMs;
+    const TWO_MINUTES = 2 * 60 * 1000;
+    return ageMs > TWO_MINUTES;
+  }, [signedIn, userProfile?.created_at]);
 
   useEffect(() => {
     readyStepsRef.current = readySteps;
@@ -185,13 +194,17 @@ export function FeatureTourProvider({
 
   // Returning signed-in users should not re-enter the welcome/tour flow
   // due to missing local storage in fresh web/incognito sessions.
-  // But DON'T suppress if the user just completed onboarding (hasSeenOnboarding
-  // is true) — they're a new user who should see the tour for the first time.
+  // But DON'T suppress if the user just completed onboarding in THIS session
+  // (account created < 2 min ago) — they're a new user seeing the tour for the first time.
   useEffect(() => {
     if (isLoading || !isServerReturningUser) return;
     if (currentStep === null && isTourComplete) return;
-    // If local onboarding flag is set, this is a fresh signup session — let tour run
-    if (hasSeenOnboarding) return;
+    // If onboarding was completed during this session (fresh signup, account < 2 min old),
+    // isServerReturningUser will be false, so we won't reach here. The hasSeenOnboarding
+    // flag persists in AsyncStorage across sessions, so it can NOT be used to distinguish
+    // "just signed up" from "returning after days/weeks." We rely on isServerReturningUser
+    // (account age > 2 min) instead — if we got here, the account is old and the tour
+    // state is stale.
 
     const suppressTourForReturningUser = async () => {
       await FeatureTourService.completeTour();
@@ -203,12 +216,12 @@ export function FeatureTourProvider({
     };
 
     void suppressTourForReturningUser();
-  }, [currentStep, isLoading, isServerReturningUser, isTourComplete, hasSeenOnboarding]);
+  }, [currentStep, isLoading, isServerReturningUser, isTourComplete]);
 
   // Auto-start tour if conditions are met (guests see welcome card instead)
   useEffect(() => {
-    // Suppress for returning users who are NOT in an active onboarding session
-    if (isServerReturningUser && !hasSeenOnboarding) {
+    // Returning users (account > 2 min old) should never auto-start the tour
+    if (isServerReturningUser) {
       return;
     }
     const canAutoStart = hasSeenOnboarding && !isGuest;
@@ -246,8 +259,9 @@ export function FeatureTourProvider({
   }, [isTourComplete, currentStep, isGuest]);
 
   const shouldShowTour = useMemo(() => {
-    // Suppress for returning users not in an active onboarding session
-    if (isServerReturningUser && !hasSeenOnboarding) return false;
+    // Returning users (account > 2 min old) should never see the tour —
+    // even if hasSeenOnboarding is true from a previous session's AsyncStorage.
+    if (isServerReturningUser) return false;
     const canShow = hasSeenOnboarding && !isGuest;
     return canShow && !isTourComplete && !isLoading;
   }, [hasSeenOnboarding, isGuest, isTourComplete, isLoading, isServerReturningUser]);
@@ -373,6 +387,10 @@ export function FeatureTourProvider({
 
   const skipTour = useCallback(async () => {
     await FeatureTourService.skipTour();
+    // Also mark pricing prompt as seen so the auto-trigger effect doesn't
+    // immediately show the pricing card after skipping
+    await FeatureTourService.markPricingPromptSeen();
+    setHasSeenPricingPrompt(true);
     setCurrentStep(null);
     setCurrentStepIndex(0);
     setIsTourComplete(true);
