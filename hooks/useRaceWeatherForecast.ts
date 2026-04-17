@@ -113,8 +113,16 @@ export interface DataSourceMeta {
 export interface RaceWeatherForecastData {
   /** Hourly wind speed values (knots) for sparkline */
   windForecast: number[];
-  /** Hourly tide/current speed values for sparkline */
+  /** Hourly tide/current values for sparkline */
   tideForecast: number[];
+  /**
+   * What `tideForecast` actually represents:
+   *  - 'current' = tidal current speed in knots (preferred — regionally enriched)
+   *  - 'height'  = tidal height in metres (fallback when no current model)
+   *  - 'wave'    = wave height in metres (last-resort fallback)
+   *  - 'none'    = no data
+   */
+  tideMetric: 'current' | 'height' | 'wave' | 'none';
   /** Index in the array representing "now" */
   forecastNowIndex: number;
   /** Index in the array representing race start */
@@ -512,15 +520,32 @@ export function useRaceWeatherForecast(
         return;
       }
 
-      // Fetch weather data - request enough hours to cover race window + buffer
-      const hoursToFetch = Math.min(240, Math.ceil(hoursUntil) + dynamicForecastHours);
+      // Anchor the forecast grid on the race time (not "now"). We want hourly
+      // samples from (raceStart - 2h) through (raceStart + duration + buffer)
+      // so the race window is always covered — whether the race is in the
+      // future, happening now, or a few hours in the past. Without this the
+      // RegionalWeatherService sampled from "now" forward at 3h intervals and
+      // would miss the race window by enough to land on the wrong hour
+      // (showing e.g. 5-8kt S when the race-time hour was actually 11kt SSW).
+      const raceDurationHoursCeil = Math.ceil(expectedDurationMinutes / 60);
+      const hoursToFetch = Math.min(240, dynamicForecastHours + raceDurationHoursCeil);
+      // Past hours needed so anchored window includes `raceStart - 2h` even
+      // when the race is in the past.
+      const pastHoursNeeded = Math.max(0, Math.ceil(-hoursUntil) + 2);
+      const pastHoursToFetch = Math.min(240, pastHoursNeeded);
       logger.debug('[useRaceWeatherForecast] Fetching weather:', {
         venueId: venue.id,
         venueName: venue.name,
         coordinates: venue.coordinates,
         hoursToFetch,
+        pastHoursToFetch,
+        anchor: raceDateObj.toISOString(),
       });
-      const weatherData = await regionalWeatherService.getVenueWeather(venue, hoursToFetch);
+      const weatherData = await regionalWeatherService.getVenueWeather(
+        venue,
+        hoursToFetch,
+        { anchorTime: raceDateObj, pastHours: pastHoursToFetch },
+      );
 
       logger.debug('[useRaceWeatherForecast] Weather result:', {
         hasData: !!weatherData,
@@ -535,8 +560,11 @@ export function useRaceWeatherForecast(
       const nowMs = now.getTime();
       const raceStartMs = raceDateObj.getTime();
 
-      // Find starting point: 2 hours before race or now, whichever is later
-      const windowStartMs = Math.max(nowMs, raceStartMs - 2 * 60 * 60 * 1000);
+      // Start the display window 2h before race start. The forecast array is
+      // now anchored on race time (see getVenueWeather call above), so we no
+      // longer need to clamp this to `nowMs` — doing so would throw away the
+      // race-window samples for races that have already started.
+      const windowStartMs = raceStartMs - 2 * 60 * 60 * 1000;
 
       // Find the forecast entry closest to window start
       let startIndex = 0;
@@ -562,20 +590,39 @@ export function useRaceWeatherForecast(
       // Extract wind speeds
       const windForecast = relevantForecasts.map(f => Math.round(f.windSpeed));
 
-      // Extract tide/current data (use current speed as proxy for tide movement)
-      // If no current data, use wave height as visual indicator
-      const tideForecast = relevantForecasts.map(f => {
-        if (f.currentSpeed !== undefined && f.currentSpeed > 0) {
-          // Scale current speed to make visible (typically 0-2 knots)
-          return Math.round(f.currentSpeed * 10) / 10;
-        }
-        // Fallback to wave height if available
-        if (f.waveHeight !== undefined) {
-          return Math.round(f.waveHeight * 10) / 10;
-        }
-        // Default to tide height from marine conditions
-        return weatherData.marineConditions.tidalHeight || 1.0;
-      });
+      // Decide which metric to use for the "tide" sparkline row, in priority:
+      //  1. Current speed (preferred — regionally enriched for HK, etc.)
+      //  2. Wave height (visual proxy when no current model exists)
+      //  3. Marine conditions tidal height (last resort)
+      // Using a single consistent metric avoids mixing knots and metres in the
+      // same array (which made min/max/HW/LW meaningless).
+      const hasCurrentData = relevantForecasts.some(
+        (f) => f.currentSpeed !== undefined && f.currentSpeed > 0,
+      );
+      const hasWaveData = relevantForecasts.some(
+        (f) => f.waveHeight !== undefined && f.waveHeight > 0,
+      );
+
+      let tideMetric: 'current' | 'height' | 'wave' | 'none' = 'none';
+      let tideForecast: number[];
+      if (hasCurrentData) {
+        tideMetric = 'current';
+        tideForecast = relevantForecasts.map((f) =>
+          Math.round((f.currentSpeed ?? 0) * 10) / 10,
+        );
+      } else if (hasWaveData) {
+        tideMetric = 'wave';
+        tideForecast = relevantForecasts.map((f) =>
+          Math.round((f.waveHeight ?? 0) * 10) / 10,
+        );
+      } else if (weatherData.marineConditions.tidalHeight !== undefined) {
+        tideMetric = 'height';
+        tideForecast = relevantForecasts.map(
+          () => weatherData.marineConditions.tidalHeight || 1.0,
+        );
+      } else {
+        tideForecast = relevantForecasts.map(() => 0);
+      }
 
       // Calculate "now" index within the extracted window
       let nowIndex = 0;
@@ -620,13 +667,22 @@ export function useRaceWeatherForecast(
 
       // Calculate trends and peak times
       const windTrend = calculateWindTrend(windForecast);
-      const tidePeakTime = findTidePeakTime(relevantForecasts, tideForecast);
+      // Peak time only meaningful for tidal heights — for current speeds it
+      // would mark "strongest flow" which is not what the UI label implies.
+      const tidePeakTime = tideMetric === 'height'
+        ? findTidePeakTime(relevantForecasts, tideForecast)
+        : undefined;
 
       // Extract detailed time-series data
       const hourlyWind = extractHourlyWind(relevantForecasts);
       const hourlyTide = extractHourlyTide(relevantForecasts, tideForecast);
       const hourlyWaves = extractHourlyWaves(relevantForecasts);
-      const { highTide, lowTide, tideRange, turnTime } = extractTideTimes(relevantForecasts, tideForecast);
+      // HW/LW/Range/TurnTime only make sense when the metric is real tide
+      // HEIGHT. For current speed we omit them — the wizard hides those rows.
+      const { highTide, lowTide, tideRange, turnTime } =
+        tideMetric === 'height'
+          ? extractTideTimes(relevantForecasts, tideForecast)
+          : { highTide: undefined, lowTide: undefined, tideRange: undefined, turnTime: undefined };
 
       // Extract race-window specific data for Tufte display
       const raceWindow = extractRaceWindowData(
@@ -688,6 +744,7 @@ export function useRaceWeatherForecast(
       setData({
         windForecast,
         tideForecast,
+        tideMetric,
         forecastNowIndex: nowIndex,
         raceStartIndex,
         raceEndIndex,
@@ -778,15 +835,34 @@ export function extractForecastForSparklines(
   if (relevantForecasts.length < 2) return null;
 
   const windForecast = relevantForecasts.map(f => Math.round(f.windSpeed));
-  const tideForecast = relevantForecasts.map(f => {
-    if (f.currentSpeed !== undefined && f.currentSpeed > 0) {
-      return Math.round(f.currentSpeed * 10) / 10;
-    }
-    if (f.waveHeight !== undefined) {
-      return Math.round(f.waveHeight * 10) / 10;
-    }
-    return weatherData.marineConditions.tidalHeight || 1.0;
-  });
+
+  const hasCurrentData = relevantForecasts.some(
+    (f) => f.currentSpeed !== undefined && f.currentSpeed > 0,
+  );
+  const hasWaveData = relevantForecasts.some(
+    (f) => f.waveHeight !== undefined && f.waveHeight > 0,
+  );
+
+  let tideMetric: 'current' | 'height' | 'wave' | 'none' = 'none';
+  let tideForecast: number[];
+  if (hasCurrentData) {
+    tideMetric = 'current';
+    tideForecast = relevantForecasts.map((f) =>
+      Math.round((f.currentSpeed ?? 0) * 10) / 10,
+    );
+  } else if (hasWaveData) {
+    tideMetric = 'wave';
+    tideForecast = relevantForecasts.map((f) =>
+      Math.round((f.waveHeight ?? 0) * 10) / 10,
+    );
+  } else if (weatherData.marineConditions.tidalHeight !== undefined) {
+    tideMetric = 'height';
+    tideForecast = relevantForecasts.map(
+      () => weatherData.marineConditions.tidalHeight || 1.0,
+    );
+  } else {
+    tideForecast = relevantForecasts.map(() => 0);
+  }
 
   let nowIndex = 0;
   minDiff = Infinity;
@@ -829,7 +905,10 @@ export function extractForecastForSparklines(
   const hourlyWind = extractHourlyWind(relevantForecasts);
   const hourlyTide = extractHourlyTide(relevantForecasts, tideForecast);
   const hourlyWaves = extractHourlyWaves(relevantForecasts);
-  const { highTide, lowTide, tideRange, turnTime } = extractTideTimes(relevantForecasts, tideForecast);
+  const { highTide, lowTide, tideRange, turnTime } =
+    tideMetric === 'height'
+      ? extractTideTimes(relevantForecasts, tideForecast)
+      : { highTide: undefined, lowTide: undefined, tideRange: undefined, turnTime: undefined };
 
   // Extract race-window specific data
   const raceWindow = extractRaceWindowData(
@@ -866,11 +945,14 @@ export function extractForecastForSparklines(
   return {
     windForecast,
     tideForecast,
+    tideMetric,
     forecastNowIndex: nowIndex,
     raceStartIndex,
     raceEndIndex,
     windTrend: calculateWindTrend(windForecast),
-    tidePeakTime: findTidePeakTime(relevantForecasts, tideForecast),
+    tidePeakTime: tideMetric === 'height'
+      ? findTidePeakTime(relevantForecasts, tideForecast)
+      : undefined,
     rawForecasts: relevantForecasts,
     // Detailed time-series data
     hourlyWind,

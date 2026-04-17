@@ -1,6 +1,6 @@
 import { createLogger } from '@/lib/utils/logger';
 import { useAuth } from '@/providers/AuthProvider';
-import { useWorkspaceDomain } from '@/hooks/useWorkspaceDomain';
+// useWorkspaceDomain guard removed — this hook is always used in race context
 import {
   sailorRacePreparationService,
   type RaceBriefData,
@@ -75,6 +75,8 @@ interface UseRacePreparationOptions {
   regattaId: string | null;
   autoSave?: boolean;
   debounceMs?: number;
+  /** When false, skips loading data from Supabase (default: true) */
+  enabled?: boolean;
 }
 
 interface UseRacePreparationReturn {
@@ -90,6 +92,10 @@ interface UseRacePreparationReturn {
   /** True if we have cached/loaded data (even if currently refreshing) */
   hasData: boolean;
   isSaving: boolean;
+  /** True when there are changes that haven't been written to the DB yet */
+  hasPendingChanges: boolean;
+  /** Timestamp of the last successful DB save */
+  lastSavedAt: string | null;
 
   // Actions
   setRigNotes: (notes: string) => void;
@@ -120,11 +126,13 @@ export function useRacePreparation({
   regattaId,
   autoSave = true,
   debounceMs = 1000,
+  enabled = true,
 }: UseRacePreparationOptions): UseRacePreparationReturn {
   const { user } = useAuth();
-  const { isSailingDomain } = useWorkspaceDomain();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [hasPendingChanges, setHasPendingChanges] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
 
   // State
   const [rigNotes, setRigNotesState] = useState('');
@@ -145,6 +153,8 @@ export function useRacePreparation({
   const saveRunIdRef = useRef(0);
   const activeRegattaIdRef = useRef<string | null>(regattaId);
   const activeUserIdRef = useRef<string | undefined>(user?.id);
+  const intentionsRef = useRef<RaceIntentions>(intentions);
+  intentionsRef.current = intentions;
 
   useEffect(() => {
     activeRegattaIdRef.current = regattaId;
@@ -164,25 +174,13 @@ export function useRacePreparation({
    */
   const loadPreparation = useCallback(async () => {
     const runId = ++loadRunIdRef.current;
-    const targetRegattaId = regattaId;
-    const targetUserId = user?.id;
+    const targetRegattaId = activeRegattaIdRef.current;
+    const targetUserId = activeUserIdRef.current;
     const canCommit = () =>
       isMountedRef.current &&
       runId === loadRunIdRef.current &&
       activeRegattaIdRef.current === targetRegattaId &&
       activeUserIdRef.current === targetUserId;
-
-    if (!isSailingDomain) {
-      if (!canCommit()) return;
-      setRigNotesState('');
-      setSelectedRigPresetIdState(null);
-      setAcknowledgements(DEFAULT_ACKNOWLEDGEMENTS);
-      setRaceBriefData(null);
-      setIntentions(DEFAULT_INTENTIONS);
-      setIsLoading(false);
-      hasLoadedOnceRef.current = true;
-      return;
-    }
 
     if (!targetRegattaId) {
       if (!canCommit()) return;
@@ -321,15 +319,17 @@ export function useRacePreparation({
       setIsLoading(false);
       hasLoadedOnceRef.current = true;
     }
-  }, [regattaId, user?.id, isSailingDomain]);
+  }, [regattaId, user?.id]);
 
   /**
    * Save pending changes to Supabase or AsyncStorage
    */
   const saveChanges = useCallback(async () => {
     const runId = ++saveRunIdRef.current;
-    const targetRegattaId = regattaId;
-    const targetUserId = user?.id;
+    // Use refs for regattaId/userId to avoid stale closures when auth state
+    // is briefly null during re-renders (the callback dep might capture undefined)
+    const targetRegattaId = activeRegattaIdRef.current;
+    const targetUserId = activeUserIdRef.current;
     const canUpdateUi = () =>
       isMountedRef.current &&
       runId === saveRunIdRef.current &&
@@ -338,7 +338,8 @@ export function useRacePreparation({
 
     // For demo races (non-UUID), we allow saving even without a user ID (guest mode)
     const isDemoRace = targetRegattaId ? !isValidUUID(targetRegattaId) : false;
-    if (!targetRegattaId || (!targetUserId && !isDemoRace) || Object.keys(pendingChangesRef.current).length === 0) {
+    const pendingKeys = Object.keys(pendingChangesRef.current);
+    if (!targetRegattaId || (!targetUserId && !isDemoRace) || pendingKeys.length === 0) {
       return;
     }
 
@@ -364,6 +365,10 @@ export function useRacePreparation({
         await AsyncStorage.setItem(key, JSON.stringify(merged));
         logger.info('Demo race preparation saved to AsyncStorage', { regattaId: targetRegattaId });
         pendingChangesRef.current = {};
+        if (canUpdateUi()) {
+          setHasPendingChanges(false);
+          setLastSavedAt(new Date().toISOString());
+        }
       } catch (error) {
         logger.error('AsyncStorage save failed', error);
         logger.error('AsyncStorage save failed:', error);
@@ -387,41 +392,35 @@ export function useRacePreparation({
         ...pendingChangesRef.current,
       };
 
-      logger.info('Saving race preparation to Supabase', { regattaId: targetRegattaId, hasIntentions: !!updates.user_intentions });
       const result = await sailorRacePreparationService.upsertPreparation(updates);
 
       if (result) {
-        logger.info('Race preparation saved successfully', { regattaId: targetRegattaId });
         pendingChangesRef.current = {};
+        if (canUpdateUi()) {
+          setHasPendingChanges(false);
+          setLastSavedAt(new Date().toISOString());
+        }
       } else {
-        // Regatta doesn't exist - log this for debugging
-        logger.warn('Regatta does not exist, cannot save preparation', targetRegattaId);
-        logger.warn('Regatta does not exist, skipping save', { regattaId: targetRegattaId });
+        logger.warn('Regatta not found, save skipped', { regattaId: targetRegattaId });
         pendingChangesRef.current = {};
       }
     } catch (error: any) {
-      // RLS errors (42501) are expected when race doesn't exist or user doesn't have access yet
-      // This happens during sample data creation - just log as warning and clear pending changes
+      logger.error('Save error', { code: error?.code, message: error?.message });
       if (error?.code === '42501') {
-        logger.warn('RLS policy prevented save (race may not exist yet)', { regattaId: targetRegattaId });
         pendingChangesRef.current = {};
-      } else {
-        logger.warn('Failed to save race preparation', error);
-        logger.warn('Failed to save race preparation:', error);
-        // Keep pending changes so they can be retried
       }
     } finally {
       if (canUpdateUi()) {
         setIsSaving(false);
       }
     }
-  }, [regattaId, user?.id, isSailingDomain]);
+  }, [regattaId, user?.id]);
 
   /**
    * Schedule a save with debouncing
    */
   const scheduleSave = useCallback(() => {
-    if (!isSailingDomain || !autoSave) {
+    if (!autoSave) {
       return;
     }
 
@@ -432,14 +431,13 @@ export function useRacePreparation({
     saveTimeoutRef.current = setTimeout(() => {
       void saveChanges();
     }, debounceMs);
-  }, [autoSave, debounceMs, saveChanges, isSailingDomain]);
+  }, [autoSave, debounceMs, saveChanges]);
 
   /**
    * Update rig notes
    */
   const setRigNotes = useCallback(
     (notes: string) => {
-      if (!isSailingDomain) return;
       setRigNotesState(notes);
       pendingChangesRef.current = {
         ...pendingChangesRef.current,
@@ -447,7 +445,7 @@ export function useRacePreparation({
       };
       scheduleSave();
     },
-    [scheduleSave, isSailingDomain]
+    [scheduleSave]
   );
 
   /**
@@ -455,7 +453,6 @@ export function useRacePreparation({
    */
   const setSelectedRigPresetId = useCallback(
     (id: string | null) => {
-      if (!isSailingDomain) return;
       setSelectedRigPresetIdState(id);
       pendingChangesRef.current = {
         ...pendingChangesRef.current,
@@ -463,7 +460,7 @@ export function useRacePreparation({
       };
       scheduleSave();
     },
-    [scheduleSave, isSailingDomain]
+    [scheduleSave]
   );
 
   /**
@@ -471,7 +468,6 @@ export function useRacePreparation({
    */
   const setAcknowledgementsCallback = useCallback(
     (acks: RegulatoryAcknowledgements) => {
-      if (!isSailingDomain) return;
       setAcknowledgements(acks);
       pendingChangesRef.current = {
         ...pendingChangesRef.current,
@@ -479,7 +475,7 @@ export function useRacePreparation({
       };
       scheduleSave();
     },
-    [scheduleSave, isSailingDomain]
+    [scheduleSave]
   );
 
   /**
@@ -487,7 +483,6 @@ export function useRacePreparation({
    */
   const toggleAcknowledgement = useCallback(
     (key: keyof RegulatoryAcknowledgements) => {
-      if (!isSailingDomain) return;
       setAcknowledgements((prev) => {
         const updated = {
           ...prev,
@@ -504,7 +499,7 @@ export function useRacePreparation({
         return updated;
       });
     },
-    [scheduleSave, isSailingDomain]
+    [scheduleSave]
   );
 
   /**
@@ -512,7 +507,6 @@ export function useRacePreparation({
    */
   const updateRaceBrief = useCallback(
     (data: RaceBriefData) => {
-      if (!isSailingDomain) return;
       // Only update if data has actually changed (deep comparison)
       setRaceBriefData((prev) => {
         if (JSON.stringify(prev) === JSON.stringify(data)) {
@@ -526,7 +520,7 @@ export function useRacePreparation({
         return data;
       });
     },
-    [scheduleSave, isSailingDomain]
+    [scheduleSave]
   );
 
   /**
@@ -535,28 +529,28 @@ export function useRacePreparation({
    */
   const updateIntentions = useCallback(
     (update: RaceIntentionUpdate) => {
-      if (!isSailingDomain) return;
+      // Update pendingChangesRef synchronously BEFORE the state setter,
+      // so the data is visible to unmount cleanup even if React defers
+      // the setIntentions updater function.
+      const existingIntentions = pendingChangesRef.current.user_intentions as RaceIntentions | undefined;
+      const accumulatedIntentions = deepMergeIntentions(existingIntentions || intentionsRef.current, update);
+      accumulatedIntentions.updatedAt = new Date().toISOString();
+      pendingChangesRef.current = {
+        ...pendingChangesRef.current,
+        user_intentions: accumulatedIntentions,
+      };
+
+      setHasPendingChanges(true);
+      scheduleSave();
+
       setIntentions((prev) => {
         // Deep merge to preserve nested fields from concurrent updates
         const merged = deepMergeIntentions(prev, update);
-        merged.updatedAt = new Date().toISOString();
-
-        // Accumulate into pending changes using deep merge
-        // This ensures multiple rapid updates are combined, not overwritten
-        const existingIntentions = pendingChangesRef.current.user_intentions || prev;
-        const accumulatedIntentions = deepMergeIntentions(existingIntentions, update);
-        accumulatedIntentions.updatedAt = merged.updatedAt;
-
-        pendingChangesRef.current = {
-          ...pendingChangesRef.current,
-          user_intentions: accumulatedIntentions,
-        };
-
-        scheduleSave();
+        merged.updatedAt = accumulatedIntentions.updatedAt;
         return merged;
       });
     },
-    [scheduleSave, isSailingDomain]
+    [scheduleSave]
   );
 
   /**
@@ -604,7 +598,6 @@ export function useRacePreparation({
    */
   const updateStrategyNote = useCallback(
     (sectionId: string, note: string) => {
-      if (!isSailingDomain) return;
       setIntentions((prev) => {
         const existingNotes = prev.strategyNotes || {};
         const updatedNotes: StrategyNotes = {
@@ -624,19 +617,18 @@ export function useRacePreparation({
         return merged;
       });
     },
-    [scheduleSave, isSailingDomain]
+    [scheduleSave]
   );
 
   /**
    * Manually trigger a save
    */
   const save = useCallback(async () => {
-    if (!isSailingDomain) return;
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
     }
     await saveChanges();
-  }, [saveChanges, isSailingDomain]);
+  }, [saveChanges]);
 
   /**
    * Refresh data from server
@@ -645,10 +637,11 @@ export function useRacePreparation({
     await loadPreparation();
   }, [loadPreparation]);
 
-  // Load data on mount or when race changes
+  // Load data on mount or when race changes (skip when disabled)
   useEffect(() => {
+    if (!enabled) return;
     void loadPreparation();
-  }, [loadPreparation]);
+  }, [loadPreparation, enabled]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -657,11 +650,11 @@ export function useRacePreparation({
         clearTimeout(saveTimeoutRef.current);
       }
       // Save any pending changes before unmounting
-      if (isSailingDomain && Object.keys(pendingChangesRef.current).length > 0) {
+      if (Object.keys(pendingChangesRef.current).length > 0) {
         void saveChanges();
       }
     };
-  }, [saveChanges, isSailingDomain]);
+  }, [saveChanges]);
 
   // Compute derived state for loading optimization
   const isInitialLoading = isLoading && !hasLoadedOnceRef.current;
@@ -678,6 +671,8 @@ export function useRacePreparation({
     isInitialLoading,
     hasData,
     isSaving,
+    hasPendingChanges,
+    lastSavedAt,
 
     // Actions
     setRigNotes,
@@ -703,6 +698,8 @@ export function useRacePreparation({
     isInitialLoading,
     hasData,
     isSaving,
+    hasPendingChanges,
+    lastSavedAt,
     setRigNotes,
     setSelectedRigPresetId,
     setAcknowledgementsCallback,

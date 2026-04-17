@@ -10,6 +10,7 @@ import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { supabase } from '@/services/supabase';
 import { createLogger } from '@/lib/utils/logger';
 import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
+import { isPersistedRaceId } from '@/lib/races/isPersistedRaceId';
 
 const logger = createLogger('usePostRaceInterview');
 
@@ -104,8 +105,10 @@ export function usePostRaceInterview({
       userId: user?.id,
     });
 
-    if (!selectedRaceId || !user?.id || selectedRaceId.startsWith('demo-')) {
-      logger.debug('[POST_RACE_LOAD] Missing selectedRaceId or userId or demo race, clearing session');
+    if (!user?.id || !isPersistedRaceId(selectedRaceId)) {
+      // Guards: no user, no id, demo/sample id, or an in-flight optimistic
+      // `temp-` id. Any of those would produce a 400 on `regatta_id=eq.{id}`.
+      logger.debug('[POST_RACE_LOAD] Skipping — missing userId or non-persisted raceId, clearing session');
       setUserPostRaceSession(null);
       return;
     }

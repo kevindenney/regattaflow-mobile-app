@@ -437,14 +437,55 @@ export function useLiveRaces(userId?: string) {
         });
       };
 
-      // Regattas the user created
-      const { data: createdRaces, error: createdError } = await supabase
-        .from('regattas')
-        .select('*')
-        .eq('created_by', userId)
-        .order('start_date', { ascending: true })
-        .limit(100);
+      // Stage 1: fire all five independent "which regattas touch this user"
+      // lookups concurrently. Previously these ran sequentially and dominated
+      // the Race page's cold-load latency on a hard refresh.
+      const [
+        createdResult,
+        participantRowsResult,
+        sessionsPrimaryResult,
+        raceEventsResult,
+        collaboratorRowsResult,
+      ] = await Promise.all([
+        // Regattas the user created
+        supabase
+          .from('regattas')
+          .select('*')
+          .eq('created_by', userId)
+          .order('start_date', { ascending: true })
+          .limit(100),
+        // Regattas the user is registered for (excluding withdrawn)
+        supabase
+          .from('race_participants')
+          .select('regatta_id')
+          .eq('user_id', userId)
+          .not('regatta_id', 'is', null)
+          .neq('status', 'withdrawn')
+          .limit(100),
+        // Regattas where the user has logged timer sessions
+        supabase
+          .from('race_timer_sessions')
+          .select('regatta_id')
+          .eq('sailor_id', userId)
+          .not('regatta_id', 'is', null)
+          .order('end_time', { ascending: false })
+          .limit(200),
+        // Race events created by the user (user-created races via add race flow)
+        supabase
+          .from('race_events')
+          .select('*')
+          .eq('user_id', userId)
+          .order('start_time', { ascending: true })
+          .limit(100),
+        // Regattas where the user is a collaborator (accepted or pending)
+        supabase
+          .from('race_collaborators')
+          .select('regatta_id, id, access_level, status')
+          .eq('user_id', userId)
+          .in('status', ['accepted', 'pending']),
+      ]);
 
+      const { data: createdRaces, error: createdError } = createdResult;
       if (createdError) {
         logger.warn('Returning empty due to regatta query error:', createdError);
         if (!canCommit()) return;
@@ -455,51 +496,17 @@ export function useLiveRaces(userId?: string) {
       }
       addRaces(createdRaces as any[]);
 
-      // Regattas where the user is registered as a participant (excluding withdrawn)
-      const { data: participantRows, error: participantRegError } = await supabase
-        .from('race_participants')
-        .select('regatta_id')
-        .eq('user_id', userId)
-        .not('regatta_id', 'is', null)
-        .neq('status', 'withdrawn');
-
+      const { data: participantRows, error: participantRegError } = participantRowsResult;
       if (participantRegError) {
         logger.warn('Unable to load registered regattas from race_participants:', participantRegError);
-      } else {
-        const participantRegattaIds = Array.from(
-          new Set((participantRows ?? []).map((row) => row.regatta_id).filter(Boolean))
-        ) as string[];
-
-        const missingParticipantIds = participantRegattaIds.filter((regattaId) => !racesById.has(regattaId));
-
-        if (missingParticipantIds.length > 0) {
-          const { data: registeredRaces, error: regRacesError } = await supabase
-            .from('regattas')
-            .select('*')
-            .in('id', missingParticipantIds)
-            .order('start_date', { ascending: true });
-
-          if (regRacesError) {
-            logger.warn('Unable to load regattas for registered participants:', regRacesError);
-          } else {
-            addRaces(registeredRaces as any[]);
-          }
-        }
       }
 
-      // Regattas where the user has logged timer sessions
-      let sessionRows: { regatta_id?: string | null; race_id?: string | null }[] | null = null;
-      let sessionsError: any = null;
-      const primarySessions = await supabase
-        .from('race_timer_sessions')
-        .select('regatta_id')
-        .eq('sailor_id', userId)
-        .not('regatta_id', 'is', null)
-        .order('end_time', { ascending: false })
-        .limit(200);
-      sessionRows = primarySessions.data as any;
-      sessionsError = primarySessions.error;
-
+      // Timer sessions — fall back to legacy `race_id` column if `regatta_id`
+      // isn't present (older schema). Only runs when stage-1 errored with that
+      // specific missing-column signal.
+      let sessionRows: { regatta_id?: string | null; race_id?: string | null }[] | null =
+        sessionsPrimaryResult.data as any;
+      let sessionsError: any = sessionsPrimaryResult.error;
       if (
         sessionsError &&
         isMissingIdColumn(sessionsError, 'race_timer_sessions', 'regatta_id')
@@ -517,43 +524,14 @@ export function useLiveRaces(userId?: string) {
         })) || null;
         sessionsError = fallbackSessions.error;
       }
-
       if (sessionsError) {
         logger.warn('Unable to load participant regattas from race_timer_sessions:', sessionsError);
-      } else {
-        const uniqueSessionRegattaIds = Array.from(
-          new Set((sessionRows ?? []).map((row) => row.regatta_id || row.race_id).filter(Boolean))
-        ) as string[];
-
-        const missingRegattaIds = uniqueSessionRegattaIds.filter((regattaId) => !racesById.has(regattaId));
-
-        if (missingRegattaIds.length > 0) {
-          const { data: participantRaces, error: participantError } = await supabase
-            .from('regattas')
-            .select('*')
-            .in('id', missingRegattaIds)
-            .order('start_date', { ascending: true });
-
-          if (participantError) {
-            logger.warn('Unable to load regattas for participant sessions:', participantError);
-          } else {
-            addRaces(participantRaces as any[]);
-          }
-        }
       }
 
-      // Race events created by the user (user-created races via add race flow)
-      const { data: userRaceEvents, error: raceEventsError } = await supabase
-        .from('race_events')
-        .select('*')
-        .eq('user_id', userId)
-        .order('start_time', { ascending: true })
-        .limit(100);
-
+      const { data: userRaceEvents, error: raceEventsError } = raceEventsResult;
       if (raceEventsError) {
         logger.warn('Unable to load user race_events:', raceEventsError);
       } else {
-        // Normalize race_events to match regatta structure for consistent handling
         const normalizedRaceEvents = (userRaceEvents || []).map((event: any) => ({
           ...event,
           // Map race_events fields to regatta-like structure
@@ -566,7 +544,7 @@ export function useLiveRaces(userId?: string) {
             venue_name: event.location || event.metadata?.venue_name || null,
             venue: event.location || event.metadata?.venue || null,
           },
-          _source: 'race_events', // Track source for debugging
+          _source: 'race_events',
         }));
         addRaces(normalizedRaceEvents);
       }
@@ -579,21 +557,10 @@ export function useLiveRaces(userId?: string) {
         collaboratorId: string;
       }>();
 
-      // Regattas where the user is a collaborator (accepted or pending)
-      const { data: collaboratorRows, error: collaboratorError } = await supabase
-        .from('race_collaborators')
-        .select('regatta_id, id, access_level, status')
-        .eq('user_id', userId)
-        .in('status', ['accepted', 'pending']);
-
+      const { data: collaboratorRows, error: collaboratorError } = collaboratorRowsResult;
       if (collaboratorError) {
         logger.warn('Unable to load collaborator regattas:', collaboratorError);
       } else {
-        const collaboratorRegattaIds = Array.from(
-          new Set((collaboratorRows ?? []).map((row) => row.regatta_id).filter(Boolean))
-        ) as string[];
-
-        // Store collaboration info for each race
         (collaboratorRows ?? []).forEach((row) => {
           if (row.regatta_id) {
             collaborationInfo.set(row.regatta_id, {
@@ -604,22 +571,54 @@ export function useLiveRaces(userId?: string) {
             });
           }
         });
+      }
 
-        const missingCollaboratorIds = collaboratorRegattaIds.filter((regattaId) => !racesById.has(regattaId));
+      // Stage 2: batch the three "resolve missing regatta IDs → full row"
+      // lookups concurrently. Each input list may be empty, in which case we
+      // skip that query entirely.
+      const participantRegattaIds = Array.from(
+        new Set((participantRows ?? []).map((row) => row.regatta_id).filter(Boolean))
+      ) as string[];
+      const uniqueSessionRegattaIds = Array.from(
+        new Set((sessionRows ?? []).map((row) => row.regatta_id || row.race_id).filter(Boolean))
+      ) as string[];
+      const collaboratorRegattaIds = Array.from(
+        new Set((collaboratorRows ?? []).map((row) => row.regatta_id).filter(Boolean))
+      ) as string[];
 
-        if (missingCollaboratorIds.length > 0) {
-          const { data: collaboratorRaces, error: collabRacesError } = await supabase
-            .from('regattas')
-            .select('*')
-            .in('id', missingCollaboratorIds)
-            .order('start_date', { ascending: true });
+      const missingParticipantIds = participantRegattaIds.filter((id) => !racesById.has(id));
+      const missingSessionIds = uniqueSessionRegattaIds.filter((id) => !racesById.has(id));
+      const missingCollaboratorIds = collaboratorRegattaIds.filter((id) => !racesById.has(id));
 
-          if (collabRacesError) {
-            logger.warn('Unable to load regattas for collaborators:', collabRacesError);
-          } else {
-            addRaces(collaboratorRaces as any[]);
-          }
-        }
+      const lookupRegattas = (ids: string[]) =>
+        ids.length === 0
+          ? Promise.resolve({ data: [] as any[], error: null as any })
+          : supabase
+              .from('regattas')
+              .select('*')
+              .in('id', ids)
+              .order('start_date', { ascending: true });
+
+      const [participantLookup, sessionLookup, collaboratorLookup] = await Promise.all([
+        lookupRegattas(missingParticipantIds),
+        lookupRegattas(missingSessionIds),
+        lookupRegattas(missingCollaboratorIds),
+      ]);
+
+      if (participantLookup.error) {
+        logger.warn('Unable to load regattas for registered participants:', participantLookup.error);
+      } else {
+        addRaces(participantLookup.data as any[]);
+      }
+      if (sessionLookup.error) {
+        logger.warn('Unable to load regattas for participant sessions:', sessionLookup.error);
+      } else {
+        addRaces(sessionLookup.data as any[]);
+      }
+      if (collaboratorLookup.error) {
+        logger.warn('Unable to load regattas for collaborators:', collaboratorLookup.error);
+      } else {
+        addRaces(collaboratorLookup.data as any[]);
       }
 
       // Add ownership/collaboration flags to all races
