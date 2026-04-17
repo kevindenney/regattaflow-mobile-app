@@ -1435,6 +1435,14 @@ export default function RacesScreen() {
     }
   }, [orderedBaseCardGridRaces]);
 
+  // Pending-step ref and its stable setter. Declared before renderCardGridContent
+  // because it references handleNextStepCreatedForCard in its dep array — must
+  // be initialized first to avoid a TDZ error on render.
+  const pendingNewStepIdRef = useRef<string | null>(null);
+  const handleNextStepCreatedForCard = useCallback((newStepId: string) => {
+    pendingNewStepIdRef.current = newStepId;
+  }, []);
+
   // Render card content for CardGrid
   const renderCardGridContent = useCallback(
     (
@@ -1726,13 +1734,6 @@ export default function RacesScreen() {
   }, [user?.id, currentInterest?.id, vocab, queryClient]);
 
   // Quick-create a timeline step — optionally pre-filled from a template
-  const pendingNewStepIdRef = useRef<string | null>(null);
-
-  // Stable per-render identity so RaceSummaryCard can rely on React.memo.
-  const handleNextStepCreatedForCard = useCallback((newStepId: string) => {
-    pendingNewStepIdRef.current = newStepId;
-  }, []);
-
   const handleAddStep = useCallback(async () => {
     if (!user?.id || !currentInterest?.id) return;
 
