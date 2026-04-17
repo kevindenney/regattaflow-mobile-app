@@ -44,16 +44,18 @@ function isValidUrl(url: string): boolean {
 }
 
 /**
- * Parse URLs from text input (one URL per line)
+ * Parse URLs from text input
+ * Supports URLs on their own lines OR embedded in surrounding text
  */
 function parseUrls(text: string): string[] {
   if (!text.trim()) return [];
 
-  return text
-    .split(/[\n\r]+/) // Split by newlines
-    .map(line => line.trim())
-    .filter(line => line.startsWith('http://') || line.startsWith('https://'))
-    .filter(isValidUrl);
+  const urlRegex = /https?:\/\/[^\s<>"{}|\\^`\[\]]+/gi;
+  const matches = text.match(urlRegex);
+  if (!matches) return [];
+
+  // Deduplicate while preserving order, then validate schemes
+  return [...new Set(matches)].filter(isValidUrl);
 }
 
 /**
@@ -225,9 +227,10 @@ export function URLInput({
 
       {isTextContent && (
         <View style={styles.urlCountContainer}>
-          <FileText size={14} color={TUFTE_FORM_COLORS.aiAccent} />
-          <Text style={[styles.urlCountText, styles.urlCountTextMultiple]}>
+          <FileText size={14} color={value.trim().length > 30000 ? TUFTE_FORM_COLORS.error ?? '#FF3B30' : TUFTE_FORM_COLORS.aiAccent} />
+          <Text style={[styles.urlCountText, styles.urlCountTextMultiple, value.trim().length > 30000 && styles.urlCountTextWarning]}>
             Document text detected ({value.trim().length.toLocaleString()} chars)
+            {value.trim().length > 30000 ? ' — very large, extraction may be slow' : ''}
           </Text>
         </View>
       )}
@@ -279,6 +282,9 @@ const styles = StyleSheet.create({
   urlCountTextMultiple: {
     color: TUFTE_FORM_COLORS.aiAccent,
     fontWeight: '500',
+  },
+  urlCountTextWarning: {
+    color: '#FF9500',
   },
   hint: {
     fontSize: 12,

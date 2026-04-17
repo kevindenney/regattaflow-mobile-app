@@ -14,12 +14,13 @@ import {
   FileStack,
   Map,
   File,
+  Calendar,
   Check,
 } from 'lucide-react-native';
 import { TUFTE_FORM_COLORS, TUFTE_FORM_SPACING } from '@/components/races/AddRaceDialog/tufteFormStyles';
 import { IOS_COLORS } from '@/components/cards/constants';
 
-export type DocumentType = 'nor' | 'si' | 'amendment' | 'appendix' | 'course_diagram' | 'courses' | 'other';
+export type DocumentType = 'nor' | 'si' | 'calendar' | 'amendment' | 'appendix' | 'course_diagram' | 'courses' | 'other';
 
 interface DocumentTypeOption {
   type: DocumentType;
@@ -43,6 +44,13 @@ const DOCUMENT_TYPES: DocumentTypeOption[] = [
     shortLabel: 'SI',
     icon: <ScrollText size={16} />,
     description: 'Racing rules and procedures',
+  },
+  {
+    type: 'calendar',
+    label: 'Season Calendar',
+    shortLabel: 'Calendar',
+    icon: <Calendar size={16} />,
+    description: 'Full-season race schedule (50+ races)',
   },
   {
     type: 'amendment',
@@ -99,7 +107,7 @@ export function DocumentTypeSelector({
   showCommonOnly = false,
 }: DocumentTypeSelectorProps) {
   const types = showCommonOnly
-    ? DOCUMENT_TYPES.filter((t) => ['nor', 'si', 'amendment', 'courses'].includes(t.type))
+    ? DOCUMENT_TYPES.filter((t) => ['nor', 'si', 'calendar', 'amendment', 'courses'].includes(t.type))
     : DOCUMENT_TYPES;
 
   if (compact) {

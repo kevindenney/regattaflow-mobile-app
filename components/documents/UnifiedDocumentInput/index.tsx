@@ -12,7 +12,7 @@
  * - Support for incremental document addition
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -20,8 +20,9 @@ import {
   StyleSheet,
   Platform,
 } from 'react-native';
-import { ChevronRight, ChevronDown, Sparkles, CheckCircle } from 'lucide-react-native';
+import { ChevronRight, ChevronDown, Sparkles, CheckCircle, Check } from 'lucide-react-native';
 import { TUFTE_FORM_COLORS, TUFTE_FORM_SPACING } from '@/components/races/AddRaceDialog/tufteFormStyles';
+import { IOS_COLORS } from '@/components/cards/constants';
 
 import { InputMethodTabs, type InputMethod } from './InputMethodTabs';
 import { URLInput, type InputContentType } from './URLInput';
@@ -251,6 +252,21 @@ export function UnifiedDocumentInput({
   const [duplicateDocument, setDuplicateDocument] = useState<ServiceRaceSourceDocument | null>(null);
   const [pendingSource, setPendingSource] = useState<DocumentSource | null>(null);
 
+  // Calendar mode: include past races toggle (default OFF — most users only want upcoming races)
+  const [includePastRaces, setIncludePastRaces] = useState(false);
+
+  // Derived: compact extraction mode is auto-enabled for season calendars
+  const isCalendarMode = documentType === 'calendar';
+  const extractionOptions = useMemo(
+    () => ({
+      compactMode: isCalendarMode,
+      // Pass currentDate so the server filter is deterministic across timezones
+      currentDate: new Date().toISOString().split('T')[0],
+      includePast: isCalendarMode ? includePastRaces : true,
+    }),
+    [isCalendarMode, includePastRaces],
+  );
+
   // Auto-detect document type from content
   const handleUrlAutoDetect = useCallback((info: { isPdf: boolean; suggestedType?: string }) => {
     if (info.suggestedType) {
@@ -316,6 +332,44 @@ export function UnifiedDocumentInput({
     }
   }, [regattaId, mode]);
 
+  // Helper: fetch a PDF via the pdf-proxy edge function and extract text with PDF.js
+  const extractPdfViaProxy = useCallback(async (url: string): Promise<{
+    success: boolean;
+    textContent?: string;
+    error?: string;
+  }> => {
+    const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+    const proxyUrl = `${supabaseUrl}/functions/v1/pdf-proxy?url=${encodeURIComponent(url)}`;
+
+    const proxyResponse = await fetch(proxyUrl, {
+      headers: { 'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}` },
+    });
+
+    if (!proxyResponse.ok) {
+      const errBody = await proxyResponse.json().catch(() => ({}));
+      return { success: false, error: (errBody as any)?.error || `PDF proxy failed: ${proxyResponse.status}` };
+    }
+
+    const arrayBuffer = await proxyResponse.arrayBuffer();
+
+    // Create a Blob URL so PDF.js can load it without CORS issues
+    const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
+    const blobUrl = URL.createObjectURL(blob);
+
+    try {
+      // Calendar PDFs (full season schedules) can be 10-30+ pages; lift the cap so we don't truncate races.
+      const pdfResult = await PDFExtractionService.extractText(blobUrl, {
+        maxPages: isCalendarMode ? 100 : 50,
+      });
+      if (!pdfResult.success || !pdfResult.text) {
+        return { success: false, error: pdfResult.error || 'Failed to extract PDF text' };
+      }
+      return { success: true, textContent: pdfResult.text };
+    } finally {
+      URL.revokeObjectURL(blobUrl);
+    }
+  }, [isCalendarMode]);
+
   // Helper function to extract from a single URL
   const extractFromUrl = useCallback(async (url: string): Promise<{
     success: boolean;
@@ -331,52 +385,24 @@ export function UnifiedDocumentInput({
       let textContent = '';
 
       if (isPdfUrl) {
-        // Use server-side PDF extraction
-        const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-        const extractUrl = `${supabaseUrl}/functions/v1/extract-pdf-text`;
-
-        const extractResponse = await fetch(extractUrl, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ url }),
-        });
-
-        const extractResult = await extractResponse.json();
-
-        if (!extractResponse.ok || !extractResult.success) {
-          return { success: false, error: extractResult.error || `Failed to extract PDF: ${extractResponse.status}` };
+        // Fetch PDF through server proxy (avoids CORS) then extract with PDF.js
+        const result = await extractPdfViaProxy(url);
+        if (!result.success || !result.textContent) {
+          return { success: false, error: result.error || 'Failed to extract PDF text' };
         }
-
-        textContent = extractResult.text;
+        textContent = result.textContent;
       } else {
         // Non-PDF URL - try direct fetch
         const response = await fetch(url);
         const contentType = response.headers.get('content-type') || '';
 
         if (contentType.includes('pdf')) {
-          // Retry as PDF
-          const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-          const extractUrl = `${supabaseUrl}/functions/v1/extract-pdf-text`;
-
-          const extractResponse = await fetch(extractUrl, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ url }),
-          });
-
-          const extractResult = await extractResponse.json();
-
-          if (!extractResponse.ok || !extractResult.success) {
-            return { success: false, error: extractResult.error || 'Failed to extract PDF' };
+          // Content-type says PDF, proxy and extract
+          const result = await extractPdfViaProxy(url);
+          if (!result.success || !result.textContent) {
+            return { success: false, error: result.error || 'Failed to extract PDF text' };
           }
-
-          textContent = extractResult.text;
+          textContent = result.textContent;
         } else {
           textContent = await response.text();
         }
@@ -390,7 +416,7 @@ export function UnifiedDocumentInput({
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : 'Failed to fetch URL' };
     }
-  }, []);
+  }, [extractPdfViaProxy]);
 
   // Handler for course diagram/courses extraction using vision
   const handleCourseExtraction = useCallback(async (source: DocumentSource) => {
@@ -640,7 +666,7 @@ export function UnifiedDocumentInput({
       setBatchProgress(null);
 
       try {
-        const result = await extractRaceDetailsFromText(textContent);
+        const result = await extractRaceDetailsFromText(textContent, extractionOptions);
 
         if (!result.success || !result.data) {
           throw new Error(result.error || 'Failed to extract race details');
@@ -682,6 +708,7 @@ export function UnifiedDocumentInput({
             sourceTracking: {
               documentType,
               sourceType: source.type,
+              sourceUrl: source.url,
             },
           });
         }
@@ -733,7 +760,7 @@ export function UnifiedDocumentInput({
 
         // AI extraction
         try {
-          const result = await extractRaceDetailsFromText(fetchResult.textContent);
+          const result = await extractRaceDetailsFromText(fetchResult.textContent, extractionOptions);
 
           if (!result.success || !result.data) {
             results.push({ url, success: false, error: result.error || 'Extraction failed' });
@@ -858,8 +885,9 @@ export function UnifiedDocumentInput({
         textContent = pasteValue.trim();
       } else if (activeMethod === 'upload' && selectedFile) {
         // Extract text from PDF
+        // Calendar PDFs (full season schedules) can be 10-30+ pages; lift the cap so we don't truncate races.
         const pdfResult = await PDFExtractionService.extractText(selectedFile.uri, {
-          maxPages: 50,
+          maxPages: isCalendarMode ? 100 : 50,
         });
 
         if (!pdfResult.success || !pdfResult.text) {
@@ -878,7 +906,7 @@ export function UnifiedDocumentInput({
       // Now do AI extraction
       setExtractionStatus('extracting');
 
-      const result = await extractRaceDetailsFromText(textContent);
+      const result = await extractRaceDetailsFromText(textContent, extractionOptions);
 
       if (!result.success || !result.data) {
         throw new Error(result.error || 'Failed to extract race details');
@@ -957,6 +985,8 @@ export function UnifiedDocumentInput({
     handleCourseExtraction,
     urlInputContentType,
     urlInputTextContent,
+    extractionOptions,
+    isCalendarMode,
   ]);
 
   // Reset handler
@@ -1058,6 +1088,30 @@ export function UnifiedDocumentInput({
               showCommonOnly
             />
           </View>
+
+          {/* Calendar mode: include past races toggle */}
+          {isCalendarMode && (
+            <Pressable
+              style={styles.includePastRow}
+              onPress={() => !isProcessing && setIncludePastRaces((v) => !v)}
+              disabled={isProcessing}
+            >
+              <View
+                style={[
+                  styles.includePastCheckbox,
+                  includePastRaces && styles.includePastCheckboxChecked,
+                ]}
+              >
+                {includePastRaces && <Check size={12} color="#FFFFFF" />}
+              </View>
+              <Text style={styles.includePastLabel}>
+                Include past races
+              </Text>
+              <Text style={styles.includePastHint}>
+                {includePastRaces ? 'Showing all races' : 'Future races only'}
+              </Text>
+            </Pressable>
+          )}
 
           {/* Input Area */}
           {activeMethod === 'url' && (
@@ -1197,6 +1251,35 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
     color: TUFTE_FORM_COLORS.secondaryLabel,
+  },
+  includePastRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 4,
+  },
+  includePastCheckbox: {
+    width: 16,
+    height: 16,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: TUFTE_FORM_COLORS.inputBorder,
+    backgroundColor: TUFTE_FORM_COLORS.inputBackground,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  includePastCheckboxChecked: {
+    backgroundColor: IOS_COLORS.blue,
+    borderColor: IOS_COLORS.blue,
+  },
+  includePastLabel: {
+    fontSize: 13,
+    color: TUFTE_FORM_COLORS.label,
+  },
+  includePastHint: {
+    fontSize: 12,
+    color: TUFTE_FORM_COLORS.secondaryLabel,
+    fontStyle: 'italic',
   },
   extractButton: {
     flexDirection: 'row',
