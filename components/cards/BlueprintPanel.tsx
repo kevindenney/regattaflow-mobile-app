@@ -21,13 +21,21 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSharedValue } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { TimelineLane, TimelineLaneTile } from './TimelineLane';
+import { PeerStepSheet } from '@/components/blueprint/PeerStepSheet';
 import type { TimelineStepRecord } from '@/types/timeline-steps';
-import type { PeerTimeline } from '@/types/blueprint';
+import type { PeerTimeline, PeerTimelineStep } from '@/types/blueprint';
 
 export interface BlueprintPanelProps {
   blueprintId: string;
   blueprintTitle: string;
   authorName?: string | null;
+
+  /**
+   * Interest + subscription the blueprint is scoped to. Required to wire peer
+   * tile taps to the "adopt into my timeline" mutation.
+   */
+  interestId?: string | null;
+  subscriptionId?: string | null;
 
   /** Curator's curriculum steps (sorted by sort_order). */
   curriculumSteps: TimelineStepRecord[];
@@ -69,6 +77,8 @@ function formatDateLabel(step: Pick<TimelineStepRecord, 'starts_at' | 'due_at' |
 export function BlueprintPanel({
   blueprintId,
   blueprintTitle,
+  interestId,
+  subscriptionId,
   curriculumSteps,
   myAdoptedSteps,
   peers = [],
@@ -87,6 +97,15 @@ export function BlueprintPanel({
   // "Following · N" to expand.
   const [peersExpanded, setPeersExpanded] = useState(false);
 
+  // When the user taps a peer tile, we open a bottom-sheet with the
+  // curriculum step context, the peer's status, and actions (adopt / open
+  // my adopted version / view peer's profile).
+  const [selectedPeerStep, setSelectedPeerStep] = useState<{
+    peer: PeerTimeline;
+    peerStep: PeerTimelineStep | null;
+    curriculumStep: TimelineStepRecord;
+  } | null>(null);
+
   // Set of curriculum step IDs the user has already adopted.
   const adoptedCurriculumIds = useMemo(() => {
     const set = new Set<string>();
@@ -96,6 +115,19 @@ export function BlueprintPanel({
       }
     }
     return set;
+  }, [myAdoptedSteps, blueprintId]);
+
+  // Map from curriculum step id → the user's adopted step id, so the sheet
+  // can offer "Open & ask AI Coach" when a peer's tile is tapped for a step
+  // the user has already adopted.
+  const adoptedStepIdBySourceId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const step of myAdoptedSteps ?? []) {
+      if (step.source_blueprint_id === blueprintId && step.source_id) {
+        map.set(step.source_id, step.id);
+      }
+    }
+    return map;
   }, [myAdoptedSteps, blueprintId]);
 
   // Curriculum row tiles — sorted by sort_order (caller may already sort).
@@ -128,18 +160,12 @@ export function BlueprintPanel({
       const peerStepByTitle = new Map<string, PeerTimeline['steps'][number]>();
       for (const s of peer.steps) peerStepByTitle.set(s.title, s);
 
-      const tiles: TimelineLaneTile[] = curriculumTiles.map((currTile, i) => {
+      const tiles: TimelineLaneTile[] = curriculumTiles.map((_currTile, i) => {
         const curr = curriculumSteps[i];
-        const peerStep = peerStepByTitle.get(curr.title);
-        if (!peerStep) {
-          return {
-            id: `${peer.subscriber_id}:${curr.id}`,
-            title: curr.title,
-            status: 'upcoming' as const,
-          };
-        }
-        const status: TimelineLaneTile['status'] =
-          peerStep.status === 'completed'
+        const peerStep = peerStepByTitle.get(curr.title) ?? null;
+        const status: TimelineLaneTile['status'] = !peerStep
+          ? 'upcoming'
+          : peerStep.status === 'completed'
             ? 'done'
             : peerStep.status === 'in_progress'
               ? 'now'
@@ -148,9 +174,15 @@ export function BlueprintPanel({
           id: `${peer.subscriber_id}:${curr.id}`,
           title: curr.title,
           status,
-          dateLabel: peerStep.completed_at
+          dateLabel: peerStep?.completed_at
             ? `Done ${new Date(peerStep.completed_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
             : undefined,
+          onPress: () =>
+            setSelectedPeerStep({
+              peer,
+              peerStep,
+              curriculumStep: curr,
+            }),
         };
       });
 
@@ -217,6 +249,25 @@ export function BlueprintPanel({
             />
           ))
         : null}
+
+      {/* Bottom sheet that opens when a peer tile is tapped. Only wired if
+          we have the interest + subscription context needed by the adopt
+          mutation — otherwise taps are no-ops. */}
+      {selectedPeerStep && interestId && subscriptionId ? (
+        <PeerStepSheet
+          visible
+          onClose={() => setSelectedPeerStep(null)}
+          peer={selectedPeerStep.peer}
+          peerStep={selectedPeerStep.peerStep}
+          curriculumStep={selectedPeerStep.curriculumStep}
+          interestId={interestId}
+          subscriptionId={subscriptionId}
+          blueprintId={blueprintId}
+          alreadyAdoptedStepId={
+            adoptedStepIdBySourceId.get(selectedPeerStep.curriculumStep.id) ?? null
+          }
+        />
+      ) : null}
     </View>
   );
 }

@@ -101,6 +101,8 @@ function BlueprintPanelRow({
       blueprintId={info.blueprint_id}
       blueprintTitle={info.blueprint_title}
       authorName={info.author_name}
+      interestId={interestId ?? null}
+      subscriptionId={info.subscription_id}
       curriculumSteps={curriculumSteps}
       myAdoptedSteps={myAdoptedSteps}
       peers={peers}
