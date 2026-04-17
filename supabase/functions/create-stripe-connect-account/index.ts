@@ -1,6 +1,7 @@
 /**
  * Create Stripe Connect Account Edge Function
- * Creates and onboards coaches to Stripe Connect for marketplace payments
+ * Creates and onboards any user to Stripe Connect for marketplace payments.
+ * Uses creator_stripe_accounts table (not coach_profiles).
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
@@ -21,7 +22,8 @@ const corsHeaders = {
 };
 
 interface ConnectAccountRequest {
-  coach_id: string;
+  user_id?: string;
+  coach_id?: string; // legacy compat
   return_url?: string;
   refresh_url?: string;
 }
@@ -48,7 +50,7 @@ serve(async (req: Request) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser(
       authHeader.replace('Bearer ', '')
     );
-    
+
     if (authError || !user) {
       return new Response(
         JSON.stringify({ error: 'Unauthorized' }),
@@ -57,46 +59,65 @@ serve(async (req: Request) => {
     }
 
     const body: ConnectAccountRequest = await req.json();
-    const { coach_id, return_url, refresh_url } = body;
+    const targetUserId = body.user_id || body.coach_id;
 
-    if (!coach_id) {
+    if (!targetUserId) {
       return new Response(
-        JSON.stringify({ error: 'coach_id is required' }),
+        JSON.stringify({ error: 'user_id is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Verify the coach profile belongs to this user
-    const { data: coachProfile, error: profileError } = await supabase
-      .from('coach_profiles')
-      .select('*, users!coach_profiles_user_id_fkey (email, full_name)')
-      .eq('id', coach_id)
-      .single();
-
-    if (profileError || !coachProfile) {
-      return new Response(
-        JSON.stringify({ error: 'Coach profile not found' }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
     // Verify ownership
-    if (coachProfile.user_id !== user.id) {
+    if (targetUserId !== user.id) {
       return new Response(
-        JSON.stringify({ error: 'Not authorized to access this coach profile' }),
+        JSON.stringify({ error: 'Not authorized' }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Check if coach already has a Stripe account
-    let accountId = coachProfile.stripe_account_id;
+    // Check if user already has a Stripe account in creator_stripe_accounts
+    const { data: existingCreator } = await supabase
+      .from('creator_stripe_accounts')
+      .select('stripe_account_id')
+      .eq('user_id', targetUserId)
+      .single();
+
+    let accountId = existingCreator?.stripe_account_id || null;
+
+    // Also check legacy coach_profiles
+    if (!accountId) {
+      const { data: coachProfile } = await supabase
+        .from('coach_profiles')
+        .select('stripe_account_id')
+        .eq('user_id', targetUserId)
+        .single();
+
+      if (coachProfile?.stripe_account_id) {
+        accountId = coachProfile.stripe_account_id;
+        // Migrate to creator_stripe_accounts
+        await supabase
+          .from('creator_stripe_accounts')
+          .upsert({
+            user_id: targetUserId,
+            stripe_account_id: accountId,
+          }, { onConflict: 'user_id' });
+      }
+    }
 
     if (!accountId) {
+      // Get user profile for prefilling
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('full_name, email')
+        .eq('id', targetUserId)
+        .single();
+
       // Create new Stripe Connect account (Express type)
       const account = await stripe.accounts.create({
         type: 'express',
-        country: coachProfile.country || 'US',
-        email: coachProfile.users?.email || user.email,
+        country: 'US',
+        email: profile?.email || user.email,
         capabilities: {
           card_payments: { requested: true },
           transfers: { requested: true },
@@ -104,40 +125,38 @@ serve(async (req: Request) => {
         business_type: 'individual',
         business_profile: {
           mcc: '7941', // Sports clubs, fields, and promoters
-          name: coachProfile.display_name || coachProfile.users?.full_name || 'Sailing Coach',
-          product_description: 'Professional sailing coaching services',
-          url: `https://regattaflow.com/coach/${coach_id}`,
+          name: profile?.full_name || 'Creator',
+          product_description: 'Digital learning blueprints and content',
+          url: `https://betterat.com/creator/${targetUserId}`,
         },
         metadata: {
-          coach_id: coach_id,
-          user_id: user.id,
+          user_id: targetUserId,
         },
       });
 
       accountId = account.id;
 
-      // Save account ID to coach profile
-      const { error: updateError } = await supabase
-        .from('coach_profiles')
-        .update({
+      // Save to creator_stripe_accounts
+      const { error: insertError } = await supabase
+        .from('creator_stripe_accounts')
+        .upsert({
+          user_id: targetUserId,
           stripe_account_id: accountId,
-          stripe_onboarding_complete: false,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', coach_id);
+          onboarding_complete: false,
+        }, { onConflict: 'user_id' });
 
-      if (updateError) {
-        console.error('Failed to save Stripe account ID:', updateError);
+      if (insertError) {
+        console.error('Failed to save Stripe account ID:', insertError);
       }
     }
 
     // Create account onboarding link
-    const baseUrl = Deno.env.get('APP_URL') || 'https://regattaflow.com';
-    
+    const baseUrl = Deno.env.get('APP_URL') || 'https://betterat.com';
+
     const accountLink = await stripe.accountLinks.create({
       account: accountId,
-      refresh_url: refresh_url || `${baseUrl}/coach-onboarding-stripe-callback?refresh=true`,
-      return_url: return_url || `${baseUrl}/coach-onboarding-stripe-callback`,
+      refresh_url: body.refresh_url || `${baseUrl}/stripe-connect-callback?refresh=true`,
+      return_url: body.return_url || `${baseUrl}/stripe-connect-callback`,
       type: 'account_onboarding',
       collect: 'eventually_due',
     });
@@ -154,21 +173,22 @@ serve(async (req: Request) => {
       }
     );
   } catch (error) {
-    console.error('Error creating Stripe Connect account:', error);
-    
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     const isStripeError = error instanceof Stripe.errors.StripeError;
-    
+    const errorDetail = isStripeError
+      ? { message: error.message, code: error.code, type: error.type, param: error.param }
+      : { message: error instanceof Error ? error.message : String(error) };
+    console.error('Error creating Stripe Connect account:', JSON.stringify(errorDetail));
+
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         error: isStripeError ? error.message : 'Failed to create Stripe Connect account',
         code: isStripeError ? error.code : undefined,
+        detail: errorDetail,
       }),
-      { 
-        status: isStripeError ? 400 : 500, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      {
+        status: isStripeError ? 400 : 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       }
     );
   }
 });
-

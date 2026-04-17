@@ -475,38 +475,163 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) 
       .eq('course_id', metadata.course_id);
   }
 
-  // Handle blueprint purchase checkout
+  // Handle blueprint purchase/subscription checkout
   console.log(`[checkout.session.completed] metadata:`, JSON.stringify(metadata));
-  console.log(`[checkout.session.completed] payment_status: ${session.payment_status}, amount_total: ${session.amount_total}`);
+  console.log(`[checkout.session.completed] mode: ${session.mode}, payment_status: ${session.payment_status}, amount_total: ${session.amount_total}`);
   if (metadata.type === 'blueprint_purchase' && metadata.blueprint_id && metadata.user_id) {
-    console.log(`[checkout.session.completed] Processing blueprint purchase: blueprint=${metadata.blueprint_id}, user=${metadata.user_id}`);
-    await handleBlueprintPurchaseSuccess(
-      metadata.blueprint_id,
-      metadata.user_id,
-      session.payment_intent as string || session.id,
-      session.amount_total || 0
-    );
+    if (session.mode === 'subscription' && session.subscription) {
+      // Recurring blueprint subscription
+      console.log(`[checkout.session.completed] Processing blueprint subscription: blueprint=${metadata.blueprint_id}, user=${metadata.user_id}`);
+      await handleBlueprintSubscriptionCreated(
+        metadata.blueprint_id,
+        metadata.user_id,
+        session.subscription as string,
+        session.amount_total || 0
+      );
+    } else {
+      // One-time blueprint purchase
+      console.log(`[checkout.session.completed] Processing blueprint purchase: blueprint=${metadata.blueprint_id}, user=${metadata.user_id}`);
+      await handleBlueprintPurchaseSuccess(
+        metadata.blueprint_id,
+        metadata.user_id,
+        session.payment_intent as string || session.id,
+        session.amount_total || 0
+      );
 
-    // Store checkout session ID on purchase
-    const { error: updateError } = await supabase
-      .from('blueprint_purchases')
-      .update({
-        stripe_checkout_session_id: session.id,
-      })
-      .eq('buyer_id', metadata.user_id)
-      .eq('blueprint_id', metadata.blueprint_id);
-    console.log(`[checkout.session.completed] Update checkout session ID result: ${updateError ? updateError.message : 'success'}`);
-  } else {
-    console.log(`[checkout.session.completed] Not a blueprint purchase or missing metadata fields. type=${metadata.type}, blueprint_id=${metadata.blueprint_id}, user_id=${metadata.user_id}`);
+      // Store checkout session ID on purchase
+      await supabase
+        .from('blueprint_purchases')
+        .update({ stripe_checkout_session_id: session.id })
+        .eq('buyer_id', metadata.user_id)
+        .eq('blueprint_id', metadata.blueprint_id);
+    }
   }
 }
 
 /**
- * Handle subscription updates
+ * Handle new blueprint subscription from checkout
+ */
+async function handleBlueprintSubscriptionCreated(
+  blueprintId: string,
+  userId: string,
+  stripeSubscriptionId: string,
+  amountPaid: number
+) {
+  const platformFeeCents = Math.round(amountPaid * 0.15);
+
+  console.log(`[handleBlueprintSubscriptionCreated] blueprint=${blueprintId}, user=${userId}, sub=${stripeSubscriptionId}`);
+
+  // Create purchase record for the first payment
+  await supabase
+    .from('blueprint_purchases')
+    .upsert({
+      blueprint_id: blueprintId,
+      buyer_id: userId,
+      stripe_payment_intent_id: stripeSubscriptionId,
+      amount_paid_cents: amountPaid,
+      platform_fee_cents: platformFeeCents,
+      status: 'completed',
+      purchased_at: new Date().toISOString(),
+    }, { onConflict: 'blueprint_id,buyer_id' });
+
+  // Create/update subscription record with Stripe subscription ID
+  await supabase
+    .from('blueprint_subscriptions')
+    .upsert({
+      blueprint_id: blueprintId,
+      subscriber_id: userId,
+      subscribed_at: new Date().toISOString(),
+      stripe_subscription_id: stripeSubscriptionId,
+      subscription_status: 'active',
+    }, { onConflict: 'blueprint_id,subscriber_id' });
+
+  // Increment subscriber count
+  await supabase.rpc('increment_blueprint_subscriber_count', {
+    p_blueprint_id: blueprintId,
+  });
+
+  // Notify creator
+  const { data: blueprint } = await supabase
+    .from('timeline_blueprints')
+    .select('title, user_id')
+    .eq('id', blueprintId)
+    .single();
+
+  const { data: buyer } = await supabase
+    .from('users')
+    .select('email, full_name')
+    .eq('id', userId)
+    .single();
+
+  if (blueprint?.user_id) {
+    const formattedAmount = (amountPaid / 100).toFixed(2);
+    try {
+      await supabase.functions.invoke('send-push-notification', {
+        body: {
+          recipients: [{
+            userId: blueprint.user_id,
+            title: 'New Blueprint Subscriber!',
+            body: `${buyer?.full_name || 'Someone'} subscribed to "${blueprint.title}" ($${formattedAmount}/mo)`,
+            data: { type: 'blueprint_subscription', blueprintId },
+            category: 'payments',
+          }],
+        },
+      });
+    } catch (e) {
+      console.error('Failed to send subscription push:', e);
+    }
+  }
+
+  // Send confirmation email to buyer
+  if (buyer?.email) {
+    try {
+      await supabase.functions.invoke('send-email', {
+        body: {
+          to: buyer.email,
+          subject: `Subscription Confirmed: ${blueprint?.title || 'Blueprint'}`,
+          html: `
+            <h2>Welcome to Your New Blueprint!</h2>
+            <p>Hi ${buyer.full_name || 'there'},</p>
+            <p>Your subscription is active for:</p>
+            <h3>${blueprint?.title || 'Your Blueprint'}</h3>
+            <p>You'll receive new steps as the creator publishes them. Cancel anytime from your settings.</p>
+            <p>Thank you for choosing BetterAt!</p>
+          `,
+        },
+      });
+    } catch (e) {
+      console.error('Failed to send subscription email:', e);
+    }
+  }
+}
+
+/**
+ * Handle subscription updates (platform subscriptions + blueprint subscriptions)
  */
 async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
   const customerId = subscription.customer as string;
+  const metadata = subscription.metadata || {};
 
+  // ── Blueprint subscription update ──
+  if (metadata.type === 'blueprint_purchase' && metadata.blueprint_id) {
+    const statusMap: Record<string, string> = {
+      active: 'active', past_due: 'past_due', canceled: 'canceled',
+      unpaid: 'unpaid', incomplete: 'unpaid', incomplete_expired: 'canceled',
+    };
+    const mappedStatus = statusMap[subscription.status] || 'active';
+
+    await supabase
+      .from('blueprint_subscriptions')
+      .update({
+        subscription_status: mappedStatus,
+      })
+      .eq('stripe_subscription_id', subscription.id);
+
+    console.log(`[handleSubscriptionUpdate] Blueprint subscription ${subscription.id} → ${mappedStatus}`);
+    return;
+  }
+
+  // ── Platform subscription update (existing logic) ──
   // Find user by Stripe customer ID
   const { data: user } = await supabase
     .from('users')
@@ -679,6 +804,20 @@ function generateInviteCode(): string {
  * Handle subscription deletion
  */
 async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
+  const metadata = subscription.metadata || {};
+
+  // ── Blueprint subscription canceled ──
+  if (metadata.type === 'blueprint_purchase') {
+    await supabase
+      .from('blueprint_subscriptions')
+      .update({ subscription_status: 'canceled' })
+      .eq('stripe_subscription_id', subscription.id);
+
+    console.log(`[handleSubscriptionDeleted] Blueprint subscription ${subscription.id} canceled`);
+    return;
+  }
+
+  // ── Platform subscription canceled (existing logic) ──
   const customerId = subscription.customer as string;
 
   const { data: user } = await supabase
@@ -864,8 +1003,23 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
  * Handle Stripe Connect account updates
  */
 async function handleAccountUpdated(account: Stripe.Account) {
-  // Update coach profile with account status
-  const { error } = await supabase
+  // Update creator_stripe_accounts (generic creator table)
+  const { error: creatorError } = await supabase
+    .from('creator_stripe_accounts')
+    .update({
+      charges_enabled: account.charges_enabled ?? false,
+      payouts_enabled: account.payouts_enabled ?? false,
+      onboarding_complete: account.details_submitted ?? false,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('stripe_account_id', account.id);
+
+  if (creatorError) {
+    console.error('Failed to update creator_stripe_accounts:', creatorError);
+  }
+
+  // Also update legacy coach_profiles for backward compat
+  await supabase
     .from('coach_profiles')
     .update({
       stripe_details_submitted: account.details_submitted,
@@ -874,10 +1028,6 @@ async function handleAccountUpdated(account: Stripe.Account) {
       updated_at: new Date().toISOString(),
     })
     .eq('stripe_account_id', account.id);
-
-  if (error) {
-    console.error('Failed to update coach profile:', error);
-  }
 }
 
 /**
@@ -906,12 +1056,31 @@ async function handleTransferCreated(transfer: Stripe.Transfer) {
  * Handle payout to connected account
  */
 async function handlePayoutPaid(payout: Stripe.Payout, accountId: string) {
-  // Find coach by Stripe account
+  // Find creator by Stripe account (check generic table first, then legacy coach_profiles)
+  let creatorUserId: string | null = null;
+  let creatorCurrency: string | null = null;
+
+  const { data: creator } = await supabase
+    .from('creator_stripe_accounts')
+    .select('user_id')
+    .eq('stripe_account_id', accountId)
+    .maybeSingle();
+
+  if (creator) {
+    creatorUserId = creator.user_id;
+  }
+
+  // Fallback to coach_profiles for legacy accounts
   const { data: coach } = await supabase
     .from('coach_profiles')
     .select('id, user_id, currency')
     .eq('stripe_account_id', accountId)
-    .single();
+    .maybeSingle();
+
+  if (coach) {
+    creatorUserId = creatorUserId || coach.user_id;
+    creatorCurrency = coach.currency;
+  }
 
   if (coach) {
     // BUG 2: Use upsert to handle webhook retries gracefully
@@ -958,12 +1127,18 @@ async function handlePayoutPaid(payout: Stripe.Payout, accountId: string) {
  * Handle failed payout to connected account
  */
 async function handlePayoutFailed(payout: Stripe.Payout, accountId: string) {
-  // Find coach by Stripe account
+  // Find creator by Stripe account (check generic table first, then legacy)
+  const { data: creator } = await supabase
+    .from('creator_stripe_accounts')
+    .select('user_id')
+    .eq('stripe_account_id', accountId)
+    .maybeSingle();
+
   const { data: coach } = await supabase
     .from('coach_profiles')
     .select('id, user_id, currency')
     .eq('stripe_account_id', accountId)
-    .single();
+    .maybeSingle();
 
   if (coach) {
     // BUG 2: Use upsert to handle webhook retries gracefully

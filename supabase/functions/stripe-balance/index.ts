@@ -50,48 +50,60 @@ serve(async (req: Request) => {
       );
     }
 
-    // Get coachId from query params
+    // Get userId/coachId from query params (coachId is legacy)
     const url = new URL(req.url);
-    const coachId = url.searchParams.get('coachId');
-    const userId = url.searchParams.get('userId');
+    const targetUserId = url.searchParams.get('coachId') || url.searchParams.get('userId');
 
-    if (!coachId) {
+    if (!targetUserId) {
       return new Response(
-        JSON.stringify({ error: 'coachId is required' }),
+        JSON.stringify({ error: 'userId or coachId is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Get coach profile
-    const { data: coachProfile, error: profileError } = await supabase
-      .from('coach_profiles')
-      .select('*')
-      .eq('id', coachId)
+    // Resolve Stripe account ID: check creator_stripe_accounts first, fall back to coach_profiles
+    let stripeAccountId: string | null = null;
+
+    // 1) creator_stripe_accounts (new: any blueprint seller)
+    const { data: creatorAccount } = await supabase
+      .from('creator_stripe_accounts')
+      .select('stripe_account_id')
+      .eq('user_id', targetUserId)
       .single();
 
-    if (profileError || !coachProfile) {
-      return new Response(
-        JSON.stringify({ error: 'Coach profile not found' }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    if (creatorAccount?.stripe_account_id) {
+      stripeAccountId = creatorAccount.stripe_account_id;
     }
 
-    // Verify ownership
-    if (coachProfile.user_id !== user.id) {
+    // 2) Fall back to coach_profiles (legacy coaches)
+    if (!stripeAccountId) {
+      const { data: coachProfile } = await supabase
+        .from('coach_profiles')
+        .select('stripe_account_id, user_id')
+        .or(`id.eq.${targetUserId},user_id.eq.${targetUserId}`)
+        .single();
+
+      if (coachProfile?.stripe_account_id) {
+        stripeAccountId = coachProfile.stripe_account_id;
+      }
+    }
+
+    // Verify the requesting user owns this account
+    if (targetUserId !== user.id) {
       return new Response(
-        JSON.stringify({ error: 'Not authorized to access this coach profile' }),
+        JSON.stringify({ error: 'Not authorized to access this account' }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     // Check for Stripe account
-    if (!coachProfile.stripe_account_id) {
+    if (!stripeAccountId) {
       return new Response(
-        JSON.stringify({ 
-          available: 0, 
-          pending: 0, 
+        JSON.stringify({
+          available: 0,
+          pending: 0,
           currency: 'usd',
-          error: 'No Stripe Connect account found' 
+          error: 'No Stripe Connect account found'
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -99,7 +111,7 @@ serve(async (req: Request) => {
 
     // Get balance from Stripe using the connected account
     const balance = await stripe.balance.retrieve({
-      stripeAccount: coachProfile.stripe_account_id,
+      stripeAccount: stripeAccountId,
     });
 
     // Sum up balances (there might be multiple currencies)
