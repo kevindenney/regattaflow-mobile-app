@@ -86,120 +86,26 @@ type IndexedRace = { race: CardRaceData; index: number };
 // HELPERS
 // =============================================================================
 
-const MONTH_NAMES = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-];
-
 /**
- * Group races by month, optionally sorting within each group.
- * - 'planned': steps first (NEXT/actionable), then plan-phase items, by date asc
- * - 'done': chronological (oldest left → most recent right)
- * - undefined: preserve original array order
+ * Return a single flat group of indexed races.
+ *
+ * Dates no longer drive positioning — steps are ordered by `sort_order`
+ * (manual order, creation order for new items) within each side of TODAY.
+ * Done/planned split is handled by the caller via `isItemPast`; this helper
+ * just preserves the caller's array order.
+ *
+ * Historical shape: this previously returned one group per month with an
+ * "Unscheduled" bucket slotted adjacent to NOW. That's been retired — the
+ * two sections (above/below TODAY) are enough structure.
  */
 function groupByMonthIndexed(
   indexedRaces: IndexedRace[],
-  sortMode?: 'planned' | 'done',
-  nextRaceIdx?: number | null,
-  preserveOrder = false,
+  _sortMode?: 'planned' | 'done',
+  _nextRaceIdx?: number | null,
+  _preserveOrder = false,
 ): MonthGroup[] {
-  // In reorder mode, keep everything in one flat group so drag works across months,
-  // and preserve the caller's order (which reflects the user's manual reorders).
-  // Sorting by date here would undo every move the user makes.
-  if (preserveOrder) {
-    return [{ key: 'all', label: '', races: indexedRaces }];
-  }
-
-  const groups = new Map<string, MonthGroup>();
-  const undated: IndexedRace[] = [];
-
-  // Track the start-of-month epoch so we can split past vs. future months
-  // relative to NOW without re-parsing dates later.
-  const groupMonthMs = new Map<string, number>();
-
-  indexedRaces.forEach(({ race, index }) => {
-    const dateStr = (race as any).start_date || race.date;
-    if (!dateStr) {
-      undated.push({ race, index });
-      return;
-    }
-    const d = new Date(dateStr);
-    const year = d.getFullYear();
-    const month = d.getMonth();
-    const key = `${year}-${String(month).padStart(2, '0')}`;
-    const label = `${MONTH_NAMES[month]} ${year}`;
-
-    if (!groups.has(key)) {
-      groups.set(key, { key, label, races: [] });
-      groupMonthMs.set(key, new Date(year, month, 1).getTime());
-    }
-    groups.get(key)!.races.push({ race, index });
-  });
-
-  // Partition month groups into past vs. future relative to the first day
-  // of the current month. The "Unscheduled" bucket slots between them so
-  // undated steps always sit adjacent to NOW.
-  const now = new Date();
-  const currentMonthStartMs = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-  const sortedMonthKeys = Array.from(groups.keys()).sort((a, b) => a.localeCompare(b));
-  const pastMonths: MonthGroup[] = [];
-  const futureMonths: MonthGroup[] = [];
-  for (const key of sortedMonthKeys) {
-    const group = groups.get(key)!;
-    const monthMs = groupMonthMs.get(key) ?? 0;
-    if (monthMs < currentMonthStartMs) pastMonths.push(group);
-    else futureMonths.push(group);
-  }
-
-  const result: MonthGroup[] = [...pastMonths];
-  if (undated.length > 0) {
-    result.push({ key: 'unscheduled', label: 'Unscheduled', races: undated });
-  }
-  result.push(...futureMonths);
-
-  if (!preserveOrder) {
-    if (sortMode === 'planned') {
-      // Within each month: chronological by date, with sort_order as tie-breaker.
-      // This matches reorder mode and card view order so all views are consistent.
-      for (const group of result) {
-        group.races.sort((a, b) => {
-          const aDate = (a.race as any).start_date || a.race.date;
-          const bDate = (b.race as any).start_date || b.race.date;
-          if (!aDate && !bDate) {
-            // Both undated: sort by sort_order DESC so newly created steps
-            // appear at the TOP of the Unscheduled bucket (next to TODAY),
-            // not buried at the end. sort_order is a monotonic epoch delta
-            // per the create_timeline_step RPC, so DESC = newest first.
-            const aSortOrder = (a.race as any).sort_order ?? 0;
-            const bSortOrder = (b.race as any).sort_order ?? 0;
-            return bSortOrder - aSortOrder;
-          }
-          if (!aDate) return 1;
-          if (!bDate) return -1;
-          const dateDiff = new Date(aDate).getTime() - new Date(bDate).getTime();
-          if (dateDiff !== 0) return dateDiff;
-          // Same date: sort by sort_order
-          const aSortOrder = (a.race as any).sort_order ?? 999;
-          const bSortOrder = (b.race as any).sort_order ?? 999;
-          return aSortOrder - bSortOrder;
-        });
-      }
-    } else if (sortMode === 'done') {
-      // Within each month: chronological order (oldest left → most recent right)
-      for (const group of result) {
-        group.races.sort((a, b) => {
-          const aDate = (a.race as any).start_date || a.race.date;
-          const bDate = (b.race as any).start_date || b.race.date;
-          if (!aDate && !bDate) return 0;
-          if (!aDate) return 1;
-          if (!bDate) return -1;
-          return new Date(aDate).getTime() - new Date(bDate).getTime();
-        });
-      }
-    }
-  }
-
-  return result;
+  if (indexedRaces.length === 0) return [];
+  return [{ key: 'all', label: '', races: indexedRaces }];
 }
 
 function isStepOverdue(race: CardRaceData): boolean {
@@ -1329,7 +1235,9 @@ export function TimelineGridView({
 
           return (
             <View key={`done-${group.key}`} style={gridStyles.monthSection}>
-              <Text style={gridStyles.monthHeaderDone}>{group.label}</Text>
+              {group.label ? (
+                <Text style={gridStyles.monthHeaderDone}>{group.label}</Text>
+              ) : null}
               <View style={{ gap }}>{doneRows}</View>
             </View>
           );

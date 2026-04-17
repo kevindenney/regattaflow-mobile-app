@@ -14,10 +14,9 @@ export function timelineStepToCardRaceData(step: TimelineStepRecord): CardRaceDa
     name: step.title,
     interest_id: step.interest_id,
     venue: step.location_name ?? '',
-    // Only surface a `date` when the user has set an explicit due date.
-    // `due_at` is the sole anchor for timeline ordering (see lib/races/anchorDate.ts).
-    // `starts_at` is deliberately not consulted here — it is null for new steps
-    // and a stale artifact on older rows that would misflag fresh steps as "past".
+    // Surface the due date as `date` so cards can display it. Dates are
+    // metadata only — positioning on the timeline is driven by status +
+    // sort_order (see lib/races/timelineCompare.ts), not by date.
     date: step.due_at || undefined,
     status: STATUS_MAP[step.status] ?? 'scheduled',
     created_by: step.user_id,

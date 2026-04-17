@@ -4496,8 +4496,6 @@ export default function RacesScreen() {
                     subscribedBlueprints={subscribedBlueprints ?? []}
                     myTimelineSteps={myTimelineSteps}
                     onOpenAdoptedStep={(stepId) => {
-                      // eslint-disable-next-line no-console
-                      console.log('[races.tsx] onOpenAdoptedStep fired', { stepId });
                       // Directly select + scroll to the step in-place. We set
                       // the pending-scroll ref so TimelineGridView's scroll
                       // effect triggers; otherwise selectedRaceId only
