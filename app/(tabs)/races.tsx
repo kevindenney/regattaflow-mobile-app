@@ -93,7 +93,7 @@ import { createStep as createTimelineStep, deleteStep as deleteTimelineStep } fr
 import { timelineStepsToCardRaceData } from '@/lib/timeline/timelineStepAdapter';
 import { StepFilterBar, type StepFilters } from '@/components/step/StepFilterBar';
 import { StepDetailContent } from '@/components/step/StepDetailContent';
-import { PeerTimelinesFooter } from '@/components/blueprint/PeerTimelinesFooter';
+import { BlueprintPanelsStack } from '@/components/cards/BlueprintPanelsStack';
 import { PublishBlueprintSheet } from '@/components/blueprint/PublishBlueprintSheet';
 import { useUserBlueprints, useSubscribedBlueprints, useSuggestedNextSteps, useAdoptBlueprintStep, useDismissBlueprintStep } from '@/hooks/useBlueprint';
 import { useScrollToolbarHide } from '@/hooks/useScrollToolbarHide';
@@ -3852,12 +3852,10 @@ export default function RacesScreen() {
                 blueprintTitle={timelineBlueprintTitle}
                 blueprintSlug={timelineBlueprintSlug}
                 renderFooter={!isViewingOtherTimeline ? () => (
-                  <PeerTimelinesFooter
+                  <BlueprintPanelsStack
                     interestId={currentInterest?.id}
-                    interestSlug={currentInterest?.slug}
-                    orgId={activeOrganization?.id}
-                    orgName={activeOrganization?.name}
-                    hasOrg={!!activeOrganization?.id}
+                    subscribedBlueprints={subscribedBlueprints ?? []}
+                    myTimelineSteps={myTimelineSteps}
                   />
                 ) : undefined}
               />
