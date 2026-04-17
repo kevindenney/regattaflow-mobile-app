@@ -11,7 +11,15 @@ import type { Interest, DomainWithInterests } from '@/providers/InterestProvider
 import { useAuth } from '@/providers/AuthProvider'
 import { router } from 'expo-router'
 import { showConfirm } from '@/lib/utils/crossPlatformAlert'
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
+
+// Imperative opener so other parts of the app (e.g. the guest sample banner)
+// can pop the same sheet without prop-drilling. The mounted InterestSwitcher
+// registers its setOpen on mount and clears it on unmount.
+let externalOpener: (() => void) | null = null
+export function openInterestSwitcher() {
+  externalOpener?.()
+}
 import {
   Modal,
   Platform,
@@ -50,9 +58,18 @@ function groupByDomain(
 }
 
 export function InterestSwitcher() {
-  const { currentInterest, userInterests, allInterests, groupedInterests, switchInterest, removeInterest, loading } = useInterest()
+  const { currentInterest, userInterests, groupedInterests, domains, switchInterest, removeInterest, loading } = useInterest()
   const { signedIn } = useAuth()
   const [open, setOpen] = useState(false)
+
+  // Register the imperative opener so callers anywhere in the tree can pop the sheet
+  useEffect(() => {
+    const opener = () => setOpen(true)
+    externalOpener = opener
+    return () => {
+      if (externalOpener === opener) externalOpener = null
+    }
+  }, [])
 
   // Group user interests by domain
   const userGroups = useMemo(
@@ -60,15 +77,6 @@ export function InterestSwitcher() {
     [userInterests, groupedInterests],
   )
 
-  // Interests the user hasn't added yet, grouped by domain
-  const otherInterests = useMemo(
-    () => allInterests.filter((ai) => !userInterests.some((ui) => ui.slug === ai.slug)),
-    [allInterests, userInterests],
-  )
-  const otherGroups = useMemo(
-    () => groupByDomain(otherInterests, groupedInterests),
-    [otherInterests, groupedInterests],
-  )
 
   if (loading || userInterests.length === 0) return null
 
@@ -94,10 +102,6 @@ export function InterestSwitcher() {
     )
   }
 
-  const handleExploreMore = () => {
-    setOpen(false)
-    router.push('/interests' as any)
-  }
 
   const renderInterestRow = (interest: Interest, isUserSection: boolean) => {
     const isActive = interest.slug === currentInterest?.slug
@@ -185,36 +189,48 @@ export function InterestSwitcher() {
             <ScrollView showsVerticalScrollIndicator={false}>
               {!signedIn ? (
                 <>
-                  <Text style={styles.sheetTitle}>Explore Interests</Text>
+                  <Text style={styles.sheetTitle}>Switch Interest</Text>
                   <Text style={styles.guestDescription}>
-                    Sign up to customize your interests, track progress, and unlock personalized content.
+                    Pick a different interest to explore. You can add more after signing up.
                   </Text>
 
-                  {/* Let guests browse and switch, but not remove */}
+                  {/* Current interest — highlighted at top */}
+                  {currentInterest && (
+                    <View style={styles.guestCurrentRow}>
+                      <View style={[styles.rowDot, { backgroundColor: currentInterest.accent_color }]} />
+                      <Text style={styles.guestCurrentLabel} numberOfLines={1}>
+                        {currentInterest.name}
+                      </Text>
+                      <View style={styles.guestCurrentBadge}>
+                        <Text style={styles.guestCurrentBadgeText}>Current</Text>
+                      </View>
+                    </View>
+                  )}
+
+                  <View style={styles.divider} />
+
+                  {/* All interests grouped by domain */}
                   {userGroups.map((group) => (
                     <View key={group.domain?.slug ?? 'ungrouped'}>
-                      {showDomainHeaders && group.domain && (
+                      {group.domain && (
                         <Text style={styles.domainHeader}>{group.domain.name}</Text>
                       )}
-                      {group.interests.map((interest) => {
-                        const isActive = interest.slug === currentInterest?.slug
-                        return (
+                      {group.interests
+                        .filter((i) => i.slug !== currentInterest?.slug)
+                        .map((interest) => (
                           <TouchableOpacity
                             key={interest.id}
-                            style={[styles.row, isActive && styles.rowActive]}
+                            style={styles.guestSwitchRow}
                             onPress={() => handleSelect(interest)}
                             activeOpacity={0.7}
                           >
-                            <View style={styles.rowMain}>
-                              <View style={[styles.rowDot, { backgroundColor: interest.accent_color }]} />
-                              <Text style={[styles.rowLabel, isActive && styles.rowLabelActive]} numberOfLines={1}>
-                                {interest.name}
-                              </Text>
-                              {isActive && <Ionicons name="checkmark" size={18} color="#1F2937" />}
-                            </View>
+                            <View style={[styles.rowDot, { backgroundColor: interest.accent_color }]} />
+                            <Text style={styles.rowLabel} numberOfLines={1}>
+                              {interest.name}
+                            </Text>
+                            <Ionicons name="arrow-forward" size={14} color="#94A3B8" />
                           </TouchableOpacity>
-                        )
-                      })}
+                        ))}
                     </View>
                   ))}
 
@@ -227,8 +243,8 @@ export function InterestSwitcher() {
                       router.push('/(auth)/signup')
                     }}
                   >
-                    <Ionicons name="person-add-outline" size={18} color="#FFFFFF" />
-                    <Text style={styles.signUpBtnText}>Sign Up to Customize</Text>
+                    <Ionicons name="sparkles-outline" size={18} color="#FFFFFF" />
+                    <Text style={styles.signUpBtnText}>Sign up to customize</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
@@ -251,28 +267,20 @@ export function InterestSwitcher() {
                     </View>
                   ))}
 
-                  {/* Explore more interests */}
+                  {/* Add interest button */}
                   <View style={styles.divider} />
-
-                  {otherGroups.length > 0 && (
-                    <Text style={styles.sectionLabel}>Explore More</Text>
-                  )}
-                  {otherGroups.map((group) => (
-                    <View key={group.domain?.slug ?? 'ungrouped-explore'}>
-                      {otherGroups.length > 1 && group.domain && (
-                        <Text style={styles.domainHeader}>{group.domain.name}</Text>
-                      )}
-                      {group.interests.slice(0, 3).map((interest) => renderInterestRow(interest, false))}
-                    </View>
-                  ))}
 
                   <TouchableOpacity
                     style={styles.exploreAllBtn}
-                    onPress={handleExploreMore}
+                    onPress={() => {
+                      setOpen(false)
+                      router.push({ pathname: '/(tabs)/discover', params: { segment: 'interests' } })
+                    }}
                   >
                     <Ionicons name="add-circle-outline" size={18} color="#4338CA" />
-                    <Text style={styles.exploreAllText}>Explore All Interests</Text>
+                    <Text style={styles.exploreAllText}>Add Interest</Text>
                   </TouchableOpacity>
+
 
                   <TouchableOpacity
                     style={styles.closeBtn}
@@ -450,6 +458,44 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     paddingHorizontal: 4,
   },
+  guestCurrentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: '#F0F4FF',
+    borderWidth: 1,
+    borderColor: 'rgba(37, 99, 235, 0.15)',
+  },
+  guestCurrentLabel: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+  guestCurrentBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: '#2563EB',
+  },
+  guestCurrentBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.3,
+  },
+  guestSwitchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    ...Platform.select({ web: { cursor: 'pointer' } }),
+  },
   signUpBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -459,7 +505,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 20,
     borderRadius: 12,
-    backgroundColor: '#4338CA',
+    backgroundColor: '#2563EB',
     ...Platform.select({ web: { cursor: 'pointer' } }),
   },
   signUpBtnText: {
@@ -467,6 +513,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#FFFFFF',
   },
+
 
   // Close
   closeBtn: {

@@ -1,7 +1,8 @@
 /**
  * WelcomeCard — Centered modal card shown after signup.
  *
- * Interest-aware welcome screen with quick links to important features.
+ * Personalized, interest-aware welcome with clear next actions.
+ * BetterAt brand: blue accent, cream feel, Manrope-style typography.
  */
 
 import React from 'react';
@@ -10,6 +11,7 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
+  Platform,
   useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,97 +23,80 @@ export interface WelcomeCardProps {
   onSkip: () => void;
   onNavigate?: (route: string) => void;
   interestSlug?: string | null;
+  userName?: string | null;
 }
 
-interface QuickLink {
+interface QuickAction {
   icon: keyof typeof Ionicons.glyphMap;
   title: string;
   description: string;
   route: string;
-  color: string;
 }
 
-const SAILING_LINKS: QuickLink[] = [
+const SAILING_ACTIONS: QuickAction[] = [
   {
-    icon: 'add-circle',
-    title: 'Add a Race',
-    description: 'Track an upcoming regatta',
+    icon: 'add-circle-outline',
+    title: 'Add your first race',
+    description: 'Track an upcoming regatta on your timeline',
     route: '/(tabs)/races',
-    color: '#2563EB',
   },
   {
-    icon: 'school',
-    title: 'Learn Tactics',
-    description: 'Racing strategies & tips',
-    route: '/(tabs)/learn',
-    color: '#059669',
+    icon: 'compass-outline',
+    title: 'Browse programs',
+    description: 'Discover training plans and blueprints',
+    route: '/(tabs)/discover',
   },
   {
-    icon: 'people',
-    title: 'Find a Coach',
-    description: 'Connect with sailing coaches',
-    route: '/coach/discover',
-    color: '#7C3AED',
+    icon: 'people-outline',
+    title: 'Find people',
+    description: 'Connect with coaches and fellow sailors',
+    route: '/(tabs)/discover',
   },
 ];
 
-const GENERIC_LINKS: QuickLink[] = [
+const GENERIC_ACTIONS: QuickAction[] = [
   {
-    icon: 'add-circle',
-    title: 'Add a Step',
-    description: 'Create your first timeline step',
+    icon: 'add-circle-outline',
+    title: 'Add your first step',
+    description: 'Create a timeline step to track your progress',
     route: '/(tabs)/races',
-    color: '#2563EB',
   },
   {
-    icon: 'compass',
-    title: 'Browse Programs',
+    icon: 'compass-outline',
+    title: 'Browse programs',
     description: 'Discover pathways and blueprints',
-    route: '/(tabs)/learn',
-    color: '#059669',
+    route: '/(tabs)/discover',
   },
   {
-    icon: 'people',
-    title: 'Find People',
+    icon: 'people-outline',
+    title: 'Find people',
     description: 'Connect with peers and mentors',
-    route: '/(tabs)/connect',
-    color: '#7C3AED',
+    route: '/(tabs)/discover',
   },
 ];
 
 const SAILING_SLUGS = new Set(['sail-racing', 'sailing']);
 
-function getLinks(interestSlug?: string | null): QuickLink[] {
-  if (interestSlug && SAILING_SLUGS.has(interestSlug)) return SAILING_LINKS;
-  return GENERIC_LINKS;
+function getActions(interestSlug?: string | null): QuickAction[] {
+  if (interestSlug && SAILING_SLUGS.has(interestSlug)) return SAILING_ACTIONS;
+  return GENERIC_ACTIONS;
 }
 
-function getTitle(interestSlug?: string | null): string {
-  if (interestSlug && SAILING_SLUGS.has(interestSlug)) return 'Welcome to BetterAt Sailing!';
-  return 'Welcome to BetterAt!';
+function getFirstName(fullName?: string | null): string {
+  if (!fullName) return '';
+  return fullName.split(/\s+/)[0];
 }
 
-function getDescription(interestSlug?: string | null): string {
-  if (interestSlug && SAILING_SLUGS.has(interestSlug)) {
-    return 'Your sailing race companion. Here\'s how to get started:';
-  }
-  return 'Track your progress, learn from others, and reach your goals. Here\'s how to get started:';
-}
-
-function getIcon(interestSlug?: string | null): string {
-  if (interestSlug && SAILING_SLUGS.has(interestSlug)) return '⛵';
-  return '🚀';
-}
-
-export function WelcomeCard({ visible, onStartTour, onSkip, onNavigate, interestSlug }: WelcomeCardProps) {
+export function WelcomeCard({ visible, onStartTour, onSkip, onNavigate, interestSlug, userName }: WelcomeCardProps) {
   const { width } = useWindowDimensions();
 
   if (!visible) return null;
 
   const cardWidth = Math.min(380, width - 40);
-  const links = getLinks(interestSlug);
+  const actions = getActions(interestSlug);
+  const firstName = getFirstName(userName);
 
-  const handleQuickLink = (route: string) => {
+  const handleAction = (route: string) => {
     onSkip(); // Dismiss the card
     onNavigate?.(route);
   };
@@ -123,49 +108,59 @@ export function WelcomeCard({ visible, onStartTour, onSkip, onNavigate, interest
       style={styles.backdrop}
     >
       <View style={[styles.card, { width: cardWidth }]}>
-        <Text style={styles.emoji}>{getIcon(interestSlug)}</Text>
-        <Text style={styles.title}>{getTitle(interestSlug)}</Text>
+        {/* Brand icon */}
+        <View style={styles.iconCircle}>
+          <Ionicons name="sparkles" size={24} color="#2563EB" />
+        </View>
+
+        {/* Greeting */}
+        <Text style={styles.title}>
+          {firstName ? `Welcome, ${firstName}!` : 'Welcome!'}
+        </Text>
         <Text style={styles.description}>
-          {getDescription(interestSlug)}
+          You're all set with 14 days of Pro access.{'\n'}Here are a few ways to get started:
         </Text>
 
-        {/* Quick Links */}
-        <View style={styles.linksContainer}>
-          {links.map((link, index) => (
+        {/* Quick actions */}
+        <View style={styles.actionsContainer}>
+          {actions.map((action, index) => (
             <TouchableOpacity
               key={index}
-              style={styles.linkButton}
-              onPress={() => handleQuickLink(link.route)}
+              style={styles.actionRow}
+              onPress={() => handleAction(action.route)}
               activeOpacity={0.7}
             >
-              <View style={[styles.linkIcon, { backgroundColor: `${link.color}15` }]}>
-                <Ionicons name={link.icon} size={24} color={link.color} />
+              <View style={styles.actionIcon}>
+                <Ionicons name={action.icon} size={20} color="#2563EB" />
               </View>
-              <View style={styles.linkContent}>
-                <Text style={styles.linkTitle}>{link.title}</Text>
-                <Text style={styles.linkDescription}>{link.description}</Text>
+              <View style={styles.actionContent}>
+                <Text style={styles.actionTitle}>{action.title}</Text>
+                <Text style={styles.actionDescription}>{action.description}</Text>
               </View>
-              <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
+              <Ionicons name="chevron-forward" size={16} color="#CBD5E1" />
             </TouchableOpacity>
           ))}
         </View>
 
+        {/* Primary dismiss */}
         <TouchableOpacity
-          style={styles.dismissButton}
+          style={styles.exploreButton}
           onPress={onSkip}
-          activeOpacity={0.7}
+          activeOpacity={0.85}
         >
-          <Text style={styles.dismissButtonText}>Got it, let me explore</Text>
+          <Text style={styles.exploreButtonText}>Got it, let me explore</Text>
         </TouchableOpacity>
       </View>
     </Animated.View>
   );
 }
 
+const ACCENT = '#2563EB';
+
 const styles = StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 1100,
@@ -173,73 +168,118 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
-    paddingVertical: 28,
+    paddingTop: 28,
+    paddingBottom: 20,
     paddingHorizontal: 24,
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.2,
     shadowRadius: 24,
     elevation: 16,
   },
-  emoji: {
-    fontSize: 48,
-    marginBottom: 12,
+  iconCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: 'rgba(37, 99, 235, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(37, 99, 235, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
   },
   title: {
     fontSize: 22,
-    fontWeight: '800',
+    fontWeight: '700',
     color: '#0F172A',
     textAlign: 'center',
     marginBottom: 8,
+    letterSpacing: -0.3,
+    ...Platform.select({
+      ios: { fontFamily: 'Manrope-Bold' },
+      android: { fontFamily: 'Manrope-Bold' },
+      web: { fontFamily: 'Manrope, system-ui, sans-serif', fontWeight: '700' as const },
+    }),
   },
   description: {
-    fontSize: 15,
-    color: '#475569',
+    fontSize: 14,
+    color: '#64748B',
     textAlign: 'center',
-    lineHeight: 22,
+    lineHeight: 20,
     marginBottom: 20,
+    ...Platform.select({
+      ios: { fontFamily: 'Manrope-Regular' },
+      android: { fontFamily: 'Manrope-Regular' },
+      web: { fontFamily: 'Manrope, system-ui, sans-serif' },
+    }),
   },
-  linksContainer: {
+  actionsContainer: {
     width: '100%',
     marginBottom: 16,
+    gap: 2,
   },
-  linkButton: {
+  actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8FAFC',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
     borderRadius: 12,
-    padding: 14,
-    marginBottom: 10,
   },
-  linkIcon: {
-    width: 44,
-    height: 44,
+  actionIcon: {
+    width: 36,
+    height: 36,
     borderRadius: 10,
+    backgroundColor: 'rgba(37, 99, 235, 0.08)',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
   },
-  linkContent: {
+  actionContent: {
     flex: 1,
   },
-  linkTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#0F172A',
-    marginBottom: 2,
-  },
-  linkDescription: {
-    fontSize: 13,
-    color: '#64748B',
-  },
-  dismissButton: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-  },
-  dismissButtonText: {
+  actionTitle: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#2563EB',
+    color: '#0F172A',
+    marginBottom: 1,
+    ...Platform.select({
+      ios: { fontFamily: 'Manrope-SemiBold' },
+      android: { fontFamily: 'Manrope-SemiBold' },
+      web: { fontFamily: 'Manrope, system-ui, sans-serif', fontWeight: '600' as const },
+    }),
+  },
+  actionDescription: {
+    fontSize: 13,
+    color: '#94A3B8',
+    ...Platform.select({
+      ios: { fontFamily: 'Manrope-Regular' },
+      android: { fontFamily: 'Manrope-Regular' },
+      web: { fontFamily: 'Manrope, system-ui, sans-serif' },
+    }),
+  },
+  exploreButton: {
+    backgroundColor: ACCENT,
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+    width: '100%',
+    alignItems: 'center',
+    shadowColor: ACCENT,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  exploreButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.1,
+    ...Platform.select({
+      ios: { fontFamily: 'Manrope-Bold' },
+      android: { fontFamily: 'Manrope-Bold' },
+      web: { fontFamily: 'Manrope, system-ui, sans-serif', fontWeight: '700' as const },
+    }),
   },
 });

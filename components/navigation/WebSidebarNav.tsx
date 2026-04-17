@@ -16,6 +16,7 @@ import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { usePathname, useRouter } from 'expo-router';
+import { BetterAtLogo } from '@/components/BetterAtLogo';
 import { useAuth } from '@/providers/AuthProvider';
 import { useWebDrawer } from '@/providers/WebDrawerProvider';
 
@@ -36,7 +37,7 @@ interface WebSidebarNavProps {
 
 function WebSidebarNav({ onClose }: WebSidebarNavProps) {
   const { userType, isGuest } = useAuth();
-  const { isPinned, togglePin, closeDrawer } = useWebDrawer();
+  const { isPinned, toggleDrawer } = useWebDrawer();
   const { vocabulary } = useVocabulary();
   const { memberships, activeDomain } = useOrganization();
   const pathname = usePathname();
@@ -63,12 +64,9 @@ function WebSidebarNav({ onClose }: WebSidebarNavProps) {
     }
   };
 
-  // Handle sidebar toggle - if pinned, unpin and close; otherwise just close
+  // Handle sidebar toggle — toggleDrawer atomically unpins + closes in one batch
   const handleToggleSidebar = () => {
-    if (isPinned) {
-      togglePin();
-    }
-    closeDrawer();
+    toggleDrawer();
   };
 
   const renderNavItem = (item: NavItem) => {
@@ -108,9 +106,7 @@ function WebSidebarNav({ onClose }: WebSidebarNavProps) {
           accessibilityLabel="Go to homepage"
           accessibilityRole="link"
         >
-          <View style={styles.homeLogo}>
-            <Text style={styles.homeLogoText}>B</Text>
-          </View>
+          <BetterAtLogo size={24} variant="filled" />
           <Text style={styles.homeTitle}>BetterAt</Text>
         </Pressable>
         <Pressable
@@ -212,19 +208,6 @@ const styles = StyleSheet.create({
   },
   homeLinkHover: {
     backgroundColor: IOS_COLORS.secondarySystemBackground,
-  },
-  homeLogo: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
-    backgroundColor: '#1A1A1A',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  homeLogoText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#FFFFFF',
   },
   homeTitle: {
     fontSize: 15,
