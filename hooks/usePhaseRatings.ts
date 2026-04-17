@@ -132,7 +132,7 @@ export function usePhaseRatings({
         activeRaceIdRef.current === targetRaceId &&
         activeUserIdRef.current === targetUserId;
       // Skip for demo races or missing params
-      if (!targetRaceId || !targetUserId || targetRaceId.startsWith('demo-')) {
+      if (!targetRaceId || !targetUserId || targetRaceId.startsWith('demo-') || targetRaceId.startsWith('temp-')) {
         if (!canCommit()) return;
         setRatings({});
         setSessionId(null);
@@ -223,7 +223,7 @@ export function usePhaseRatings({
         activeRaceIdRef.current === targetRaceId &&
         activeUserIdRef.current === targetUserId;
 
-      if (!targetRaceId || !targetUserId || targetRaceId.startsWith('demo-')) {
+      if (!targetRaceId || !targetUserId || targetRaceId.startsWith('demo-') || targetRaceId.startsWith('temp-')) {
         logger.warn('[usePhaseRatings] Cannot save: missing raceId or userId');
         return;
       }

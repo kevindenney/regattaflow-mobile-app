@@ -143,7 +143,8 @@ interface UseRaceAnalysisDataResult {
  */
 export function useRaceAnalysisData(
   raceId: string | null | undefined,
-  userId: string | null | undefined
+  userId: string | null | undefined,
+  enabled: boolean = true
 ): UseRaceAnalysisDataResult {
   const [analysisData, setAnalysisData] = useState<RaceAnalysisData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -179,8 +180,8 @@ export function useRaceAnalysisData(
         runId === fetchRunIdRef.current &&
         activeRaceIdRef.current === targetRaceId &&
         activeUserIdRef.current === targetUserId;
-      // Skip queries for demo race (string ID) - DB expects UUIDs
-      if (!targetRaceId || !targetUserId || targetRaceId === 'demo-race' || targetRaceId.startsWith('demo-')) {
+      // Skip queries for demo race (string ID) and optimistic `temp-` ids - DB expects UUIDs
+      if (!enabled || !targetRaceId || !targetUserId || targetRaceId === 'demo-race' || targetRaceId.startsWith('demo-') || targetRaceId.startsWith('temp-')) {
         if (!canCommit()) return;
         setAnalysisData(null);
         setIsLoading(false);
@@ -427,7 +428,7 @@ export function useRaceAnalysisData(
     return () => {
       abortController.abort();
     };
-  }, [raceId, userId, refetchTrigger]);
+  }, [raceId, userId, refetchTrigger, enabled]);
 
   const refetch = () => setRefetchTrigger((prev) => prev + 1);
 

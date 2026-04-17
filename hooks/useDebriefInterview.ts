@@ -239,7 +239,7 @@ export function useDebriefInterview({
       activeUserIdRef.current === targetUserId;
 
     // Skip for demo races or missing params
-    if (!targetRaceId || !targetUserId || targetRaceId.startsWith('demo-')) {
+    if (!targetRaceId || !targetUserId || targetRaceId.startsWith('demo-') || targetRaceId.startsWith('temp-')) {
       if (!canCommit()) return;
       setResponses({});
       setSessionId(null);
@@ -367,7 +367,7 @@ export function useDebriefInterview({
         activeRaceIdRef.current === targetRaceId &&
         activeUserIdRef.current === targetUserId;
 
-      if (!targetRaceId || !targetUserId || targetRaceId.startsWith('demo-')) {
+      if (!targetRaceId || !targetUserId || targetRaceId.startsWith('demo-') || targetRaceId.startsWith('temp-')) {
         logger.warn('[useDebriefInterview] Cannot save: missing raceId or userId');
         return;
       }

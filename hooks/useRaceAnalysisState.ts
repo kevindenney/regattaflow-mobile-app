@@ -49,7 +49,8 @@ function calculateDaysSince(dateString: string): number {
 export function useRaceAnalysisState(
   raceId: string | null | undefined,
   raceDate: string | null | undefined,
-  userId: string | null | undefined
+  userId: string | null | undefined,
+  enabled: boolean = true
 ): UseRaceAnalysisStateResult {
   const [state, setState] = useState<RaceAnalysisState | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -97,8 +98,8 @@ export function useRaceAnalysisState(
         runId === fetchRunIdRef.current &&
         activeRaceIdRef.current === targetRaceId &&
         activeUserIdRef.current === targetUserId;
-      // Only fetch for completed races with valid (non-demo) IDs
-      if (!targetRaceId || !targetUserId || !isCompleted || targetRaceId.startsWith('demo-')) {
+      // Only fetch for completed races with valid (non-demo, non-optimistic) IDs
+      if (!enabled || !targetRaceId || !targetUserId || !isCompleted || targetRaceId.startsWith('demo-') || targetRaceId.startsWith('temp-')) {
         if (!canCommit()) return;
         setState(null);
         setIsLoading(false);
@@ -311,7 +312,7 @@ export function useRaceAnalysisState(
     }
 
     void fetchAnalysisState();
-  }, [raceId, userId, isCompleted, daysSinceRace, memoryFading, refetchTrigger]);
+  }, [raceId, userId, isCompleted, daysSinceRace, memoryFading, refetchTrigger, enabled]);
 
   const refetch = () => setRefetchTrigger((prev) => prev + 1);
 

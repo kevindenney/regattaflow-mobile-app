@@ -62,7 +62,9 @@ export function useEventAnalysis({
   }, []);
 
   const loadAnalysis = useCallback(async () => {
-    if (!eventId || !userId) {
+    // Bail for synthetic ids (demo data) and optimistic `temp-` ids — both
+    // would 400 against `regatta_id=eq.{id}` (UUID-typed column).
+    if (!eventId || !userId || eventId.startsWith('demo-') || eventId.startsWith('temp-')) {
       setAnalysis(null);
       setIsLoading(false);
       return;

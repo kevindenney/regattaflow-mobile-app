@@ -2,6 +2,7 @@
  * useTimelineSteps — React Query hooks for timeline step operations.
  */
 
+import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/providers/AuthProvider';
 import {
@@ -14,6 +15,9 @@ import {
   deleteStep,
   adoptStep,
   createStepsFromCourse,
+  pinStepToInterest,
+  unpinStepFromInterest,
+  getStepPinInterestIds,
 } from '@/services/TimelineStepService';
 import type { CourseToTimelineOptions } from '@/services/TimelineStepService';
 import type {
@@ -47,8 +51,9 @@ const KEYS = {
 export function useMyTimeline(interestId?: string | string[] | null) {
   const { user } = useAuth();
   const userId = user?.id;
+  const queryClient = useQueryClient();
 
-  return useQuery<TimelineStepRecord[], Error>({
+  const result = useQuery<TimelineStepRecord[], Error>({
     queryKey: KEYS.myTimeline(interestId),
     queryFn: () => getUserTimeline(userId!, interestId),
     enabled: Boolean(userId),
@@ -59,6 +64,24 @@ export function useMyTimeline(interestId?: string | string[] | null) {
     refetchOnWindowFocus: false,
     staleTime: 30_000, // 30s — manual pull-to-refresh still works
   });
+
+  // Prime the per-step detail cache from the list. Tapping any step in the
+  // carousel previously triggered a redundant `getStepById` round-trip; with
+  // the cache primed, useStepDetail returns instantly. We only seed entries
+  // that aren't already present so we never clobber a fresher detail fetch.
+  useEffect(() => {
+    if (!result.data) return;
+    for (const step of result.data) {
+      const existing = queryClient.getQueryData<TimelineStepRecord>(
+        KEYS.stepDetail(step.id),
+      );
+      if (!existing) {
+        queryClient.setQueryData(KEYS.stepDetail(step.id), step);
+      }
+    }
+  }, [result.data, queryClient]);
+
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -108,10 +131,15 @@ export function useCollaboratedSteps(interestId?: string | null) {
 // ---------------------------------------------------------------------------
 
 export function useStepById(stepId: string | undefined) {
+  // Skip network fetch for client-generated `temp-` ids used by optimistic
+  // step-create. The cached synthetic record is all we need until the RPC
+  // reconciles it with the real server row.
+  const isTempId = typeof stepId === 'string' && stepId.startsWith('temp-');
+
   return useQuery<TimelineStepRecord, Error>({
     queryKey: KEYS.stepDetail(stepId ?? ''),
     queryFn: () => getStepById(stepId!),
-    enabled: Boolean(stepId),
+    enabled: Boolean(stepId) && !isTempId,
   });
 }
 
@@ -204,6 +232,51 @@ export function useCreateStepsFromCourse() {
   >({
     mutationFn: createStepsFromCourse,
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['timeline-steps'] });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// 9. Cross-interest step pins
+// ---------------------------------------------------------------------------
+
+export function useStepPinInterestIds(stepId: string | undefined) {
+  const { user } = useAuth();
+  return useQuery<string[], Error>({
+    queryKey: ['step-pins', stepId] as const,
+    queryFn: () => getStepPinInterestIds(stepId!, user!.id),
+    enabled: Boolean(stepId && user?.id),
+  });
+}
+
+export function usePinStep() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation<void, Error, { stepId: string; interestId: string }>({
+    mutationFn: ({ stepId, interestId }) => {
+      if (!user?.id) throw new Error('Must be logged in');
+      return pinStepToInterest(stepId, user.id, interestId);
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['step-pins', variables.stepId] });
+      queryClient.invalidateQueries({ queryKey: ['timeline-steps'] });
+    },
+  });
+}
+
+export function useUnpinStep() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation<void, Error, { stepId: string; interestId: string }>({
+    mutationFn: ({ stepId, interestId }) => {
+      if (!user?.id) throw new Error('Must be logged in');
+      return unpinStepFromInterest(stepId, user.id, interestId);
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['step-pins', variables.stepId] });
       queryClient.invalidateQueries({ queryKey: ['timeline-steps'] });
     },
   });
