@@ -26,23 +26,37 @@ import {
 // Re-export the type so consumers can import from one place
 export type { VocabularyMap } from '@/lib/vocabulary';
 
-export function useVocabulary() {
-  const { currentInterest } = useInterest();
+/**
+ * @param overrideInterestId  When viewing someone else's step (e.g. creator
+ *   reviewing a subscriber), pass the step's interest_id so vocabulary matches
+ *   the step's domain, not the viewer's active interest.
+ */
+export function useVocabulary(overrideInterestId?: string) {
+  const { currentInterest, allInterests } = useInterest();
+
+  // Resolve the effective interest: override wins when provided and differs
+  const effectiveInterest = useMemo(() => {
+    if (overrideInterestId && overrideInterestId !== currentInterest?.id) {
+      const match = allInterests.find((i) => i.id === overrideInterestId);
+      if (match) return match;
+    }
+    return currentInterest;
+  }, [overrideInterestId, currentInterest, allInterests]);
 
   const {
     data: fetchedVocabulary,
     isLoading,
   } = useQuery<VocabularyMap>({
-    queryKey: ['vocabulary', currentInterest?.id],
-    queryFn: () => fetchVocabulary(currentInterest!.id, currentInterest!.slug),
-    enabled: currentInterest !== null,
+    queryKey: ['vocabulary', effectiveInterest?.id],
+    queryFn: () => fetchVocabulary(effectiveInterest!.id, effectiveInterest!.slug),
+    enabled: effectiveInterest !== null,
     staleTime: 1000 * 60 * 30, // 30 minutes – vocabulary rarely changes
   });
 
   // Stable fallback: memoize so we don't recreate on every render
   const fallback = useMemo(
-    () => getFallbackVocabulary(currentInterest?.slug),
-    [currentInterest?.slug],
+    () => getFallbackVocabulary(effectiveInterest?.slug),
+    [effectiveInterest?.slug],
   );
 
   // Use interest-specific fallback while loading or when Supabase has no data

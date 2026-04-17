@@ -4,6 +4,7 @@
  * Provides hooks for publishing, subscribing, and consuming blueprints.
  */
 
+import { useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/providers/AuthProvider';
 import {
@@ -30,8 +31,13 @@ import {
   removeStepFromBlueprint,
   reorderBlueprintSteps,
   setBlueprintSteps,
+  migrateBlueprint,
+  getSubscriberAdoptedSteps,
+  getBlueprintWithAuthorById,
 } from '@/services/BlueprintService';
+import type { SubscriberAdoptedStep } from '@/services/BlueprintService';
 import { adoptStep } from '@/services/TimelineStepService';
+import { NotificationService } from '@/services/NotificationService';
 import type {
   BlueprintRecord,
   CreateBlueprintInput,
@@ -68,6 +74,8 @@ const keys = {
   subscribers: (blueprintId: string) => ['blueprint-subscribers', blueprintId] as const,
   subscriberProgress: (blueprintId: string) =>
     ['blueprint-subscriber-progress', blueprintId] as const,
+  subscriberAdoptedSteps: (blueprintId: string, subscriberId: string) =>
+    ['blueprint-subscriber-adopted', blueprintId, subscriberId] as const,
   suggestedNextSteps: (userId: string, interestId?: string | null) =>
     ['blueprint-suggested-next', userId, interestId] as const,
 };
@@ -89,6 +97,15 @@ export function useBlueprintById(blueprintId?: string | null) {
     queryKey: keys.byId(blueprintId ?? ''),
     queryFn: () => getBlueprintById(blueprintId!),
     enabled: !!blueprintId,
+  });
+}
+
+export function useBlueprintWithAuthor(blueprintId?: string | null) {
+  return useQuery<BlueprintWithAuthor | null>({
+    queryKey: [...keys.byId(blueprintId ?? ''), 'with-author'] as const,
+    queryFn: () => getBlueprintWithAuthorById(blueprintId!),
+    enabled: !!blueprintId,
+    staleTime: 5 * 60_000, // 5 min — blueprint metadata rarely changes
   });
 }
 
@@ -165,6 +182,80 @@ export function useSubscribedBlueprints(interestId?: string | null) {
   });
 }
 
+/**
+ * Backfill hook: ensures every subscribed blueprint has at least one adopted
+ * step AND that all adopted steps have corresponding blueprint_step_actions
+ * records. Handles:
+ *   1. Users who subscribed before auto-adopt was added
+ *   2. Steps adopted with broken action-tracking (wrong column names)
+ * Runs once per mount.
+ */
+export function useAutoAdoptSubscribedSteps(
+  interestId?: string | null,
+  mySteps?: TimelineStepRecord[] | null,
+) {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const { data: subscribed } = useSubscribedBlueprints(interestId);
+  const hasRun = useRef(false);
+
+  useEffect(() => {
+    if (hasRun.current || !user?.id || !subscribed?.length || mySteps === undefined) return;
+    hasRun.current = true;
+
+    // Build lookup of adopted steps by blueprint
+    const stepsByBlueprint = new Map<string, { sourceId: string; adoptedId: string }[]>();
+    for (const s of (mySteps ?? [])) {
+      const bpId = (s as any).source_blueprint_id;
+      const srcId = (s as any).source_id;
+      if (!bpId || !srcId) continue;
+      if (!stepsByBlueprint.has(bpId)) stepsByBlueprint.set(bpId, []);
+      stepsByBlueprint.get(bpId)!.push({ sourceId: srcId, adoptedId: s.id });
+    }
+
+    let didChange = false;
+
+    (async () => {
+      for (const bp of subscribed) {
+        const existingAdopted = stepsByBlueprint.get(bp.blueprint_id) ?? [];
+
+        if (existingAdopted.length === 0) {
+          // Case 1: No steps adopted — adopt the first blueprint step
+          try {
+            const steps = await getBlueprintSteps(bp.blueprint_id);
+            if (steps.length === 0) continue;
+            const firstStep = steps[0];
+            try {
+              const adopted = await adoptStep(user.id, firstStep.id, firstStep.interest_id, bp.blueprint_id);
+              await markStepAction(bp.subscription_id, firstStep.id, 'adopted', adopted.id).catch(() => {});
+              didChange = true;
+            } catch {
+              // Step may already exist
+            }
+          } catch {
+            // Non-fatal
+          }
+        } else {
+          // Case 2: Steps adopted but action records may be missing — backfill them
+          for (const { sourceId, adoptedId } of existingAdopted) {
+            try {
+              await markStepAction(bp.subscription_id, sourceId, 'adopted', adoptedId);
+            } catch {
+              // Already exists or non-fatal
+            }
+          }
+        }
+      }
+
+      if (didChange) {
+        queryClient.invalidateQueries({ queryKey: ['timeline-steps'], refetchType: 'all' });
+      }
+      queryClient.invalidateQueries({ queryKey: ['for-you-suggestions'], refetchType: 'all' });
+      queryClient.invalidateQueries({ queryKey: ['blueprint-subscriber-progress'], refetchType: 'all' });
+    })();
+  }, [user?.id, subscribed, mySteps, queryClient]);
+}
+
 export function useSuggestedNextSteps(interestId?: string | null) {
   const { user } = useAuth();
   return useQuery<BlueprintSuggestedNextStep[]>({
@@ -222,6 +313,21 @@ export function useDeleteBlueprint() {
   const queryClient = useQueryClient();
   return useMutation<void, Error, string>({
     mutationFn: deleteBlueprint,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: keys.all });
+    },
+  });
+}
+
+export function useMigrateBlueprint() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    BlueprintRecord,
+    Error,
+    { blueprintId: string; newInterestId: string }
+  >({
+    mutationFn: ({ blueprintId, newInterestId }) =>
+      migrateBlueprint(blueprintId, newInterestId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: keys.all });
     },
@@ -290,10 +396,16 @@ export function useSubscribe() {
       return subscribe(user.id, blueprintId);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['blueprint-subscriptions'] });
-      queryClient.invalidateQueries({ queryKey: ['blueprint-subscribed'] });
-      queryClient.invalidateQueries({ queryKey: keys.all });
-      queryClient.invalidateQueries({ queryKey: ['for-you-suggestions'] });
+      // refetchType: 'all' forces refetch of inactive queries too, so the
+      // Clinical timeline's SubscribedBlueprintStrip is fresh when the user
+      // navigates back to it after subscribing from the catalog page.
+      queryClient.invalidateQueries({ queryKey: ['blueprint-subscriptions'], refetchType: 'all' });
+      queryClient.invalidateQueries({ queryKey: ['blueprint-subscribed'], refetchType: 'all' });
+      queryClient.invalidateQueries({ queryKey: ['blueprint-new-steps'], refetchType: 'all' });
+      queryClient.invalidateQueries({ queryKey: ['blueprint-suggested-next'], refetchType: 'all' });
+      queryClient.invalidateQueries({ queryKey: ['timeline-steps'], refetchType: 'all' });
+      queryClient.invalidateQueries({ queryKey: keys.all, refetchType: 'all' });
+      queryClient.invalidateQueries({ queryKey: ['for-you-suggestions'], refetchType: 'all' });
     },
   });
 }
@@ -308,9 +420,13 @@ export function useUnsubscribe() {
       return unsubscribe(user.id, blueprintId);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['blueprint-subscriptions'] });
-      queryClient.invalidateQueries({ queryKey: ['blueprint-subscribed'] });
-      queryClient.invalidateQueries({ queryKey: keys.all });
+      queryClient.invalidateQueries({ queryKey: ['blueprint-subscriptions'], refetchType: 'all' });
+      queryClient.invalidateQueries({ queryKey: ['blueprint-subscribed'], refetchType: 'all' });
+      queryClient.invalidateQueries({ queryKey: ['blueprint-new-steps'], refetchType: 'all' });
+      queryClient.invalidateQueries({ queryKey: ['blueprint-suggested-next'], refetchType: 'all' });
+      queryClient.invalidateQueries({ queryKey: ['timeline-steps'], refetchType: 'all' });
+      queryClient.invalidateQueries({ queryKey: keys.all, refetchType: 'all' });
+      queryClient.invalidateQueries({ queryKey: ['for-you-suggestions'], refetchType: 'all' });
     },
   });
 }
@@ -357,6 +473,50 @@ export function useDismissBlueprintStep() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['blueprint-new-steps'] });
       queryClient.invalidateQueries({ queryKey: ['blueprint-suggested-next'] });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Creator mentoring queries & mutations
+// ---------------------------------------------------------------------------
+
+export function useSubscriberAdoptedSteps(
+  blueprintId?: string | null,
+  subscriberId?: string | null,
+) {
+  return useQuery<SubscriberAdoptedStep[]>({
+    queryKey: keys.subscriberAdoptedSteps(blueprintId ?? '', subscriberId ?? ''),
+    queryFn: () => getSubscriberAdoptedSteps(blueprintId!, subscriberId!),
+    enabled: !!blueprintId && !!subscriberId,
+  });
+}
+
+export function useSuggestStepToSubscriber() {
+  const { user } = useAuth();
+
+  return useMutation<
+    string,
+    Error,
+    {
+      targetUserId: string;
+      sourceStepId: string;
+      stepTitle: string;
+      stepDescription?: string;
+      interestId?: string;
+    }
+  >({
+    mutationFn: async ({ targetUserId, sourceStepId, stepTitle, stepDescription, interestId }) => {
+      if (!user?.id) throw new Error('Must be logged in');
+      return NotificationService.notifyStepSuggested({
+        targetUserId,
+        actorId: user.id,
+        actorName: user.user_metadata?.full_name ?? 'Your coach',
+        sourceStepId,
+        stepTitle,
+        stepDescription,
+        interestId,
+      });
     },
   });
 }
