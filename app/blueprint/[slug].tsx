@@ -5,7 +5,7 @@
  * with a subscribe CTA. Accessible via /blueprint/{slug}.
  */
 
-import React, { useCallback, useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -15,9 +15,14 @@ import {
   Platform,
   ActivityIndicator,
   Modal,
+  Animated,
+  useWindowDimensions,
   type ViewStyle,
+  type NativeSyntheticEvent,
+  type NativeScrollEvent,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/providers/AuthProvider';
@@ -30,12 +35,13 @@ import {
   useUnsubscribe,
   useAdoptBlueprintStep,
 } from '@/hooks/useBlueprint';
-import { getBlueprintAccessInfo, checkBlueprintPurchase } from '@/services/BlueprintService';
+import { getBlueprintAccessInfo, checkBlueprintPurchase, getPeerSubscriberTimelines } from '@/services/BlueprintService';
 import { blueprintPaymentService } from '@/services/BlueprintPaymentService';
 import { NotificationService } from '@/services/NotificationService';
 import { PublishBlueprintSheet } from '@/components/blueprint/PublishBlueprintSheet';
 import { StudentProgressSection } from '@/components/blueprint/StudentProgressSection';
 import type { TimelineStepRecord } from '@/types/timeline-steps';
+import type { PeerTimeline } from '@/types/blueprint';
 
 const C = {
   bg: '#F8FAFC',
@@ -81,12 +87,29 @@ export default function BlueprintPage() {
     title?: string;
   } | null>(null);
   const [justSubscribed, setJustSubscribed] = useState(false);
+  const handlePurchaseRef = useRef<(() => void) | null>(null);
   const [adoptingAll, setAdoptingAll] = useState(false);
   const [adoptedCount, setAdoptedCount] = useState(0);
   const [showEditSheet, setShowEditSheet] = useState(false);
   const [purchasing, setPurchasing] = useState(false);
   const [hasPurchased, setHasPurchased] = useState(false);
   const [previewStep, setPreviewStep] = useState<TimelineStepRecord | null>(null);
+  const [showStickyHeader, setShowStickyHeader] = useState(false);
+  const [peerTimelines, setPeerTimelines] = useState<PeerTimeline[]>([]);
+  const { width: screenWidth } = useWindowDimensions();
+  const isDesktop = Platform.OS === 'web' && screenWidth > 640;
+
+  // Fetch peer subscriber timelines for non-owners
+  const isOwnerForPeers = user?.id === blueprint?.user_id;
+  useEffect(() => {
+    if (!blueprint || !user?.id || isOwnerForPeers) return;
+    getPeerSubscriberTimelines(
+      blueprint.id,
+      user.id,
+      blueprint.interest_id,
+      blueprint.title,
+    ).then(setPeerTimelines);
+  }, [blueprint?.id, user?.id, isOwnerForPeers]);
 
   useEffect(() => {
     if (!blueprintLoading && !blueprint && slug) {
@@ -113,13 +136,22 @@ export default function BlueprintPage() {
     console.log('[BlueprintPage] Stripe return check:', { sessionId, bpId, purchasedParam, blueprintId: blueprint?.id, userId: user?.id });
     if (sessionId && bpId) {
       console.log('[BlueprintPage] Verifying purchase via session_id...');
-      blueprintPaymentService.verifyPurchase(sessionId, bpId).then((verified) => {
-        console.log('[BlueprintPage] verifyPurchase result:', verified);
+      // Retry verification — webhook may not have fired yet when Stripe redirects back
+      const verifyWithRetry = async (attempts = 0): Promise<void> => {
+        const verified = await blueprintPaymentService.verifyPurchase(sessionId, bpId);
+        console.log('[BlueprintPage] verifyPurchase result:', verified, 'attempt:', attempts);
         if (verified) {
           setHasPurchased(true);
           setJustSubscribed(true);
+        } else if (attempts < 5) {
+          // Wait 2s between retries (webhook typically fires within a few seconds)
+          await new Promise((r) => setTimeout(r, 2000));
+          return verifyWithRetry(attempts + 1);
+        } else {
+          console.warn('[BlueprintPage] Purchase verification failed after retries — webhook may be delayed');
         }
-      });
+      };
+      verifyWithRetry();
       // Clean up URL params
       window.history.replaceState({}, '', window.location.pathname);
     } else if (purchasedParam === 'true' && blueprint?.id && user?.id) {
@@ -138,9 +170,35 @@ export default function BlueprintPage() {
   const isSubscribed = !!subscription;
   const isOwner = user?.id === blueprint?.user_id;
 
+  // Auto-trigger purchase if user just signed up from a Buy click
+  const autoPurchaseTriggered = useRef(false);
+  useEffect(() => {
+    if (!user || !blueprint || autoPurchaseTriggered.current || hasPurchased || isSubscribed) return;
+    AsyncStorage.getItem('pending_blueprint_purchase').then((pendingSlug) => {
+      if (pendingSlug === slug && !autoPurchaseTriggered.current) {
+        autoPurchaseTriggered.current = true;
+        AsyncStorage.removeItem('pending_blueprint_purchase');
+        // Small delay to let the page fully render before redirecting to Stripe
+        setTimeout(() => {
+          handlePurchaseRef.current?.();
+        }, 500);
+      }
+    });
+  }, [user, blueprint, slug, hasPurchased, isSubscribed]);
+
+  const blueprintInterestSlug = blueprint?.interest_id
+    ? allInterests.find((i) => i.id === blueprint.interest_id)?.slug
+    : undefined;
+
   const handleSubscribe = useCallback(async () => {
     if (!user) {
-      router.push('/(auth)/signup');
+      router.push({
+        pathname: '/(auth)/signup',
+        params: {
+          interest: blueprintInterestSlug,
+          returnTo: `/blueprint/${slug}`,
+        },
+      } as any);
       return;
     }
     if (!blueprint) return;
@@ -169,7 +227,15 @@ export default function BlueprintPage() {
 
   const handlePurchase = useCallback(async () => {
     if (!user) {
-      router.push('/(auth)/signup');
+      // Store purchase intent so we auto-trigger checkout after signup
+      AsyncStorage.setItem('pending_blueprint_purchase', slug as string);
+      router.push({
+        pathname: '/(auth)/signup',
+        params: {
+          interest: blueprintInterestSlug,
+          returnTo: `/blueprint/${slug}`,
+        },
+      } as any);
       return;
     }
     if (!blueprint) return;
@@ -178,10 +244,11 @@ export default function BlueprintPage() {
     try {
       const baseUrl = Platform.OS === 'web' ? window.location.origin : 'betterat://';
       const blueprintUrl = `${baseUrl}/blueprint/${blueprint.slug}`;
+      // Don't add query params — the edge function appends ?session_id=...&blueprint_id=...
       const result = await blueprintPaymentService.purchaseBlueprint(
         user.id,
         blueprint.id,
-        `${blueprintUrl}?purchased=true&blueprint_id=${blueprint.id}`,
+        blueprintUrl,
         blueprintUrl,
       );
 
@@ -205,6 +272,9 @@ export default function BlueprintPage() {
       setPurchasing(false);
     }
   }, [user, blueprint, router]);
+
+  // Keep ref in sync so auto-purchase effect can call it
+  handlePurchaseRef.current = handlePurchase;
 
   const navigateToTimeline = useCallback(async () => {
     // Switch to the blueprint's interest before navigating to timeline
@@ -236,6 +306,28 @@ export default function BlueprintPage() {
     setAdoptedCount(count);
     setAdoptingAll(false);
   }, [subscription, blueprint, steps, adoptStepMutation]);
+
+  // Build "What's included" summary from step metadata
+  const includedSummary = useMemo(() => {
+    if (!steps?.length) return null;
+    let totalSubSteps = 0;
+    const allSkills: string[] = [];
+    for (const s of steps) {
+      const meta = s.metadata as Record<string, any> | undefined;
+      const plan = meta?.plan ?? {};
+      totalSubSteps += (plan.how_sub_steps || []).length;
+      for (const skill of (plan.capability_goals || [])) {
+        if (!allSkills.includes(skill)) allSkills.push(skill);
+      }
+    }
+    return { totalSubSteps, skills: allSkills.slice(0, 6) };
+  }, [steps]);
+
+  // Sticky header on scroll
+  const handleScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const y = e.nativeEvent.contentOffset.y;
+    setShowStickyHeader(y > 200);
+  }, []);
 
   const Container = Platform.OS === 'web' ? View : SafeAreaView;
   const containerStyle: ViewStyle[] =
@@ -280,7 +372,12 @@ export default function BlueprintPage() {
           {isPaid && !user && (
             <Pressable
               style={styles.joinOrgBtn}
-              onPress={() => router.push('/(auth)/signup')}
+              onPress={() => router.push({
+                pathname: '/(auth)/signup',
+                params: {
+                  returnTo: `/blueprint/${slug}`,
+                },
+              } as any)}
             >
               <Ionicons name="log-in-outline" size={16} color="#FFFFFF" />
               <Text style={styles.joinOrgBtnText}>Sign in to purchase</Text>
@@ -305,6 +402,11 @@ export default function BlueprintPage() {
   const completedCount = steps?.filter((s) => s.status === 'completed').length ?? 0;
   const totalCount = steps?.length ?? 0;
 
+  // Price helper
+  const priceLabel = blueprint.price_cents && blueprint.price_cents > 0
+    ? `$${(blueprint.price_cents / 100).toFixed(blueprint.price_cents % 100 === 0 ? 0 : 2)}`
+    : null;
+
   return (
     <Container style={containerStyle}>
       {/* Navigation header */}
@@ -318,20 +420,51 @@ export default function BlueprintPage() {
         </Pressable>
       </View>
 
+      {/* Sticky header — appears on scroll */}
+      {showStickyHeader && (
+        <View style={styles.stickyHeader}>
+          <Text style={styles.stickyTitle} numberOfLines={1}>{blueprint.title}</Text>
+          {!isOwner && !isSubscribed && !hasPurchased && priceLabel ? (
+            <Pressable style={styles.stickyCTA} onPress={handlePurchase}>
+              <Text style={styles.stickyCTAText}>Buy for {priceLabel}</Text>
+            </Pressable>
+          ) : !isOwner && !isSubscribed && !hasPurchased ? (
+            <Pressable style={styles.stickyCTA} onPress={handleSubscribe}>
+              <Text style={styles.stickyCTAText}>Subscribe</Text>
+            </Pressable>
+          ) : isOwner ? (
+            <View style={styles.stickyOwnerBadge}>
+              <Ionicons name="person-circle-outline" size={14} color={C.accent} />
+              <Text style={{ fontSize: 13, fontWeight: '600', color: C.accent }}>Your Blueprint</Text>
+            </View>
+          ) : null}
+        </View>
+      )}
+
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
       >
         {/* Hero */}
-        <View style={styles.hero}>
+        <View
+          style={styles.hero}
+        >
           <View style={styles.heroIcon}>
             <Ionicons name="layers" size={28} color={C.accent} />
           </View>
           <Text style={styles.heroTitle}>{blueprint.title}</Text>
-          {blueprint.description && (
+          {blueprint.description ? (
             <Text style={styles.heroDescription}>{blueprint.description}</Text>
-          )}
+          ) : isOwner ? (
+            <Pressable onPress={() => setShowEditSheet(true)}>
+              <Text style={[styles.heroDescription, { color: C.labelLight, fontStyle: 'italic' }]}>
+                Tap to add a description...
+              </Text>
+            </Pressable>
+          ) : null}
 
           {/* Organization badge */}
           {blueprint.organization_name && (
@@ -371,7 +504,7 @@ export default function BlueprintPage() {
                 {blueprint.author_avatar_emoji ?? '👤'}
               </Text>
             </View>
-            <View>
+            <View style={{ flex: 1 }}>
               <Text style={styles.authorName}>
                 {blueprint.author_name ?? 'Anonymous'}
               </Text>
@@ -380,16 +513,21 @@ export default function BlueprintPage() {
                 {blueprint.subscriber_count !== 1 ? 's' : ''} · {totalCount} step
                 {totalCount !== 1 ? 's' : ''}
               </Text>
+              {blueprint.author_bio ? (
+                <Text style={styles.authorBio} numberOfLines={2}>{blueprint.author_bio}</Text>
+              ) : null}
             </View>
           </Pressable>
 
-          {/* Price badge for paid blueprints */}
-          {blueprint.access_level === 'paid' && blueprint.price_cents && blueprint.price_cents > 0 && !isOwner && !isSubscribed && !hasPurchased && (
+          {/* Price badge for paid blueprints — shown to everyone including owner */}
+          {blueprint.access_level === 'paid' && blueprint.price_cents && blueprint.price_cents > 0 && (
             <View style={styles.priceBadge}>
               <Text style={styles.priceText}>
                 ${(blueprint.price_cents / 100).toFixed(blueprint.price_cents % 100 === 0 ? 0 : 2)}
               </Text>
-              <Text style={styles.priceSubtext}>one-time purchase</Text>
+              <Text style={styles.priceSubtext}>
+                {blueprint.pricing_type === 'recurring' ? 'per month' : 'one-time purchase'}
+              </Text>
             </View>
           )}
 
@@ -549,43 +687,123 @@ export default function BlueprintPage() {
                   <Ionicons name="person-circle-outline" size={12} color={C.accent} />
                   <Text style={styles.ownerBadgeText}>Your Blueprint</Text>
                 </View>
-                <Pressable
-                  style={styles.manageBtn}
-                  onPress={() => setShowEditSheet(true)}
-                >
-                  <Ionicons name="create-outline" size={14} color={C.accent} />
-                  <Text style={styles.manageBtnText}>Edit</Text>
-                </Pressable>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <Pressable
+                    style={styles.manageBtn}
+                    onPress={async () => {
+                      const url = `${Platform.OS === 'web' ? window.location.origin : 'https://betterat.com'}/blueprint/${blueprint.slug}`;
+                      if (Platform.OS === 'web') {
+                        await navigator.clipboard?.writeText(url);
+                      } else {
+                        const { Share } = require('react-native');
+                        await Share.share({ url, message: `Check out my blueprint: ${url}` });
+                      }
+                    }}
+                  >
+                    <Ionicons name="share-outline" size={14} color={C.accent} />
+                    <Text style={styles.manageBtnText}>Share</Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.manageBtn}
+                    onPress={() => setShowEditSheet(true)}
+                  >
+                    <Ionicons name="create-outline" size={14} color={C.accent} />
+                    <Text style={styles.manageBtnText}>Edit</Text>
+                  </Pressable>
+                </View>
               </View>
 
-              {/* Student progress */}
-              {blueprint && steps && (
+              {/* Student progress — only show when there are subscribers */}
+              {blueprint && steps && blueprint.subscriber_count > 0 && (
                 <StudentProgressSection
                   blueprintId={blueprint.id}
                   blueprintSteps={steps}
                   interestId={blueprint.interest_id}
                 />
               )}
+
+              {/* Empty state for no subscribers */}
+              {blueprint.subscriber_count === 0 && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 }}>
+                  <Ionicons name="people-outline" size={14} color={C.labelLight} />
+                  <Text style={{ fontSize: 12, color: C.labelMid }}>
+                    No subscribers yet — share your link to get started
+                  </Text>
+                </View>
+              )}
             </View>
           )}
         </View>
 
-        {/* Progress summary */}
-        <View style={styles.progressBar}>
-          <View style={styles.progressTrack}>
-            <View
-              style={[
-                styles.progressFill,
-                { width: totalCount > 0 ? `${(completedCount / totalCount) * 100}%` : '0%' },
-              ]}
-            />
+        {/* Progress summary — only for subscribers, not the owner */}
+        {!isOwner && isSubscribed && (
+          <View style={styles.progressBar}>
+            <View style={styles.progressTrack}>
+              <View
+                style={[
+                  styles.progressFill,
+                  { width: totalCount > 0 ? `${(completedCount / totalCount) * 100}%` : '0%' },
+                ]}
+              />
+            </View>
+            <Text style={styles.progressText}>
+              {completedCount}/{totalCount} steps completed
+            </Text>
           </View>
-          <Text style={styles.progressText}>
-            {completedCount}/{totalCount} steps completed
-          </Text>
-        </View>
+        )}
 
-        {/* Steps horizontal timeline */}
+        {/* What's included summary */}
+        {includedSummary && (totalCount > 0 || includedSummary.totalSubSteps > 0) && (
+          <View
+            style={styles.includedSection}
+          >
+            <Text style={styles.sectionTitle}>What's included</Text>
+            <View
+              style={styles.includedGrid}
+            >
+              <View style={styles.includedItem}>
+                <Ionicons name="layers-outline" size={20} color={C.accent} />
+                <Text style={styles.includedNumber}>{totalCount}</Text>
+                <Text style={styles.includedLabel}>{totalCount === 1 ? 'step' : 'steps'}</Text>
+              </View>
+              {includedSummary.totalSubSteps > 0 && (
+                <View style={styles.includedItem}>
+                  <Ionicons name="list-outline" size={20} color={C.accent} />
+                  <Text style={styles.includedNumber}>{includedSummary.totalSubSteps}</Text>
+                  <Text style={styles.includedLabel}>sub-steps</Text>
+                </View>
+              )}
+              {includedSummary.skills.length > 0 && (
+                <View style={styles.includedItem}>
+                  <Ionicons name="star-outline" size={20} color={C.accent} />
+                  <Text style={styles.includedNumber}>{includedSummary.skills.length}</Text>
+                  <Text style={styles.includedLabel}>{includedSummary.skills.length === 1 ? 'skill' : 'skills'}</Text>
+                </View>
+              )}
+            </View>
+            {includedSummary.skills.length > 0 && (
+              <View style={styles.includedSkillsRow}>
+                {includedSummary.skills.map((skill, i) => (
+                  <View key={i} style={[styles.includedSkillBadge, { maxWidth: screenWidth - 96 }]}>
+                    <Text style={styles.includedSkillText} numberOfLines={1}>{skill}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Social proof */}
+        {blueprint.subscriber_count > 0 && !isOwner && (
+          <View style={styles.socialProof}>
+            <Ionicons name="people" size={16} color={C.accent} />
+            <Text style={styles.socialProofText}>
+              {blueprint.subscriber_count} {blueprint.subscriber_count === 1 ? 'person is' : 'people are'} working through this blueprint
+            </Text>
+          </View>
+        )}
+
+        {/* Steps vertical list */}
         <View style={styles.stepsSection}>
           <Text style={styles.sectionTitle}>Timeline Steps</Text>
           {stepsLoading ? (
@@ -593,23 +811,78 @@ export default function BlueprintPage() {
           ) : totalCount === 0 ? (
             <Text style={styles.emptyStepsText}>No steps published yet.</Text>
           ) : (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.stepsHScroll}
-            >
+            <View style={{ gap: 0 }}>
               {steps?.map((step, index) => (
-                <StepCard
+                <StepListItem
                   key={step.id}
                   step={step}
                   index={index}
                   total={totalCount}
-                  onPress={() => setPreviewStep(step)}
+                  isExpanded={previewStep?.id === step.id}
+                  onToggle={() => setPreviewStep(previewStep?.id === step.id ? null : step)}
+                  accentColor={C.accent}
                 />
               ))}
-            </ScrollView>
+            </View>
           )}
         </View>
+
+        {/* Peer subscriber timelines — non-owner subscribers see fellow learners */}
+        {!isOwner && peerTimelines.length > 0 && (
+          <View style={styles.stepsSection}>
+            <Text style={styles.sectionTitle}>Fellow Learners</Text>
+            <Text style={{ fontSize: 13, color: C.labelMid, marginBottom: 12 }}>
+              Others working through this blueprint
+            </Text>
+            {peerTimelines.map((peer) => {
+              const initials = peer.subscriber_name
+                ? peer.subscriber_name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()
+                : '?';
+              return (
+                <Pressable
+                  key={peer.subscriber_id}
+                  style={peerStyles.row}
+                  onPress={() => router.push(`/person/${peer.subscriber_id}` as any)}
+                >
+                  <View style={[peerStyles.avatar, { backgroundColor: C.accent + '18' }]}>
+                    <Text style={[peerStyles.avatarText, { color: C.accent }]}>
+                      {peer.subscriber_avatar_emoji || initials}
+                    </Text>
+                  </View>
+                  <View style={peerStyles.info}>
+                    <Text style={peerStyles.name} numberOfLines={1}>
+                      {peer.subscriber_name ?? 'Anonymous'}
+                    </Text>
+                    <Text style={peerStyles.progress}>
+                      {peer.completed_count}/{peer.total_count} steps completed
+                    </Text>
+                  </View>
+                  {/* Mini progress dots */}
+                  <View style={peerStyles.dots}>
+                    {peer.steps.slice(0, 8).map((step) => (
+                      <View
+                        key={step.id}
+                        style={[
+                          peerStyles.dot,
+                          {
+                            backgroundColor:
+                              step.status === 'completed' ? C.green
+                              : step.status === 'in_progress' ? C.gold
+                              : '#D4D4D4',
+                          },
+                        ]}
+                      />
+                    ))}
+                    {peer.steps.length > 8 && (
+                      <Text style={{ fontSize: 9, color: C.labelLight }}>+{peer.steps.length - 8}</Text>
+                    )}
+                  </View>
+                  <Ionicons name="chevron-forward" size={14} color={C.labelLight} />
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
       </ScrollView>
 
       {isOwner && blueprint && (
@@ -647,19 +920,344 @@ export default function BlueprintPage() {
 // Step card component (horizontal timeline)
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Step list item (vertical, expandable)
+// ---------------------------------------------------------------------------
+
+function StepListItem({
+  step,
+  index,
+  total,
+  isExpanded,
+  onToggle,
+  accentColor,
+}: {
+  step: TimelineStepRecord;
+  index: number;
+  total: number;
+  isExpanded: boolean;
+  onToggle: () => void;
+  accentColor: string;
+}) {
+  const statusCfg = STATUS_CONFIG[step.status] ?? STATUS_CONFIG.pending;
+  const metadata = step.metadata as Record<string, any> | undefined;
+  const planData = metadata?.plan ?? {};
+  const howSubSteps: { text: string }[] = planData.how_sub_steps || [];
+  const whatWillYouDo: string = planData.what_will_you_do || '';
+  const whyReasoning: string = planData.why_reasoning || '';
+  const capabilityGoals: string[] = planData.capability_goals || [];
+  const isLast = index === total - 1;
+
+  return (
+    <View>
+      {/* Row header — always visible */}
+      <Pressable
+        style={[
+          stepListStyles.row,
+          isExpanded && { backgroundColor: accentColor + '08' },
+        ]}
+        onPress={onToggle}
+      >
+        {/* Step number + connector */}
+        <View style={stepListStyles.numberCol}>
+          <View style={[stepListStyles.numberCircle, { backgroundColor: accentColor }]}>
+            <Text style={stepListStyles.numberText}>{index + 1}</Text>
+          </View>
+          {!isLast && <View style={[stepListStyles.connector, { backgroundColor: accentColor + '25' }]} />}
+        </View>
+
+        {/* Content */}
+        <View style={stepListStyles.content}>
+          <Text style={stepListStyles.stepTitle} numberOfLines={isExpanded ? undefined : 1}>
+            {step.title}
+          </Text>
+          {!isExpanded && (step.description || whatWillYouDo) ? (
+            <Text style={stepListStyles.stepSnippet} numberOfLines={1}>
+              {step.description || whatWillYouDo}
+            </Text>
+          ) : null}
+        </View>
+
+        {/* Status badge */}
+        <View style={[stepListStyles.statusBadge, { backgroundColor: statusCfg.color + '18' }]}>
+          <Ionicons name={statusCfg.icon as any} size={12} color={statusCfg.color} />
+          <Text style={[stepListStyles.statusText, { color: statusCfg.color }]} numberOfLines={1}>
+            {statusCfg.label}
+          </Text>
+        </View>
+
+        {/* Expand chevron */}
+        <Ionicons
+          name={isExpanded ? 'chevron-up' : 'chevron-down'}
+          size={16}
+          color={C.labelLight}
+          style={{ flexShrink: 0 }}
+        />
+      </Pressable>
+
+      {/* Expanded detail */}
+      {isExpanded && (
+        <View style={stepListStyles.detail}>
+          {/* Description */}
+          {step.description ? (
+            <Text style={stepListStyles.detailDesc}>{step.description}</Text>
+          ) : null}
+
+          {/* What you'll do */}
+          {whatWillYouDo ? (
+            <View style={stepListStyles.detailSection}>
+              <Text style={stepListStyles.detailSectionTitle}>What you'll do</Text>
+              <Text style={stepListStyles.detailSectionBody}>{whatWillYouDo}</Text>
+            </View>
+          ) : null}
+
+          {/* Sub-steps */}
+          {howSubSteps.length > 0 && (
+            <View style={stepListStyles.detailSection}>
+              <Text style={stepListStyles.detailSectionTitle}>Steps to follow</Text>
+              {howSubSteps.map((sub, i) => (
+                <View key={i} style={stepListStyles.subStepRow}>
+                  <View style={stepListStyles.subStepNum}>
+                    <Text style={stepListStyles.subStepNumText}>{i + 1}</Text>
+                  </View>
+                  <Text style={stepListStyles.subStepText}>{sub.text}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* Skills */}
+          {capabilityGoals.length > 0 && (
+            <View style={stepListStyles.detailSection}>
+              <Text style={stepListStyles.detailSectionTitle}>Skills you'll build</Text>
+              <View style={stepListStyles.skillsRow}>
+                {capabilityGoals.map((skill, i) => (
+                  <View key={i} style={[stepListStyles.skillBadge, { borderColor: accentColor + '40' }]}>
+                    <Text style={[stepListStyles.skillText, { color: accentColor }]}>{skill}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+
+          {/* Why */}
+          {whyReasoning ? (
+            <View style={stepListStyles.detailSection}>
+              <Text style={stepListStyles.detailSectionTitle}>Why this matters</Text>
+              <Text style={stepListStyles.detailSectionBody}>{whyReasoning}</Text>
+            </View>
+          ) : null}
+        </View>
+      )}
+    </View>
+  );
+}
+
+const stepListStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+    ...Platform.select({ web: { cursor: 'pointer' } }),
+  },
+  numberCol: {
+    width: 28,
+    alignItems: 'center',
+  },
+  numberCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  numberText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  connector: {
+    width: 2,
+    flex: 1,
+    minHeight: 8,
+    marginTop: 4,
+    borderRadius: 1,
+  },
+  content: {
+    flex: 1,
+    minWidth: 0,
+    overflow: 'hidden',
+  },
+  stepTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  stepSnippet: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    flexShrink: 0,
+  },
+  statusText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  detail: {
+    paddingLeft: 56,
+    paddingRight: 16,
+    paddingBottom: 16,
+    paddingTop: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    backgroundColor: '#FAFBFC',
+  },
+  detailDesc: {
+    fontSize: 13,
+    color: '#4B5563',
+    lineHeight: 19,
+    marginBottom: 12,
+  },
+  detailSection: {
+    marginBottom: 12,
+  },
+  detailSectionTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#374151',
+    marginBottom: 6,
+    textTransform: 'uppercase' as any,
+    letterSpacing: 0.3,
+  },
+  detailSectionBody: {
+    fontSize: 13,
+    color: '#4B5563',
+    lineHeight: 19,
+  },
+  subStepRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginBottom: 6,
+  },
+  subStepNum: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  subStepNumText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#6B7280',
+  },
+  subStepText: {
+    fontSize: 13,
+    color: '#4B5563',
+    flex: 1,
+    lineHeight: 18,
+  },
+  skillsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  skillBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  skillText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+});
+
+const peerStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+    ...Platform.select({ web: { cursor: 'pointer' } }),
+  },
+  avatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  info: {
+    flex: 1,
+  },
+  name: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  progress: {
+    fontSize: 11,
+    color: '#6B7280',
+    marginTop: 1,
+  },
+  dots: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Step card component (horizontal timeline) — kept for potential reuse
+// ---------------------------------------------------------------------------
+
 function StepCard({
   step,
   index,
   total,
   onPress,
+  wide = false,
 }: {
   step: TimelineStepRecord;
   index: number;
   total: number;
   onPress: () => void;
+  wide?: boolean;
 }) {
   const metadata = step.metadata as Record<string, any> | undefined;
-  const howSubSteps: any[] = metadata?.plan?.how_sub_steps || [];
+  const plan = metadata?.plan ?? {};
+  const howSubSteps: any[] = plan.how_sub_steps || [];
+  const whatWillYouDo: string = plan.what_will_you_do || '';
+  const capabilityGoals: string[] = plan.capability_goals || [];
 
   return (
     <View style={styles.stepCardWrapper}>
@@ -669,6 +1267,7 @@ function StepCard({
       <Pressable
         style={({ pressed }) => [
           styles.stepCard,
+          wide && styles.stepCardWide,
           pressed && styles.stepCardPressed,
         ]}
         onPress={onPress}
@@ -679,11 +1278,13 @@ function StepCard({
         </View>
 
         {/* Title */}
-        <Text style={styles.stepCardTitle} numberOfLines={2}>{step.title}</Text>
+        <Text style={styles.stepCardTitle} numberOfLines={wide ? 3 : 2}>{step.title}</Text>
 
-        {/* Description snippet */}
-        {step.description && (
-          <Text style={styles.stepCardDesc} numberOfLines={2}>{step.description}</Text>
+        {/* Description snippet — always show on wide cards */}
+        {(step.description || whatWillYouDo) && (
+          <Text style={styles.stepCardDesc} numberOfLines={wide ? 3 : 2}>
+            {step.description || whatWillYouDo}
+          </Text>
         )}
 
         {/* Sub-step count */}
@@ -696,9 +1297,22 @@ function StepCard({
           </View>
         )}
 
-        {/* Category */}
-        {step.category && step.category !== 'general' && (
-          <Text style={styles.stepCardCategory} numberOfLines={1}>{step.category}</Text>
+        {/* Skills */}
+        {capabilityGoals.length > 0 && (
+          <View style={styles.stepCardSkillsRow}>
+            {capabilityGoals.slice(0, wide ? 3 : 2).map((skill, i) => (
+              <View key={i} style={styles.stepCardSkillBadge}>
+                <Text style={styles.stepCardSkillText} numberOfLines={1}>{skill}</Text>
+              </View>
+            ))}
+            {capabilityGoals.length > (wide ? 3 : 2) && (
+              <View style={[styles.stepCardSkillBadge, { backgroundColor: C.accentBg, borderColor: C.accent }]}>
+                <Text style={[styles.stepCardSkillText, { color: C.accent }]}>
+                  +{capabilityGoals.length - (wide ? 3 : 2)}
+                </Text>
+              </View>
+            )}
+          </View>
         )}
 
         {/* Tap to preview hint */}
@@ -1567,5 +2181,163 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: C.accent,
+  },
+
+  // Sticky header
+  stickyHeader: {
+    position: Platform.OS === 'web' ? ('sticky' as any) : 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: C.cardBg,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+    maxWidth: 640,
+    width: '100%',
+    alignSelf: 'center',
+    ...Platform.select({
+      web: { boxShadow: '0 2px 8px rgba(0,0,0,0.06)' } as any,
+      default: { elevation: 4 },
+    }),
+  },
+  stickyTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: C.labelDark,
+    flex: 1,
+    marginRight: 12,
+  },
+  stickyCTA: {
+    backgroundColor: C.accent,
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    ...Platform.select({ web: { cursor: 'pointer' } as any }),
+  },
+  stickyCTAText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  stickyOwnerBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: C.accentBg,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+  },
+
+  // What's included
+  includedSection: {
+    backgroundColor: C.cardBg,
+    marginHorizontal: 16,
+    marginTop: 16,
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: C.border,
+    overflow: 'hidden',
+  },
+  includedGrid: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 12,
+  },
+  includedItem: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 2,
+  },
+  includedNumber: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: C.accent,
+  },
+  includedLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: C.labelMid,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  includedSkillsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 12,
+    width: '100%',
+  },
+  includedSkillBadge: {
+    backgroundColor: '#F0F9FF',
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    flexShrink: 1,
+  },
+  includedSkillText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#0369A1',
+  },
+
+  // Social proof
+  socialProof: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    marginTop: 8,
+  },
+  socialProofText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: C.labelMid,
+  },
+
+  // Wide step card (desktop)
+  stepCardWide: {
+    width: 260,
+    minHeight: 180,
+  },
+  stepCardSkillsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+    marginTop: 6,
+  },
+  stepCardSkillBadge: {
+    backgroundColor: '#F0F9FF',
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    maxWidth: 130,
+  },
+  stepCardSkillText: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: '#0369A1',
+  },
+
+  // Author bio
+  authorBio: {
+    fontSize: 12,
+    color: C.labelMid,
+    lineHeight: 17,
+    textAlign: 'center',
+    marginTop: 4,
+    maxWidth: 300,
   },
 });
