@@ -102,12 +102,26 @@ export function PeerStepSheet({
   };
 
   const handleOpenMyStep = () => {
-    if (!alreadyAdoptedStepId) return;
+    // eslint-disable-next-line no-console
+    console.log('[PeerStepSheet] handleOpenMyStep fired', {
+      alreadyAdoptedStepId,
+      curriculumStepId: curriculumStep.id,
+      curriculumTitle: curriculumStep.title,
+      peerSubscriberId: peer.subscriber_id,
+    });
+    if (!alreadyAdoptedStepId) {
+      // eslint-disable-next-line no-console
+      console.warn('[PeerStepSheet] bailing — alreadyAdoptedStepId is null');
+      return;
+    }
     onClose();
+    const target = `/(tabs)/races?selected=${alreadyAdoptedStepId}`;
+    // eslint-disable-next-line no-console
+    console.log('[PeerStepSheet] router.push →', target);
     // Open the step *inside the timeline* (races tab), not on a dedicated
     // detail screen — timeline steps are always rendered in-place via
     // RaceSummaryCard (StepPlanQuestions / StepDrawContent).
-    router.push(`/(tabs)/races?selected=${alreadyAdoptedStepId}` as any);
+    router.push(target as any);
   };
 
   const handleViewProfile = () => {

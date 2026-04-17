@@ -253,21 +253,33 @@ export function BlueprintPanel({
       {/* Bottom sheet that opens when a peer tile is tapped. Only wired if
           we have the interest + subscription context needed by the adopt
           mutation — otherwise taps are no-ops. */}
-      {selectedPeerStep && interestId && subscriptionId ? (
-        <PeerStepSheet
-          visible
-          onClose={() => setSelectedPeerStep(null)}
-          peer={selectedPeerStep.peer}
-          peerStep={selectedPeerStep.peerStep}
-          curriculumStep={selectedPeerStep.curriculumStep}
-          interestId={interestId}
-          subscriptionId={subscriptionId}
-          blueprintId={blueprintId}
-          alreadyAdoptedStepId={
-            adoptedStepIdBySourceId.get(selectedPeerStep.curriculumStep.id) ?? null
-          }
-        />
-      ) : null}
+      {selectedPeerStep && interestId && subscriptionId ? (() => {
+        const alreadyAdoptedStepId =
+          adoptedStepIdBySourceId.get(selectedPeerStep.curriculumStep.id) ?? null;
+        // eslint-disable-next-line no-console
+        console.log('[BlueprintPanel] rendering PeerStepSheet', {
+          curriculumStepId: selectedPeerStep.curriculumStep.id,
+          curriculumTitle: selectedPeerStep.curriculumStep.title,
+          blueprintId,
+          alreadyAdoptedStepId,
+          adoptedMapSize: adoptedStepIdBySourceId.size,
+          adoptedMapEntries: Array.from(adoptedStepIdBySourceId.entries()).slice(0, 5),
+          myAdoptedStepsCount: myAdoptedSteps?.length ?? 0,
+        });
+        return (
+          <PeerStepSheet
+            visible
+            onClose={() => setSelectedPeerStep(null)}
+            peer={selectedPeerStep.peer}
+            peerStep={selectedPeerStep.peerStep}
+            curriculumStep={selectedPeerStep.curriculumStep}
+            interestId={interestId}
+            subscriptionId={subscriptionId}
+            blueprintId={blueprintId}
+            alreadyAdoptedStepId={alreadyAdoptedStepId}
+          />
+        );
+      })() : null}
     </View>
   );
 }

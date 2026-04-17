@@ -2728,6 +2728,15 @@ export default function RacesScreen() {
   // Also handles subsequent navigations with ?selected= while tab is already mounted
   useEffect(() => {
     const targetId = initialSelectedRaceParam.current || (typeof searchParams?.selected === 'string' ? searchParams.selected : null);
+    // eslint-disable-next-line no-console
+    console.log('[races.tsx deep-link] effect ran', {
+      targetId,
+      loading,
+      searchParamsSelected: searchParams?.selected,
+      initialRef: initialSelectedRaceParam.current,
+      safeRecentRacesCount: safeRecentRaces.length,
+      myTimelineStepsCount: myTimelineSteps?.length ?? 0,
+    });
     if (!targetId || loading) {
       return;
     }
@@ -2739,6 +2748,16 @@ export default function RacesScreen() {
     const matchingRace =
       safeRecentRaces.find((race: any) => race.id === targetId) ??
       myTimelineSteps?.find((s) => s.id === targetId);
+    // eslint-disable-next-line no-console
+    console.log('[races.tsx deep-link] match result', {
+      targetId,
+      matched: !!matchingRace,
+      matchSource: safeRecentRaces.find((r: any) => r.id === targetId)
+        ? 'safeRecentRaces'
+        : myTimelineSteps?.find((s) => s.id === targetId)
+          ? 'myTimelineSteps'
+          : 'none',
+    });
     if (!matchingRace) {
       return;
     }
