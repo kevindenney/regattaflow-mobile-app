@@ -1122,7 +1122,7 @@ Generate a structured practice plan based on this resource. Your response must b
 
 Guidelines:
 - what_will_you_do: Be specific about the activity, referencing the resource
-- how_sub_steps: 3-6 concrete, actionable steps. Include time estimates where helpful
+- how_sub_steps: 3-6 concrete, actionable steps. Include time estimates where helpful. Write in natural domain language ("Assess all assigned patients during report", "Sketch three thumbnails before committing to a composition"). Do NOT use fitness-style sets×reps notation like "3x3 patients" or "1x1 shift" unless the interest is explicitly strength/fitness training.
 - why_reasoning: Connect to their learning journey and the specific skills this develops
 - capability_goals: 2-4 specific skills this session develops. IMPORTANT: If the user already has skill goals that are relevant to this session, use those EXACT names instead of inventing new ones. Only create new skill names for capabilities not covered by existing goals.
 
@@ -1358,7 +1358,7 @@ Your response must be ONLY valid JSON with this exact shape:
 Guidelines:
 - suggested_title: Capture the essence of the session in a short, descriptive title
 - what_will_you_do: Synthesize the raw notes into a clear objective — don't just repeat the raw text. Focus on what they'll actually practice/achieve
-- how_sub_steps: 3-7 concrete, ordered steps. If URLs/videos were shared, include "Watch/review [title]" steps. Include practice drills, discussion points, or exercises as appropriate. Add time estimates where helpful (e.g., "15 min")
+- how_sub_steps: 3-7 concrete, ordered steps. If URLs/videos were shared, include "Watch/review [title]" steps. Include practice drills, discussion points, or exercises as appropriate. Add time estimates where helpful (e.g., "15 min"). Write in natural domain language for the interest ("Assess all assigned patients during report", "Sketch three thumbnails before committing"). Do NOT use fitness-style sets×reps notation like "3x3 patients" or "1x1 shift" unless the interest is explicitly strength/fitness training.
 - why_reasoning: Connect to their learning journey. Reference their step history or capability gaps if available. Explain why this session matters
 - who_collaborators: Extract names of people they'll practice with (from the brain dump text)
 - capability_goals: 2-5 specific skills this session develops. IMPORTANT: If the user already has skill goals that are relevant, use those EXACT names instead of inventing new ones. Only create new skill names for capabilities not covered by existing goals. Use the detected topics as a starting point but refine them into clear skill names
