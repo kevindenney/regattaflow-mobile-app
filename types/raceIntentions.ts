@@ -178,6 +178,23 @@ export interface StrategyBriefIntention {
 }
 
 /**
+ * A Playbook concept linked to a race as a focus area.
+ * Connects the learning loop (Playbook) to race-day execution.
+ */
+export interface RaceFocusConcept {
+  /** Playbook concept ID (FK to playbook_concepts.id) */
+  conceptId: string;
+  /** Concept title snapshot (for display even if concept is later deleted) */
+  title: string;
+  /** User's one-line race-day reminder for this concept */
+  reminder?: string;
+  /** Concept slug for deep-linking back to Playbook */
+  slug?: string;
+  /** ISO timestamp when linked */
+  linkedAt: string;
+}
+
+/**
  * Pre-Start Specification - HOW the user will accomplish a pre-start check item
  */
 export interface PreStartSpecification {
@@ -271,6 +288,9 @@ export interface RaceIntentions {
   /** Briefing Sections Reviewed - which sections of the Pre-Race Briefing have been marked reviewed */
   briefingSectionsReviewed?: string[];
 
+  /** Playbook concepts the sailor wants to focus on during this race */
+  raceFocusConcepts?: RaceFocusConcept[];
+
   /** Last update timestamp */
   updatedAt: string;
 }
@@ -293,6 +313,9 @@ export interface SailInventoryItem {
   status: 'active' | 'backup' | 'retired' | 'sold';
   totalRacesUsed?: number;
   lastUsedDate?: string;
+  /** Sail cloth weight — critical for selection in different conditions */
+  sailWeight?: 'light' | 'medium' | 'heavy';
+  notes?: string;
 }
 
 /**

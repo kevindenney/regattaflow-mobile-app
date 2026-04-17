@@ -7,6 +7,7 @@
  */
 
 export type BlueprintAccessLevel = 'public' | 'org_members' | 'paid';
+export type BlueprintPricingType = 'one_time' | 'recurring';
 
 export interface BlueprintRecord {
   id: string;
@@ -23,6 +24,11 @@ export interface BlueprintRecord {
   access_level: BlueprintAccessLevel;
   price_cents: number | null;
   currency: string;
+  pricing_type: BlueprintPricingType;
+  stripe_price_id: string | null;
+  stripe_product_id: string | null;
+  migrated_from_interest_id: string | null;
+  auto_curate: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -40,6 +46,7 @@ export interface CreateBlueprintInput {
   access_level?: BlueprintAccessLevel;
   price_cents?: number | null;
   currency?: string;
+  pricing_type?: BlueprintPricingType;
 }
 
 export interface UpdateBlueprintInput {
@@ -48,11 +55,14 @@ export interface UpdateBlueprintInput {
   cover_image_url?: string | null;
   is_published?: boolean;
   slug?: string;
+  interest_id?: string;
   access_level?: BlueprintAccessLevel;
   organization_id?: string | null;
   program_id?: string | null;
   price_cents?: number | null;
   currency?: string;
+  pricing_type?: BlueprintPricingType;
+  auto_curate?: boolean;
 }
 
 export interface BlueprintPurchaseRecord {
@@ -75,6 +85,8 @@ export interface BlueprintSubscriptionRecord {
   subscribed_at: string;
   last_synced_at: string;
   auto_adopt: boolean;
+  stripe_subscription_id: string | null;
+  subscription_status: 'active' | 'past_due' | 'canceled' | 'unpaid';
 }
 
 export interface BlueprintStepActionRecord {
@@ -100,6 +112,7 @@ export interface BlueprintWithAuthor extends BlueprintRecord {
   author_name?: string;
   author_avatar_emoji?: string;
   author_avatar_color?: string;
+  author_bio?: string;
   organization_name?: string;
   organization_slug?: string;
   program_name?: string;
