@@ -695,7 +695,7 @@ const VISIBILITY_OPTIONS: { value: TimelineStepVisibility; label: string; icon: 
 // COMPONENT
 // =============================================================================
 
-export function RaceSummaryCard({
+function RaceSummaryCardImpl({
   race,
   cardType,
   isActive,
@@ -4838,5 +4838,10 @@ const styles = StyleSheet.create({
   },
 
 });
+
+// React.memo skips re-renders when props are shallow-equal. Useful for
+// collaborator/read-only cards (canManage=false → callback props are stable
+// `undefined`), and any case where upstream props genuinely haven't changed.
+export const RaceSummaryCard = React.memo(RaceSummaryCardImpl);
 
 export default RaceSummaryCard;

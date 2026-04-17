@@ -1125,7 +1125,7 @@ function formatCountdown(ms: number): { value: string; label: string; urgent: bo
   return { value: `${minutes}`, label: 'min', urgent: minutes <= 10 };
 }
 
-export function OnWaterContent({
+function OnWaterContentImpl({
   race,
   onStartTimer,
   onRaceComplete,
@@ -2540,5 +2540,9 @@ const styles = StyleSheet.create({
     textDecorationColor: IOS_COLORS.gray,
   },
 });
+
+// Phase components re-render whenever their parent RaceSummaryCard re-renders.
+// Memoize so we skip when the handful of props passed in haven't changed.
+export const OnWaterContent = React.memo(OnWaterContentImpl);
 
 export default OnWaterContent;

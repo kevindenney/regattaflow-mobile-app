@@ -7,7 +7,7 @@
  *   toast.show('Post saved!', 'success');
  */
 
-import React, { createContext, useContext, useCallback, useState, useRef } from 'react';
+import React, { createContext, useContext, useCallback, useState, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -135,8 +135,12 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     [dismiss],
   );
 
+  // Stabilize context value so consumers can safely declare `toast` as a hook
+  // dependency without losing referential equality on every provider re-render.
+  const contextValue = useMemo(() => ({ show }), [show]);
+
   return (
-    <ToastContext.Provider value={{ show }}>
+    <ToastContext.Provider value={contextValue}>
       {children}
       <View style={[styles.container, { top: insets.top + 8 }]} pointerEvents="box-none">
         {toasts.map(toast => {

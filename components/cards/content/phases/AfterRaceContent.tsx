@@ -86,7 +86,7 @@ function getOrdinalSuffix(n: number): string {
 }
 
 
-export function AfterRaceContent({
+function AfterRaceContentImpl({
   race,
   userId: propsUserId,
   onOpenPostRaceInterview,
@@ -1012,5 +1012,9 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
 });
+
+// Phase components re-render whenever their parent RaceSummaryCard re-renders.
+// Memoize so we skip when the handful of props passed in haven't changed.
+export const AfterRaceContent = React.memo(AfterRaceContentImpl);
 
 export default AfterRaceContent;

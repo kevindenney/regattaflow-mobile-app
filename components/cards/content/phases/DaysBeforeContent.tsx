@@ -302,7 +302,7 @@ function RetrospectiveChecklistSection({
 
 // TileSection removed - replaced by PrepChecklistSection
 
-export function DaysBeforeContent({
+function DaysBeforeContentImpl({
   race,
   isExpanded = true,
   onSwitchToReview,
@@ -2981,5 +2981,9 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
 });
+
+// Phase components re-render whenever their parent RaceSummaryCard re-renders.
+// Memoize so we skip when the handful of props passed in haven't changed.
+export const DaysBeforeContent = React.memo(DaysBeforeContentImpl);
 
 export default DaysBeforeContent;

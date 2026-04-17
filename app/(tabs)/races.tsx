@@ -2211,7 +2211,7 @@ export default function RacesScreen() {
     } finally {
       setDeletingRaceId(prev => (prev === raceId ? null : prev));
     }
-  }, [isDeletingRace, logger, refetchRaces, selectedRaceId]);
+  }, [isDeletingRace, refetchRaces, selectedRaceId, toast]);
 
   const handleDeleteRace = useCallback((raceId: string, raceName?: string) => {
     if (!raceId || isDeletingRace) {
@@ -2322,7 +2322,7 @@ export default function RacesScreen() {
         }
       },
     });
-  }, [deleteRaceById, isDeletingRace, orderedBaseCardGridRaces, refetchRaces, selectedRaceId, selectedRaceData, queryClient]);
+  }, [deleteRaceById, isDeletingRace, orderedBaseCardGridRaces, refetchRaces, selectedRaceId, selectedRaceData, queryClient, toast]);
 
   const handleTimelineGridBulkDelete = useCallback((raceIds: string[]) => {
     const uniqueIds = [...new Set(raceIds)];
@@ -2412,7 +2412,7 @@ export default function RacesScreen() {
       },
       { destructive: true, confirmText: 'Delete' }
     );
-  }, [orderedBaseCardGridRaces, deleteRaceById, queryClient, selectedRaceId]);
+  }, [orderedBaseCardGridRaces, deleteRaceById, queryClient, selectedRaceId, toast]);
 
   // Delete the currently selected race with confirmation
   const handleDeleteSelectedRace = useCallback(() => {
