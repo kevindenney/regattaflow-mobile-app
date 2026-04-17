@@ -20,18 +20,42 @@ const MAX_TOOL_ITERATIONS = 8;
 const MAX_CONVERSATION_MESSAGES = 10;
 const APP_URL = process.env.EXPO_PUBLIC_APP_URL || 'https://better.at';
 
-const buildSystemPrompt = () => {
+interface UserContext {
+  fullName?: string;
+  activeInterest?: string;
+  interestDescription?: string;
+  orgName?: string;
+  location?: string;
+}
+
+const buildSystemPrompt = (userCtx?: UserContext) => {
   const todayStr = new Date().toISOString().split('T')[0];
   console.log(`[telegram DEBUG] buildSystemPrompt: server date = ${new Date().toISOString()}, todayStr = ${todayStr}`);
-  return `You are the BetterAt AI assistant, helping users manage their learning timeline via Telegram.
+
+  // Build user context block if available
+  let userContextBlock = '';
+  if (userCtx) {
+    const parts: string[] = [];
+    if (userCtx.fullName) parts.push(`The user's name is ${userCtx.fullName}.`);
+    if (userCtx.activeInterest) parts.push(`They are currently working on: ${userCtx.activeInterest}.`);
+    if (userCtx.interestDescription) parts.push(`Context: ${userCtx.interestDescription}`);
+    if (userCtx.orgName) parts.push(`They are a member of ${userCtx.orgName}.`);
+    if (userCtx.location) parts.push(`Their location/region: ${userCtx.location}.`);
+    if (parts.length > 0) {
+      userContextBlock = `\n\nUSER CONTEXT:\n${parts.join('\n')}\nUse this context to tailor your responses — reference their region, local resources, and domain when relevant. Do NOT assume they are in Hong Kong or any other default location.`;
+    }
+  }
+
+  return `You are the BetterAt AI assistant, helping users manage their timeline via Telegram.
 You help them track progress, create steps, mark tasks done, and plan next activities.
-Today's date is ${todayStr}. Use this as the reference for all date-related decisions.
+Users may be working on anything — learning goals, professional development, business growth, government scheme applications, certifications, or personal projects. Their steps and blueprints describe what they're working on.
+Today's date is ${todayStr}. Use this as the reference for all date-related decisions.${userContextBlock}
 Keep responses concise — this is a chat interface, not a document.
 Use short paragraphs. Use *bold* for emphasis and _italic_ for secondary info.
 Use bullet points with - for lists. Use \`code\` for IDs or technical values.
 Avoid markdown headers — Telegram doesn't render them.
 When tool results contain lists, summarize the key points rather than dumping raw data.
-If the user asks something you can't do with available tools, say so directly.
+IMPORTANT: When you don't know the user's context, or they ask about their status, progress, options, eligibility, or what they should do next — ALWAYS call get_student_timeline first to understand what they're working on before responding. Never say "I can't help with that" without checking their timeline first.
 
 CRITICAL RULES — READ CAREFULLY:
 1. You MUST call tools to perform ANY action. NEVER pretend you did something without calling a tool.
@@ -91,7 +115,7 @@ COMPETENCY ASSESSMENT:
 - After suggesting a practice session, ask if the user wants you to create it as a step. If they say yes, call create_step with the structured details from your suggestion (title, sub_steps, capability_goals, competency_ids, location_name).`;
 };
 
-const buildPhotoSystemPrompt = () => `${buildSystemPrompt()}
+const buildPhotoSystemPrompt = (userCtx?: UserContext) => `${buildSystemPrompt(userCtx)}
 
 The user has sent a photo. A photo_url has been uploaded and is available for you to attach to a step.
 
@@ -552,6 +576,34 @@ async function handleMessage(
   // --- Build auth context ---
   const auth = await resolveAuthContext(supabase, userId);
 
+  // --- Fetch user context for system prompt ---
+  let userCtx: UserContext | undefined;
+  try {
+    const [profileRes, interestRes, orgRes] = await Promise.all([
+      supabase.from('profiles').select('full_name, bio').eq('id', userId).maybeSingle(),
+      supabase
+        .from('user_interests')
+        .select('interest_id, interests!inner(name, description)')
+        .eq('user_id', userId)
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle(),
+      auth.clubId
+        ? supabase.from('organizations').select('name').eq('id', auth.clubId).maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+    const interest = interestRes.data as any;
+    userCtx = {
+      fullName: profileRes.data?.full_name ?? undefined,
+      activeInterest: interest?.interests?.name ?? undefined,
+      interestDescription: interest?.interests?.description ?? undefined,
+      orgName: orgRes.data?.name ?? undefined,
+      location: profileRes.data?.bio ?? undefined,
+    };
+  } catch (e) {
+    console.error('[telegram] Failed to fetch user context:', e);
+  }
+
   // --- Send typing indicator ---
   await sendChatAction(chatId, 'typing');
 
@@ -601,7 +653,7 @@ async function handleMessage(
 
   // Build user content — text or photo+caption
   let userContent: Anthropic.ContentBlockParam[] | string;
-  let systemPrompt = buildSystemPrompt();
+  let systemPrompt = buildSystemPrompt(userCtx);
   let historyEntry = `${historyPrefix}${userText}`;
   let uploadedPhotoUrl = ''; // Hoisted so we can inject it into tool calls
 
@@ -647,7 +699,7 @@ async function handleMessage(
           text: `${captionText}${photoUrlNote}`,
         },
       ];
-      systemPrompt = buildPhotoSystemPrompt();
+      systemPrompt = buildPhotoSystemPrompt(userCtx);
       historyEntry = `[Sent a photo${message.caption ? `: ${message.caption}` : ''}]${photoUrl ? ` [url: ${photoUrl}]` : ''}`;
 
       // Store pending photo URL so callback buttons can attach it
