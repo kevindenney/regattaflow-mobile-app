@@ -43,6 +43,15 @@ export default function ManifestoOnboardingScreen() {
   const [cadence, setCadence] = useState<Record<string, number | string | undefined>>({});
   const [isSaving, setIsSaving] = useState(false);
   const parseTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  // Prevent click-through from previous screen on web (events bleed through during transitions)
+  const [interactable, setInteractable] = useState(Platform.OS !== 'web');
+
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      const timer = setTimeout(() => setInteractable(true), 400);
+      return () => clearTimeout(timer);
+    }
+  }, []);
 
   const activeInterest = orderedInterests[interestIndex] ?? null;
   const totalInterests = orderedInterests.length;
@@ -152,12 +161,18 @@ export default function ManifestoOnboardingScreen() {
       await switchInterest(orderedInterests[0].slug);
     }
     await OnboardingStateService.markOnboardingSeen();
+    const returnTo = await AsyncStorage.getItem('post_onboarding_return_to');
     await Promise.all([
       AsyncStorage.removeItem('onboarding_org_slug'),
       AsyncStorage.removeItem('onboarding_interest_slug'),
       AsyncStorage.removeItem('onboarding_interest_order'),
+      AsyncStorage.removeItem('post_onboarding_return_to'),
     ]);
-    router.replace('/(tabs)/races');
+    if (returnTo) {
+      router.replace(returnTo as any);
+    } else {
+      router.replace('/(tabs)/races');
+    }
   }, [router, orderedInterests, switchInterest]);
 
   const saveCurrentAndAdvance = useCallback(async () => {
@@ -317,6 +332,7 @@ export default function ManifestoOnboardingScreen() {
               style={styles.skipButton}
               onPress={handleSkip}
               activeOpacity={0.7}
+              disabled={!interactable}
             >
               <Text style={styles.skipText}>Skip for now</Text>
             </TouchableOpacity>
@@ -329,7 +345,7 @@ export default function ManifestoOnboardingScreen() {
               ]}
               onPress={saveCurrentAndAdvance}
               activeOpacity={0.85}
-              disabled={isSaving}
+              disabled={isSaving || !interactable}
             >
               <Text style={styles.continueButtonText}>
                 {isSaving ? 'Saving...' : text.trim() ? 'Save & Continue' : 'Continue'}

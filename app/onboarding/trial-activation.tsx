@@ -66,15 +66,19 @@ export default function TrialActivationScreen() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    AsyncStorage.getItem('onboarding_interest_slug').then((slug) => {
-      setInterestSlug(slug);
-      setReady(true);
-    });
+    AsyncStorage.getItem('onboarding_interest_slug')
+      .then((slug) => {
+        setInterestSlug(slug);
+      })
+      .catch(() => {
+        // Graceful fallback — show generic features
+      })
+      .finally(() => setReady(true));
   }, []);
 
   const ctx = getOnboardingContext(interestSlug || undefined);
   const features = (interestSlug && INTEREST_FEATURES[interestSlug]) || GENERIC_FEATURES;
-  const accentColor = ctx.color !== '#1A1A1A' ? ctx.color : '#2563EB';
+  const accentColor = '#2563EB';
 
   const handleStart = useCallback(() => {
     router.replace('/onboarding/privacy-quick-set');

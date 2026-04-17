@@ -45,6 +45,16 @@ export default function PrivacyQuickSetScreen() {
   const [peerVisibility, setPeerVisibility] = useState(true);
   const [stepVisibility, setStepVisibility] = useState<TimelineStepVisibility>('followers');
   const [isSaving, setIsSaving] = useState(false);
+  // Prevent click-through from previous screen on web (events bleed through during transitions)
+  const [interactable, setInteractable] = useState(Platform.OS !== 'web');
+  const hasNavigatedRef = React.useRef(false);
+
+  React.useEffect(() => {
+    if (Platform.OS === 'web') {
+      const timer = setTimeout(() => setInteractable(true), 400);
+      return () => clearTimeout(timer);
+    }
+  }, []);
 
   // Load interest slug for theming
   React.useEffect(() => {
@@ -55,6 +65,9 @@ export default function PrivacyQuickSetScreen() {
   const accentColor = ctx.color !== '#1A1A1A' ? ctx.color : '#2563EB';
 
   const navigateNext = useCallback(async () => {
+    if (hasNavigatedRef.current) return;
+    hasNavigatedRef.current = true;
+
     const orgSlug = await AsyncStorage.getItem('onboarding_org_slug');
     const interest = await AsyncStorage.getItem('onboarding_interest_slug');
 
@@ -202,14 +215,14 @@ export default function PrivacyQuickSetScreen() {
           entering={FadeIn.delay(600).duration(300)}
           style={styles.footer}
         >
-          <TouchableOpacity onPress={handleSkip} style={styles.skipButton}>
+          <TouchableOpacity onPress={handleSkip} style={styles.skipButton} disabled={!interactable}>
             <Text style={styles.skipText}>Keep defaults</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={[styles.continueButton, { backgroundColor: accentColor, shadowColor: accentColor }]}
             onPress={handleContinue}
-            disabled={isSaving}
+            disabled={isSaving || !interactable}
             activeOpacity={0.85}
           >
             <Text style={styles.continueButtonText}>

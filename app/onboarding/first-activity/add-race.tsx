@@ -28,6 +28,7 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { OnboardingProgressDots } from '@/components/onboarding/OnboardingProgressDots';
 import { useWorkspaceDomain } from '@/hooks/useWorkspaceDomain';
 import { guardOnboardingRouteForDomain } from '@/lib/utils/onboardingRouting';
@@ -90,7 +91,13 @@ export default function AddRaceScreen() {
     await OnboardingStateService.markOnboardingSeen();
     // Clear onboarding state and navigate directly into add-race flow
     await OnboardingStateService.clearState();
-    router.replace('/(tabs)/race/add-tufte');
+    const returnTo = await AsyncStorage.getItem('post_onboarding_return_to');
+    await AsyncStorage.removeItem('post_onboarding_return_to');
+    if (returnTo) {
+      router.replace(returnTo as any);
+    } else {
+      router.replace('/(tabs)/race/add-tufte');
+    }
   };
 
   const handleExplore = async () => {
@@ -98,7 +105,13 @@ export default function AddRaceScreen() {
     await OnboardingStateService.markOnboardingSeen();
     // Clear onboarding state and go to main app
     await OnboardingStateService.clearState();
-    router.replace('/(tabs)/races');
+    const returnTo = await AsyncStorage.getItem('post_onboarding_return_to');
+    await AsyncStorage.removeItem('post_onboarding_return_to');
+    if (returnTo) {
+      router.replace(returnTo as any);
+    } else {
+      router.replace('/(tabs)/races');
+    }
   };
 
   const handleBack = () => {
