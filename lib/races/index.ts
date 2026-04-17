@@ -45,3 +45,6 @@ export type {
   RegulatoryAcknowledgements,
   CourseOutlineGroup,
 } from './constants';
+
+// Shared past/future classifier
+export { isItemPast } from './isItemPast';
