@@ -577,8 +577,10 @@ export interface UseRaceListDataReturn {
   normalizedLiveRaces: LiveRace[];
   /** Safe recent races (prioritizes enriched > live > fallback) */
   safeRecentRaces: LiveRace[];
-  /** Next upcoming race from timeline */
+  /** Next upcoming race from timeline (races only, used for done/planned partition) */
   safeNextRace: LiveRace;
+  /** Next actionable item — step or race — for display and navigation */
+  nextActionItem: LiveRace;
   /** Preview text for header (e.g., "Today", "Tomorrow", "in 3 days") */
   nextRacePreview: string | null;
   /** Whether there are real (non-demo) races */
@@ -645,32 +647,117 @@ export function useRaceListData({
 
   // Safe recent races - prioritize enriched > live > fallback
   const safeRecentRaces = useMemo((): LiveRace[] => {
+    let result: LiveRace[];
     if (enrichedRaces && enrichedRaces.length > 0) {
-      return enrichedRaces;
+      result = enrichedRaces;
+    } else if (normalizedLiveRaces.length > 0) {
+      result = normalizedLiveRaces;
+    } else {
+      result = Array.isArray(recentRaces) ? (recentRaces as LiveRace[]) : [];
     }
-    if (normalizedLiveRaces.length > 0) {
-      return normalizedLiveRaces;
-    }
-    return Array.isArray(recentRaces) ? (recentRaces as LiveRace[]) : [];
+    return result;
   }, [enrichedRaces, normalizedLiveRaces, recentRaces]);
 
-  // Calculate next race from timeline
+  // UP NEXT: first non-completed item in the user's manual order.
+  //
+  // Order rule: sort_order ASC (primary), date ASC (tiebreaker), id (stable).
+  // This matches the sort in baseCardGridRaces / interestFilteredRaces, so the
+  // grid's UP NEXT badge, the carousel's UP NEXT badge, and the summary bar
+  // all agree.
+  //
+  // Default rule: skip past items (past regatta = date + 3h ago; past step =
+  // date in the past). The "natural" UP NEXT is the first non-completed
+  // future-or-undated item.
+  //
+  // Pin signal: if a past, non-completed item appears ABOVE the natural UP NEXT
+  // and has a STRICTLY lower sort_order, the user has explicitly dragged it
+  // ahead — return it instead. In the default state (all sort_orders equal),
+  // strictly-lower is never true, so past items don't auto-claim UP NEXT.
   const safeNextRace = useMemo((): LiveRace => {
     if (safeRecentRaces.length === 0) return {};
 
-    const now = new Date();
-    const nextRaceIndex = safeRecentRaces.findIndex((race) => {
-      // Timeline steps use explicit status — a pending step is always "next" regardless of date
-      if ((race as any).isTimelineStep) {
-        return (race as any).stepStatus !== 'completed';
-      }
-      const raceDateTime = new Date(race.date || race.start_date || '');
-      // Race is "upcoming" if estimated end time (start + 3 hours) is still in the future
-      const raceEndEstimate = new Date(raceDateTime.getTime() + 3 * 60 * 60 * 1000);
-      return raceEndEstimate > now;
+    const nowMs = Date.now();
+
+    const ordered = [...safeRecentRaces].sort((a: any, b: any) => {
+      const aSort = (a.sort_order ?? 0) as number;
+      const bSort = (b.sort_order ?? 0) as number;
+      if (aSort !== bSort) return aSort - bSort;
+      const aDate = a.date || a.start_date ? new Date(a.date || a.start_date).getTime() : Infinity;
+      const bDate = b.date || b.start_date ? new Date(b.date || b.start_date).getTime() : Infinity;
+      const aD = isNaN(aDate) ? Infinity : aDate;
+      const bD = isNaN(bDate) ? Infinity : bDate;
+      if (aD !== bD) return aD - bD;
+      return String(a.id ?? '').localeCompare(String(b.id ?? ''));
     });
 
-    return nextRaceIndex >= 0 ? safeRecentRaces[nextRaceIndex] : {};
+    const isCompleted = (r: any): boolean =>
+      r.stepStatus === 'completed' || r.status === 'completed';
+
+    const isPast = (r: any): boolean => {
+      const raw = r.date || r.start_date;
+      if (!raw) return false; // undated → not past
+      const d = new Date(raw).getTime();
+      if (isNaN(d)) return false;
+      if (!r.isTimelineStep) return d + 3 * 60 * 60 * 1000 <= nowMs; // 3h regatta buffer
+      return d < nowMs;
+    };
+
+    // Natural UP NEXT: first non-completed, future-or-undated item.
+    const naturalIdx = ordered.findIndex((r: any) => !isCompleted(r) && !isPast(r));
+    const naturalSort = naturalIdx >= 0
+      ? ((ordered[naturalIdx] as any).sort_order ?? 0)
+      : Infinity;
+
+    // Look for a past, non-completed item above naturalIdx with strictly
+    // lower sort_order — that's an explicit user pin.
+    const upperBound = naturalIdx >= 0 ? naturalIdx : ordered.length;
+    for (let i = 0; i < upperBound; i++) {
+      const r: any = ordered[i];
+      if (isCompleted(r)) continue;
+      if (!isPast(r)) continue;
+      const s = (r.sort_order ?? 0) as number;
+      if (s < naturalSort) return r;
+    }
+
+    if (naturalIdx >= 0) return ordered[naturalIdx];
+
+    // No future item exists at all → fall back to first non-completed item
+    // (so undated/overdue work still gets surfaced).
+    return ordered.find((r: any) => !isCompleted(r)) ?? {};
+  }, [safeRecentRaces]);
+
+  // Next actionable item — the earliest-dated non-completed item regardless of type.
+  // Uses date comparison (not array order) because safeRecentRaces order isn't guaranteed.
+  // Used for "Next:" header display and card-view initial scroll position.
+  const nextActionItem = useMemo((): LiveRace => {
+    if (safeRecentRaces.length === 0) return {};
+    const now = new Date();
+    const nowMs = now.getTime();
+    let earliest: LiveRace = {};
+    let earliestDate = Infinity;
+
+    for (const race of safeRecentRaces) {
+      const isStep = !!(race as any).isTimelineStep;
+
+      // Skip completed items
+      if (isStep) {
+        if ((race as any).stepStatus === 'completed') continue;
+      } else {
+        const raceDateTime = new Date(race.date || race.start_date || '');
+        const raceEndEstimate = raceDateTime.getTime() + 3 * 60 * 60 * 1000;
+        if (raceEndEstimate <= nowMs) continue; // past race
+      }
+
+      const d = new Date(race.date || race.start_date || '').getTime();
+      // Undated items get Infinity so dated items always win
+      const dateVal = isNaN(d) ? Infinity : d;
+      if (dateVal < earliestDate || (!earliest.id && dateVal === earliestDate)) {
+        earliestDate = dateVal;
+        earliest = race;
+      }
+    }
+
+    return earliest;
   }, [safeRecentRaces]);
 
   // Calculate next race preview text for header
@@ -694,6 +781,7 @@ export function useRaceListData({
     normalizedLiveRaces,
     safeRecentRaces,
     safeNextRace,
+    nextActionItem,
     nextRacePreview,
     hasRealRaces,
     recentRace,

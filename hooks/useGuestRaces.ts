@@ -79,9 +79,21 @@ function guestRaceToListItem(guest: GuestRace): GuestRaceListItem {
 
 /**
  * Hook for getting races for guest users
- * Returns demo races + any locally stored guest race
+ * Returns demo races + any locally stored guest race.
+ *
+ * The heavy sailing DemoRace objects (Cowes Week, Round the Island) only make
+ * sense for the `sail-racing` interest. For any other interest — *and* while
+ * the active interest is still loading (slug === undefined) — we return an
+ * empty list so we never flash sailing demos into non-sailing interests.
+ * Non-sailing interests fall through to the per-interest demo steps in
+ * `getDemoTimelineSteps()` (hooks/useRaceListData.ts).
+ *
+ * @param interestSlug The currently-selected interest slug. Must be
+ *                     explicitly `'sail-racing'` to receive the sailing demo
+ *                     races — any other value (including null/undefined while
+ *                     loading) yields an empty demo list.
  */
-export function useGuestRaces() {
+export function useGuestRaces(interestSlug?: string | null) {
   const queryClient = useQueryClient();
 
   // Query for guest race from local storage
@@ -98,13 +110,21 @@ export function useGuestRaces() {
     staleTime: 1000 * 60, // 1 minute
   });
 
-  // Get demo races (these are generated, not fetched)
-  const demoRaces = DemoRaceService.getDemoRaces();
+  // Get demo races (these are generated, not fetched).
+  // Only include them when the user is *explicitly* on the sailing interest —
+  // any other value (including `undefined` during the interest-loading window)
+  // yields an empty list so demos never leak across interests.
+  const isSailingInterest = interestSlug === 'sail-racing';
+  const allDemoRaces = DemoRaceService.getDemoRaces();
+  const demoRaces = useMemo(
+    () => (isSailingInterest ? allDemoRaces : []),
+    [isSailingInterest, allDemoRaces],
+  );
 
   // Combine demo races with guest race
   const sortedRaces = useMemo(() => {
     const allRaces: GuestRaceListItem[] = [
-      // Demo races first
+      // Demo races first (empty on non-sailing interests)
       ...demoRaces.map(demoRaceToListItem),
       // Guest race if it exists
       ...(guestRace ? [guestRaceToListItem(guestRace)] : []),

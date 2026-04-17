@@ -22,8 +22,21 @@ export function useScrollToolbarHide() {
 
   const handleScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const currentY = event.nativeEvent.contentOffset.y;
+      const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+      const currentY = contentOffset.y;
       const diff = currentY - anchorY.current;
+
+      // Ignore bounce regions:
+      // - Overscroll at the top (currentY < 0)
+      // - Overscroll / "stretch" at the bottom where we're within ~2px of the
+      //   max scrollable offset. Bouncing back from the bottom causes a
+      //   negative diff that would otherwise un-hide the toolbar.
+      const maxOffset = Math.max(0, contentSize.height - layoutMeasurement.height);
+      const atBottom = maxOffset > 0 && currentY >= maxOffset - 2;
+      if (atBottom) {
+        anchorY.current = currentY;
+        return;
+      }
 
       if (currentY <= 0) {
         // At the top — always show

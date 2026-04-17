@@ -77,8 +77,40 @@ function calculateDurationFromSchedule(
   }
 }
 
-// Cache for venue coordinates fetched from sailing_venues table
+// Cache for venue coordinates fetched from sailing_venues table.
+// Backed by localStorage on web so hard refreshes don't re-hit the database.
 const venueCoordinatesCache = new Map<string, { lat: number; lng: number } | null>();
+const VENUE_CACHE_STORAGE_KEY = 'regattaflow:venueCoordinatesCache:v1';
+
+function loadVenueCacheFromStorage(): void {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    const raw = window.localStorage.getItem(VENUE_CACHE_STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as Record<string, { lat: number; lng: number } | null>;
+    for (const [id, coords] of Object.entries(parsed)) {
+      venueCoordinatesCache.set(id, coords);
+    }
+  } catch {
+    // ignore corrupt cache
+  }
+}
+
+function saveVenueCacheToStorage(): void {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    const obj: Record<string, { lat: number; lng: number } | null> = {};
+    venueCoordinatesCache.forEach((value, key) => {
+      obj[key] = value;
+    });
+    window.localStorage.setItem(VENUE_CACHE_STORAGE_KEY, JSON.stringify(obj));
+  } catch {
+    // ignore storage errors (quota etc)
+  }
+}
+
+// Populate the in-memory cache from localStorage on module init
+loadVenueCacheFromStorage();
 
 /**
  * Fetch venue coordinates from sailing_venues table for races that have venue_id
@@ -120,6 +152,8 @@ async function fetchVenueCoordinatesFromDB(venueIds: string[]): Promise<Map<stri
         }
         venueCoordinatesCache.set(venue.id, null);
       });
+      // Persist the updated cache so subsequent hard refreshes skip this round-trip
+      saveVenueCacheToStorage();
     }
 
     // Add cached results
@@ -292,6 +326,244 @@ interface RegattaRaw {
 }
 
 /**
+ * Build a Race object from a regatta using only synchronous logic.
+ * Weather fields start as `weatherStatus: 'loading'` and get patched in later.
+ * Extracted so the UI can paint immediately without awaiting weather fetches.
+ */
+function buildBaseRace(
+  regatta: RegattaRaw,
+  venueCoordinatesFromDB: Map<string, { lat: number; lng: number }>
+): Race {
+  // Timeline steps pass-through (no weather enrichment)
+  if ((regatta as any).isTimelineStep) {
+    return {
+      ...regatta,
+      venue: (regatta as any).venue || '',
+      date: (regatta as any).date || regatta.start_date,
+      isTimelineStep: true,
+    } as Race;
+  }
+
+  const venueName = regatta.metadata?.venue_name || (regatta.metadata as any)?.venue || 'Venue TBD';
+  const raceDate = regatta.start_date;
+
+  let venueCoordinates = extractVenueCoordinates(regatta);
+  if (!venueCoordinates && regatta.metadata?.venue_id) {
+    venueCoordinates = venueCoordinatesFromDB.get(regatta.metadata.venue_id) || null;
+  }
+
+  const vhfChannel =
+    regatta.vhf_channel ||
+    regatta.metadata?.vhf_channel ||
+    regatta.metadata?.critical_details?.vhf_channel ||
+    regatta.metadata?.communications?.vhf ||
+    (Array.isArray(regatta.metadata?.vhf_channels) && regatta.metadata.vhf_channels[0]?.channel) ||
+    null;
+
+  const critical_details = {
+    ...regatta.metadata?.critical_details,
+    vhf_channel: vhfChannel,
+  };
+
+  const classId =
+    regatta.class_id ||
+    regatta.metadata?.class_id ||
+    regatta.metadata?.classId ||
+    null;
+
+  let className =
+    regatta.metadata?.class ||
+    regatta.metadata?.class_name ||
+    null;
+
+  if (!className && regatta.name) {
+    const raceNameLower = regatta.name.toLowerCase();
+    const knownClasses = ['dragon', 'j/80', 'j80', 'laser', 'optimist', 'rs21', 'etchells', 'farr 40', 'irc', 'orc', 'sportsboat'];
+    for (const knownClass of knownClasses) {
+      if (raceNameLower.includes(knownClass)) {
+        className = knownClass.charAt(0).toUpperCase() + knownClass.slice(1);
+        if (className.toLowerCase() === 'j80') className = 'J/80';
+        break;
+      }
+    }
+  }
+
+  const calculatedDuration = calculateDurationFromSchedule(regatta.schedule, regatta.start_date);
+  const effectiveTimeLimitHours = regatta.time_limit_hours ?? calculatedDuration;
+
+  return {
+    id: regatta.id,
+    name: regatta.name,
+    venue: venueName,
+    date: raceDate,
+    startTime: regatta.warning_signal_time || extract24HourTime(raceDate),
+    boatClass: className || 'Class TBD',
+    classId,
+    vhf_channel: vhfChannel,
+    status: regatta.status || 'upcoming',
+    strategy: regatta.metadata?.strategy || 'Race strategy will be generated based on conditions.',
+    critical_details,
+    created_by: regatta.created_by,
+    venueCoordinates,
+    metadata: regatta.metadata,
+    boat_id: regatta.boat_id,
+    race_type: regatta.race_type || (regatta.route_waypoints?.length > 0 ? 'distance' : 'fleet'),
+    total_distance_nm: regatta.total_distance_nm,
+    time_limit_hours: effectiveTimeLimitHours,
+    time_limit_minutes: regatta.time_limit_minutes,
+    route_waypoints: regatta.route_waypoints,
+    start_finish_same_location: regatta.start_finish_same_location,
+    finish_venue: regatta.finish_venue,
+    weatherStatus: 'loading',
+  };
+}
+
+/**
+ * Resolve the weather patch (wind/tide/weatherStatus) for a single race.
+ * For synchronous-decidable cases (metadata has real weather, cache hit, past race,
+ * too far out, no venue) this resolves immediately without an await. Otherwise
+ * it fetches weather with a 5s timeout.
+ */
+async function resolveRaceWeather(
+  regatta: RegattaRaw,
+  baseRace: Race,
+  weatherCache: Map<string, RaceWeatherMetadata | null>,
+  cacheUpdates: Map<string, RaceWeatherMetadata | null>,
+  persistenceQueue: { regattaId: string; weather: RaceWeatherMetadata; metadata: any }[],
+): Promise<Partial<Race>> {
+  // Timeline steps never need weather
+  if ((regatta as any).isTimelineStep) {
+    return {};
+  }
+
+  const venueName = baseRace.venue ?? 'Venue TBD';
+  const raceDate = baseRace.date;
+
+  const hasWind = regatta.metadata?.wind;
+  const hasTide = regatta.metadata?.tide;
+  const isPlaceholderWind = hasWind && hasWind.direction === 'Variable' && hasWind.speedMin === 8 && hasWind.speedMax === 15;
+  const isPlaceholderTide = hasTide && hasTide.state === 'slack' && hasTide.height === 1.0;
+
+  if (hasWind && hasTide && !isPlaceholderWind && !isPlaceholderTide) {
+    return { wind: regatta.metadata!.wind, tide: regatta.metadata!.tide, weatherStatus: 'available' };
+  }
+
+  const cacheKey = `${venueName}-${raceDate}`;
+  if (weatherCache.has(cacheKey)) {
+    const cachedWeather = weatherCache.get(cacheKey);
+    if (cachedWeather) {
+      return { wind: cachedWeather.wind, tide: cachedWeather.tide, weatherStatus: 'available' };
+    }
+    return { wind: null, tide: null, weatherStatus: 'unavailable' };
+  }
+
+  const raceDateObj = new Date(raceDate);
+  const now = new Date();
+  const hoursUntil = (raceDateObj.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+  if (hoursUntil < -24) {
+    const r = regatta as any;
+    const hasStoredWind = r.expected_wind_speed_min || r.expected_wind_speed_max || r.metadata?.wind || r.weather_conditions;
+    if (hasStoredWind) {
+      const wc = r.weather_conditions || {};
+      const windDir = wc.wind_direction || r.expected_wind_direction || r.metadata?.wind?.direction || 'N';
+      const windMin = wc.wind_speed_min ?? r.expected_wind_speed_min ?? r.metadata?.wind?.speedMin ?? 0;
+      const windMax = wc.wind_speed_max ?? r.expected_wind_speed_max ?? r.metadata?.wind?.speedMax ?? windMin;
+      if (windMin > 0 || windMax > 0) {
+        return {
+          wind: { direction: windDir, speedMin: windMin, speedMax: windMax },
+          tide: (wc.tide_height || r.tide_at_start) ? {
+            state: wc.tide_state || r.tide_at_start || 'unknown',
+            height: wc.tide_height || 0,
+            direction: wc.tide_direction || r.current_direction,
+          } : null,
+          weatherStatus: 'past',
+        };
+      }
+    }
+    return { wind: null, tide: null, weatherStatus: 'past' };
+  }
+
+  if (hoursUntil > 240) {
+    return { wind: null, tide: null, weatherStatus: 'too_far' };
+  }
+
+  if (!venueName || venueName === 'Venue TBD') {
+    return { wind: null, tide: null, weatherStatus: 'no_venue' };
+  }
+
+  try {
+    const warningSignal = regatta.warning_signal_time
+      || regatta.metadata?.warning_signal
+      || regatta.metadata?.first_warning
+      || regatta.metadata?.warning_signal_time
+      || null;
+
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const timeoutPromise = new Promise<null>((resolve) => {
+      timeoutId = setTimeout(() => {
+        logger.warn(`[useEnrichedRaces] Weather fetch timeout for ${regatta.name}`);
+        resolve(null);
+      }, 5000);
+    });
+
+    let coords: { lat: number; lng: number } | null = null;
+    const racingAreaCoords = regatta.metadata?.racing_area_coordinates;
+    if (racingAreaCoords?.lat && racingAreaCoords?.lng) {
+      coords = { lat: racingAreaCoords.lat, lng: racingAreaCoords.lng };
+    }
+    if (!coords && regatta.metadata?.venue_lat && regatta.metadata?.venue_lng) {
+      coords = { lat: regatta.metadata.venue_lat, lng: regatta.metadata.venue_lng };
+    }
+    const vCoords = regatta.metadata?.venue_coordinates;
+    if (!coords && vCoords?.lat && vCoords?.lng) {
+      coords = { lat: vCoords.lat, lng: vCoords.lng };
+    }
+    const sCoords = regatta.metadata?.start_coordinates;
+    if (!coords && sCoords?.lat && sCoords?.lng) {
+      coords = { lat: sCoords.lat, lng: sCoords.lng };
+    }
+    const waypoints = regatta.route_waypoints;
+    if (!coords && Array.isArray(waypoints) && waypoints.length > 0) {
+      const validWaypoints = waypoints.filter(
+        (wp: any) => typeof wp.latitude === 'number' && typeof wp.longitude === 'number'
+      );
+      if (validWaypoints.length > 0) {
+        const lat = validWaypoints.reduce((s: number, wp: any) => s + wp.latitude, 0) / validWaypoints.length;
+        const lng = validWaypoints.reduce((s: number, wp: any) => s + wp.longitude, 0) / validWaypoints.length;
+        coords = { lat, lng };
+      }
+    }
+    // Fallback to DB-looked-up coords stored on baseRace
+    if (!coords && baseRace.venueCoordinates) {
+      coords = baseRace.venueCoordinates;
+    }
+
+    const weatherPromise = coords
+      ? RaceWeatherService.fetchWeatherByCoordinates(coords.lat, coords.lng, raceDate, venueName, { warningSignalTime: warningSignal })
+      : RaceWeatherService.fetchWeatherByVenueName(venueName, raceDate, { warningSignalTime: warningSignal });
+
+    const weather = await Promise.race([weatherPromise, timeoutPromise]);
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      timeoutId = null;
+    }
+
+    cacheUpdates.set(cacheKey, weather);
+
+    if (weather) {
+      persistenceQueue.push({ regattaId: regatta.id, weather, metadata: regatta.metadata || {} });
+      return { wind: weather.wind, tide: weather.tide, weatherStatus: 'available' };
+    }
+    return { wind: null, tide: null, weatherStatus: 'unavailable' };
+  } catch (error: any) {
+    logger.error(`[useEnrichedRaces] Error fetching weather for ${regatta.name}:`, error);
+    cacheUpdates.set(cacheKey, null);
+    return { wind: null, tide: null, weatherStatus: 'error', weatherError: error?.message || 'Failed to fetch weather' };
+  }
+}
+
+/**
  * Hook to enrich races with real weather data from RaceWeatherService
  *
  * @param races - Array of race objects from database
@@ -354,7 +626,7 @@ export function useEnrichedRaces(races: RegattaRaw[]) {
         .filter(r => r.metadata?.venue_id && !extractVenueCoordinates(r))
         .map(r => r.metadata!.venue_id as string);
 
-      // Step 2: Fetch venue coordinates from sailing_venues table
+      // Step 2: Fetch venue coordinates from sailing_venues table (cached, usually fast)
       const venueCoordinatesFromDB = venueIdsNeedingLookup.length > 0
         ? await fetchVenueCoordinatesFromDB([...new Set(venueIdsNeedingLookup)])
         : new Map<string, { lat: number; lng: number }>();
@@ -363,373 +635,25 @@ export function useEnrichedRaces(races: RegattaRaw[]) {
         logger.info(`[useEnrichedRaces] Fetched ${venueCoordinatesFromDB.size} venue coordinates from DB`);
       }
 
-      // Collect all cache updates to batch them
+      // Step 3: Build base races synchronously and PAINT IMMEDIATELY with weatherStatus: 'loading'
+      // so the UI unblocks without waiting for any weather fetch.
+      const baseRaces: Race[] = races.map(regatta => buildBaseRace(regatta, venueCoordinatesFromDB));
+      setEnrichedRaces(baseRaces);
+      setLoading(false);
+
+      // Step 4: Resolve each race's weather in parallel. Each resolution patches that one
+      // race into state via functional setState so the UI streams in as results arrive.
       const cacheUpdates = new Map<string, RaceWeatherMetadata | null>();
-      // Collect weather data to persist to database
       const persistenceQueue: { regattaId: string; weather: RaceWeatherMetadata; metadata: any }[] = [];
 
-      const enrichedPromises = races.map(async (regatta) => {
-        // Timeline steps don't need weather enrichment — pass through as-is
-        if ((regatta as any).isTimelineStep) {
-          // Pass through all fields — timeline steps don't need weather enrichment
-          return {
-            ...regatta,
-            venue: (regatta as any).venue || '',
-            date: (regatta as any).date || regatta.start_date,
-            isTimelineStep: true,
-          } as Race;
-        }
+      await Promise.all(baseRaces.map(async (baseRace, i) => {
+        const regatta = races[i];
+        const patch = await resolveRaceWeather(regatta, baseRace, weatherCache, cacheUpdates, persistenceQueue);
+        if (!patch || Object.keys(patch).length === 0) return;
+        setEnrichedRaces(prev => prev.map(r => r.id === baseRace.id ? { ...r, ...patch } : r));
+      }));
 
-        // Check venue_name first (standard), then venue (legacy from EditRaceForm bug)
-        const venueName = regatta.metadata?.venue_name || (regatta.metadata as any)?.venue || 'Venue TBD';
-        const raceDate = regatta.start_date;
-
-        // Extract venue coordinates from metadata (used for weather fetching)
-        // First try metadata, then fallback to sailing_venues lookup
-        let venueCoordinates = extractVenueCoordinates(regatta);
-        if (!venueCoordinates && regatta.metadata?.venue_id) {
-          venueCoordinates = venueCoordinatesFromDB.get(regatta.metadata.venue_id) || null;
-        }
-
-        // Extract VHF channel from multiple possible locations
-        // Check top-level column first (where ComprehensiveRaceEntry stores it)
-        const vhfChannel =
-          regatta.vhf_channel ||  // Top-level database column
-          regatta.metadata?.vhf_channel ||
-          regatta.metadata?.critical_details?.vhf_channel ||
-          regatta.metadata?.communications?.vhf ||
-          // Also check for vhf_channels array (detailed multi-channel format)
-          (Array.isArray(regatta.metadata?.vhf_channels) && regatta.metadata.vhf_channels[0]?.channel) ||
-          null;
-
-        // Build critical_details ensuring VHF channel is included
-        const critical_details = {
-          ...regatta.metadata?.critical_details,
-          vhf_channel: vhfChannel,
-        };
-
-        // Extract class_id for rig tuning lookup
-        const classId =
-          regatta.class_id ||
-          regatta.metadata?.class_id ||
-          regatta.metadata?.classId ||
-          null;
-
-        // Extract class name - try multiple sources including extracting from race name
-        let className =
-          regatta.metadata?.class ||
-          regatta.metadata?.class_name ||
-          null;
-
-        // Fallback: Try to extract common boat class names from race name
-        if (!className && regatta.name) {
-          const raceNameLower = regatta.name.toLowerCase();
-          const knownClasses = ['dragon', 'j/80', 'j80', 'laser', 'optimist', 'rs21', 'etchells', 'farr 40', 'irc', 'orc', 'sportsboat'];
-          for (const knownClass of knownClasses) {
-            if (raceNameLower.includes(knownClass)) {
-              className = knownClass.charAt(0).toUpperCase() + knownClass.slice(1);
-              // Normalize some class names
-              if (className.toLowerCase() === 'j80') className = 'J/80';
-              break;
-            }
-          }
-        }
-
-        // Debug logging to understand what data we have - especially VHF
-        logger.debug(`📡 Race "${regatta.name}" VHF sources:`, {
-          'regatta.vhf_channel': regatta.vhf_channel,
-          'metadata.vhf_channel': regatta.metadata?.vhf_channel,
-          'critical_details.vhf_channel': regatta.metadata?.critical_details?.vhf_channel,
-          'communications.vhf': regatta.metadata?.communications?.vhf,
-          'vhf_channels array': regatta.metadata?.vhf_channels,
-          'extracted vhfChannel': vhfChannel,
-          classId,
-          className,
-        });
-
-        // First, map to basic race format - preserve created_by for edit permissions
-        // Calculate time_limit_hours from schedule if not set in DB
-        const calculatedDuration = calculateDurationFromSchedule(regatta.schedule, regatta.start_date);
-        const effectiveTimeLimitHours = regatta.time_limit_hours ?? calculatedDuration;
-
-        const baseRace: Race = {
-          id: regatta.id,
-          name: regatta.name,
-          venue: venueName,
-          date: raceDate,
-          startTime: regatta.warning_signal_time || extract24HourTime(raceDate),
-          boatClass: className || 'Class TBD', // Use extracted class name
-          classId, // Include class_id for rig tuning lookup
-          vhf_channel: vhfChannel, // VHF channel at top level for easy access
-          status: regatta.status || 'upcoming',
-          strategy: regatta.metadata?.strategy || 'Race strategy will be generated based on conditions.',
-          critical_details,
-          created_by: regatta.created_by, // Preserve for edit/delete permission checks
-          venueCoordinates, // Include coordinates for weather fetching
-          metadata: regatta.metadata, // Preserve full metadata for sample detection
-          boat_id: regatta.boat_id, // Preserve boat_id for equipment/sails
-          // Distance racing fields
-          race_type: regatta.race_type || (regatta.route_waypoints?.length > 0 ? 'distance' : 'fleet'),
-          total_distance_nm: regatta.total_distance_nm,
-          time_limit_hours: effectiveTimeLimitHours,
-          time_limit_minutes: regatta.time_limit_minutes,
-          route_waypoints: regatta.route_waypoints,
-          start_finish_same_location: regatta.start_finish_same_location,
-          finish_venue: regatta.finish_venue,
-        };
-
-        // Check if metadata has wind/tide and if they're not placeholder values
-        const hasWind = regatta.metadata?.wind;
-        const hasTide = regatta.metadata?.tide;
-        const isPlaceholderWind = hasWind &&
-          hasWind.direction === 'Variable' &&
-          hasWind.speedMin === 8 &&
-          hasWind.speedMax === 15;
-        const isPlaceholderTide = hasTide &&
-          hasTide.state === 'slack' &&
-          hasTide.height === 1.0;
-
-        // If metadata has real (non-placeholder) weather data, use it
-        if (hasWind && hasTide && !isPlaceholderWind && !isPlaceholderTide) {
-          logger.debug(`[useEnrichedRaces] Using existing real weather for ${regatta.name}`);
-          return {
-            ...baseRace,
-            wind: regatta.metadata!.wind,
-            tide: regatta.metadata!.tide,
-          };
-        }
-
-        // Log if we're replacing placeholder values
-        if ((hasWind && isPlaceholderWind) || (hasTide && isPlaceholderTide)) {
-          logger.debug(`[useEnrichedRaces] Replacing placeholder weather for ${regatta.name}`);
-        }
-
-        // Check cache first
-        const cacheKey = `${venueName}-${raceDate}`;
-        if (weatherCache.has(cacheKey)) {
-          const cachedWeather = weatherCache.get(cacheKey);
-          if (cachedWeather) {
-            logger.debug(`[useEnrichedRaces] Using cached weather for ${regatta.name}`);
-            return {
-              ...baseRace,
-              wind: cachedWeather.wind,
-              tide: cachedWeather.tide,
-              weatherStatus: 'available' as const,
-            };
-          } else {
-            // Cache indicates no weather available
-            return {
-              ...baseRace,
-              wind: null,
-              tide: null,
-              weatherStatus: 'unavailable' as const,
-            };
-          }
-        }
-
-        // Don't fetch for races in the past or too far in the future
-        const raceDateObj = new Date(raceDate);
-        const now = new Date();
-        const hoursUntil = (raceDateObj.getTime() - now.getTime()) / (1000 * 60 * 60);
-
-        if (hoursUntil < -24) {
-          logger.debug(`[useEnrichedRaces] Race is in the past (${Math.round(hoursUntil)} hours ago)`);
-
-          // For past races, check if we have stored wind data in regatta columns
-          const r = regatta as any;
-          const hasStoredWind = r.expected_wind_speed_min || r.expected_wind_speed_max ||
-            r.metadata?.wind || r.weather_conditions;
-
-          if (hasStoredWind) {
-            // Check multiple sources for stored weather data
-            const wc = r.weather_conditions || {};
-            const windDir = wc.wind_direction || r.expected_wind_direction || r.metadata?.wind?.direction || 'N';
-            const windMin = wc.wind_speed_min ?? r.expected_wind_speed_min ?? r.metadata?.wind?.speedMin ?? 0;
-            const windMax = wc.wind_speed_max ?? r.expected_wind_speed_max ?? r.metadata?.wind?.speedMax ?? windMin;
-
-            if (windMin > 0 || windMax > 0) {
-              logger.debug(`[useEnrichedRaces] Using stored weather for past race ${regatta.name}: ${windDir} ${windMin}-${windMax}kt`);
-              return {
-                ...baseRace,
-                wind: {
-                  direction: windDir,
-                  speedMin: windMin,
-                  speedMax: windMax,
-                },
-                tide: (wc.tide_height || r.tide_at_start) ? {
-                  state: wc.tide_state || r.tide_at_start || 'unknown',
-                  height: wc.tide_height || 0,
-                  direction: wc.tide_direction || r.current_direction,
-                } : null,
-                weatherStatus: 'past' as const,
-              };
-            }
-          }
-
-          return {
-            ...baseRace,
-            wind: null,
-            tide: null,
-            weatherStatus: 'past' as const,
-          };
-        }
-
-        if (hoursUntil > 240) {
-          logger.debug(`[useEnrichedRaces] Race is too far in future (${Math.round(hoursUntil)} hours away)`);
-          return {
-            ...baseRace,
-            wind: null,
-            tide: null,
-            weatherStatus: 'too_far' as const,
-          };
-        }
-
-        // Check if venue exists
-        if (!venueName || venueName === 'Venue TBD') {
-          logger.debug(`[useEnrichedRaces] No venue specified for ${regatta.name}`);
-          return {
-            ...baseRace,
-            wind: null,
-            tide: null,
-            weatherStatus: 'no_venue' as const,
-          };
-        }
-
-        // Fetch real weather with timeout
-        try {
-          logger.debug(`[useEnrichedRaces] Fetching weather for ${regatta.name} at ${venueName}`);
-          const warningSignal = regatta.warning_signal_time
-            || regatta.metadata?.warning_signal
-            || regatta.metadata?.first_warning
-            || regatta.metadata?.warning_signal_time
-            || null;
-
-          // Create timeout promise
-          let timeoutId: ReturnType<typeof setTimeout> | null = null;
-          const timeoutPromise = new Promise<null>((resolve) => {
-            timeoutId = setTimeout(() => {
-              logger.warn(`[useEnrichedRaces] Weather fetch timeout for ${regatta.name}`);
-              resolve(null);
-            }, 5000); // 5 second timeout
-          });
-
-          // Try to use direct coordinates from race metadata first (faster and more reliable)
-          // Check multiple potential coordinate sources:
-          // 1. racing_area_coordinates (common for fleet races)
-          // 2. venue_lat/venue_lng (explicit venue coordinates)
-          // 3. venue_coordinates (alternate format)
-          // 4. route_waypoints (distance races - calculate centroid)
-          let coords: { lat: number; lng: number } | null = null;
-
-          // 1. Check racing_area_coordinates
-          const racingAreaCoords = regatta.metadata?.racing_area_coordinates;
-          if (racingAreaCoords?.lat && racingAreaCoords?.lng) {
-            coords = { lat: racingAreaCoords.lat, lng: racingAreaCoords.lng };
-          }
-
-          // 2. Check venue_lat/venue_lng
-          if (!coords && regatta.metadata?.venue_lat && regatta.metadata?.venue_lng) {
-            coords = { lat: regatta.metadata.venue_lat, lng: regatta.metadata.venue_lng };
-          }
-
-          // 3. Check venue_coordinates
-          const venueCoords = regatta.metadata?.venue_coordinates;
-          if (!coords && venueCoords?.lat && venueCoords?.lng) {
-            coords = { lat: venueCoords.lat, lng: venueCoords.lng };
-          }
-
-          // 3b. Check start_coordinates (from add-tufte form)
-          const startCoords = regatta.metadata?.start_coordinates;
-          if (!coords && startCoords?.lat && startCoords?.lng) {
-            coords = { lat: startCoords.lat, lng: startCoords.lng };
-          }
-
-          // 4. Check route_waypoints (distance racing) - calculate centroid
-          const waypoints = regatta.route_waypoints;
-          if (!coords && Array.isArray(waypoints) && waypoints.length > 0) {
-            const validWaypoints = waypoints.filter(
-              (wp: any) => typeof wp.latitude === 'number' && typeof wp.longitude === 'number'
-            );
-            if (validWaypoints.length > 0) {
-              const lat = validWaypoints.reduce((sum: number, wp: any) => sum + wp.latitude, 0) / validWaypoints.length;
-              const lng = validWaypoints.reduce((sum: number, wp: any) => sum + wp.longitude, 0) / validWaypoints.length;
-              coords = { lat, lng };
-              logger.debug(`[useEnrichedRaces] Using centroid of ${validWaypoints.length} waypoints for ${regatta.name}`);
-            }
-          }
-
-          let weatherPromise;
-
-          if (coords) {
-            logger.debug(`[useEnrichedRaces] Using direct coordinates for ${regatta.name}: ${coords.lat}, ${coords.lng}`);
-            weatherPromise = RaceWeatherService.fetchWeatherByCoordinates(
-              coords.lat,
-              coords.lng,
-              raceDate,
-              venueName,
-              { warningSignalTime: warningSignal }
-            );
-          } else {
-            logger.debug(`[useEnrichedRaces] No coordinates in metadata, looking up venue: ${venueName}`);
-            weatherPromise = RaceWeatherService.fetchWeatherByVenueName(
-              venueName,
-              raceDate,
-              { warningSignalTime: warningSignal }
-            );
-          }
-
-          // Race between weather fetch and timeout
-          const weather = await Promise.race([weatherPromise, timeoutPromise]);
-          if (timeoutId) {
-            clearTimeout(timeoutId);
-            timeoutId = null;
-          }
-
-          // Collect cache update (don't set state in loop)
-          cacheUpdates.set(cacheKey, weather);
-
-          if (weather) {
-            logger.info(`[useEnrichedRaces] ✓ Got real weather for ${regatta.name}: ${weather.wind.direction} ${weather.wind.speedMin}-${weather.wind.speedMax}kts`);
-
-            // Queue weather data for database persistence
-            persistenceQueue.push({
-              regattaId: regatta.id,
-              weather,
-              metadata: regatta.metadata || {},
-            });
-
-            return {
-              ...baseRace,
-              wind: weather.wind,
-              tide: weather.tide,
-              weatherStatus: 'available' as const,
-            };
-          } else {
-            logger.warn(`[useEnrichedRaces] No weather available for ${regatta.name}`);
-            return {
-              ...baseRace,
-              wind: null,
-              tide: null,
-              weatherStatus: 'unavailable' as const,
-            };
-          }
-        } catch (error: any) {
-          logger.error(`[useEnrichedRaces] Error fetching weather for ${regatta.name}:`, error);
-          // Collect cache update (don't set state in loop)
-          cacheUpdates.set(cacheKey, null);
-          return {
-            ...baseRace,
-            wind: null,
-            tide: null,
-            weatherStatus: 'error' as const,
-            weatherError: error?.message || 'Failed to fetch weather',
-          };
-        }
-      });
-
-      const enriched = await Promise.all(enrichedPromises);
-
-      // Batch update cache once after all promises complete
+      // Step 5: Batch-update the in-memory weather cache and persist newly fetched weather to DB
       if (cacheUpdates.size > 0) {
         setWeatherCache(prev => {
           const newCache = new Map(prev);
@@ -738,7 +662,6 @@ export function useEnrichedRaces(races: RegattaRaw[]) {
         });
       }
 
-      // Persist all weather data to database in parallel
       if (persistenceQueue.length > 0) {
         logger.info(`[useEnrichedRaces] Persisting ${persistenceQueue.length} weather updates to database`);
         await Promise.all(
@@ -749,80 +672,23 @@ export function useEnrichedRaces(races: RegattaRaw[]) {
       }
 
       logger.info('[useEnrichedRaces] ===== ENRICHMENT COMPLETE =====');
-      logger.info('[useEnrichedRaces] Enriched races count:', enriched.length);
-      logger.info('[useEnrichedRaces] Sample race:', enriched[0]);
-      setEnrichedRaces(enriched);
+      logger.info('[useEnrichedRaces] Enriched races count:', baseRaces.length);
     } catch (error) {
       logger.error('[useEnrichedRaces] Error enriching races:', error);
-      // Fall back to basic mapping with status indicators
-      setEnrichedRaces(races.map(regatta => {
-        // Extract VHF channel from multiple possible locations
-        const vhfChannel =
-          regatta.vhf_channel ||
-          regatta.metadata?.vhf_channel ||
-          regatta.metadata?.critical_details?.vhf_channel ||
-          regatta.metadata?.communications?.vhf ||
-          null;
-
-        // Extract class name - try multiple sources including extracting from race name
-        let className =
-          regatta.metadata?.class ||
-          regatta.metadata?.class_name ||
-          null;
-
-        // Fallback: Try to extract common boat class names from race name
-        if (!className && regatta.name) {
-          const raceNameLower = regatta.name.toLowerCase();
-          const knownClasses = ['dragon', 'j/80', 'j80', 'laser', 'optimist', 'rs21', 'etchells', 'farr 40', 'irc', 'orc', 'sportsboat'];
-          for (const knownClass of knownClasses) {
-            if (raceNameLower.includes(knownClass)) {
-              className = knownClass.charAt(0).toUpperCase() + knownClass.slice(1);
-              if (className.toLowerCase() === 'j80') className = 'J/80';
-              break;
-            }
-          }
-        }
-
-        // Extract venue coordinates even in error path
-        const venueCoordinates = extractVenueCoordinates(regatta);
-
-        return {
-          id: regatta.id,
-          name: regatta.name,
-          // Check venue_name first (standard), then venue (legacy from EditRaceForm bug)
-          venue: regatta.metadata?.venue_name || (regatta.metadata as any)?.venue || 'Venue TBD',
-          date: regatta.start_date,
-          startTime: regatta.warning_signal_time || (() => { const d = new Date(regatta.start_date); return `${d.getUTCHours().toString().padStart(2, '0')}:${d.getUTCMinutes().toString().padStart(2, '0')}`; })(),
-          boatClass: className || 'Class TBD',
-          classId: regatta.class_id || regatta.metadata?.class_id || regatta.metadata?.classId || null,
-          vhf_channel: vhfChannel, // VHF channel at top level
-          status: regatta.status || 'upcoming',
-          wind: null,
-          tide: null,
-          weatherStatus: 'error' as const,
-          weatherError: 'Failed to load weather data',
-          strategy: regatta.metadata?.strategy || 'Race strategy will be generated based on conditions.',
-          critical_details: {
-            ...regatta.metadata?.critical_details,
-            vhf_channel: vhfChannel,
-          },
-          created_by: regatta.created_by, // Preserve for edit/delete permission checks
-          venueCoordinates, // Include coordinates for weather fetching
-          metadata: regatta.metadata, // Preserve full metadata for sample detection & coordinates
-          // Distance racing fields
-          race_type: regatta.race_type || (regatta.route_waypoints?.length > 0 ? 'distance' : 'fleet'),
-          total_distance_nm: regatta.total_distance_nm,
-          time_limit_hours: regatta.time_limit_hours ?? calculateDurationFromSchedule(regatta.schedule, regatta.start_date),
-          time_limit_minutes: regatta.time_limit_minutes,
-          route_waypoints: regatta.route_waypoints,
-          start_finish_same_location: regatta.start_finish_same_location,
-          finish_venue: regatta.finish_venue,
-        };
-      }));
+      // Fall back to basic mapping with status indicators so the UI still renders.
+      const fallbackMap = new Map<string, { lat: number; lng: number }>();
+      setEnrichedRaces(races.map(regatta => ({
+        ...buildBaseRace(regatta, fallbackMap),
+        wind: null,
+        tide: null,
+        weatherStatus: 'error' as const,
+        weatherError: 'Failed to load weather data',
+      })));
     } finally {
       setLoading(false);
     }
   }, [persistWeatherToDatabase, races, weatherCache]);
+
 
   useEffect(() => {
     // Create a stable key based on race IDs and dates to detect actual changes
@@ -832,6 +698,26 @@ export function useEnrichedRaces(races: RegattaRaw[]) {
     if (racesKey !== previousRacesRef.current) {
       previousRacesRef.current = racesKey;
       enrichRaces();
+    } else if (races.length > 0 && enrichedRaces.length > 0) {
+      // Same IDs/dates — pass through field changes (title, status, etc.)
+      // without re-running weather enrichment.
+      const inputById = new Map(races.map(r => [r.id, r]));
+      const updated = enrichedRaces.map(enriched => {
+        const latest = inputById.get(enriched.id);
+        if (!latest) return enriched;
+        // For timeline steps, replace entirely (no weather data to preserve)
+        if ((enriched as any).isTimelineStep) {
+          return {
+            ...latest,
+            venue: (latest as any).venue || '',
+            date: (latest as any).date || (latest as any).start_date,
+            isTimelineStep: true,
+          } as Race;
+        }
+        // For regular races, merge non-weather fields
+        return { ...enriched, name: latest.name ?? enriched.name };
+      });
+      setEnrichedRaces(updated);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [races]);
