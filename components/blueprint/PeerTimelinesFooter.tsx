@@ -1,6 +1,6 @@
 /**
  * PeerTimelinesFooter — Rendered below the user's timeline grid.
- * Shows ForYouSection + mini timelines of peer blueprint subscribers.
+ * Shows mini timelines of peer blueprint subscribers.
  */
 
 import React, { useCallback, useState } from 'react';
@@ -8,8 +8,6 @@ import { View, Text, Pressable, ScrollView, StyleSheet, Platform, ActivityIndica
 import { useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
-import { ForYouSection } from '@/components/blueprint/ForYouSection';
-import { SubscribedBlueprintStrip } from '@/components/blueprint/SubscribedBlueprintStrip';
 import { usePeerTimelines, type PeerBlueprintGroup } from '@/hooks/usePeerTimelines';
 import { useAuth } from '@/providers/AuthProvider';
 import { adoptStep } from '@/services/TimelineStepService';
@@ -28,7 +26,7 @@ const C = {
   completed: '#16A34A',
   inProgress: '#0D9488',
   pending: '#D4D4D4',
-  sectionAccent: '#6D28D9',
+  sectionAccent: '#2563EB',
   adopt: '#2563EB',
 } as const;
 
@@ -50,25 +48,13 @@ interface PeerTimelinesFooterProps {
 
 export function PeerTimelinesFooter({
   interestId,
-  interestSlug,
-  orgId,
-  orgName,
-  hasOrg,
 }: PeerTimelinesFooterProps) {
   const { groups } = usePeerTimelines(interestId);
 
+  if (groups.length === 0) return null;
+
   return (
     <View>
-      <SubscribedBlueprintStrip interestId={interestId} />
-
-      <ForYouSection
-        interestId={interestId}
-        interestSlug={interestSlug}
-        orgId={orgId}
-        orgName={orgName}
-        hasOrg={hasOrg}
-      />
-
       {groups.map((group) => (
         <PeerBlueprintSection
           key={group.blueprintId}

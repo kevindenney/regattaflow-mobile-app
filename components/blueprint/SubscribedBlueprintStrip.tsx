@@ -13,10 +13,10 @@ import { useSubscribedBlueprints, useUnsubscribe } from '@/hooks/useBlueprint';
 import { showConfirm } from '@/lib/utils/crossPlatformAlert';
 
 const C = {
-  bg: 'rgba(109,40,217,0.06)',
-  border: 'rgba(109,40,217,0.12)',
-  accent: '#6D28D9',
-  accentLight: '#8B5CF6',
+  bg: 'rgba(37,99,235,0.04)',
+  border: 'rgba(37,99,235,0.08)',
+  accent: '#2563EB',
+  accentLight: '#3B82F6',
   label: '#1A1918',
   labelMid: '#6D6C6A',
 } as const;

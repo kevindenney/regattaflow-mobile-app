@@ -9,6 +9,7 @@ import { View, Text, Pressable, ScrollView, StyleSheet, Platform, ActivityIndica
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useForYouItems, type ForYouItem, type ForYouItemType } from '@/hooks/useForYouItems';
+import { ForYouPreviewModal } from './ForYouPreviewModal';
 
 // =============================================================================
 // COLORS
@@ -26,13 +27,13 @@ const C = {
   suggestionBg: 'rgba(37,99,235,0.08)',
   blueprint: '#00897B',
   blueprintBg: 'rgba(0,137,123,0.08)',
-  orgBlueprint: '#6D28D9',
-  orgBlueprintBg: 'rgba(109,40,217,0.08)',
+  orgBlueprint: '#2563EB',
+  orgBlueprintBg: 'rgba(37,99,235,0.08)',
   joinOrg: '#D97706',
   joinOrgBg: 'rgba(217,119,6,0.08)',
-  headerAccent: '#6D28D9',
-  badgeBg: '#EDE9FE',
-  badgeText: '#6D28D9',
+  headerAccent: '#2563EB',
+  badgeBg: '#DBEAFE',
+  badgeText: '#2563EB',
 } as const;
 
 const TYPE_CONFIG: Record<ForYouItemType, { color: string; bg: string; icon: string; actionLabel: string }> = {
@@ -93,6 +94,7 @@ export function ForYouSection({
   const [collapsed, setCollapsed] = useState(getPersistedCollapsed);
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
+  const [previewItem, setPreviewItem] = useState<ForYouItem | null>(null);
 
   const { items, actions } = useForYouItems({
     interestId,
@@ -137,6 +139,8 @@ export function ForYouSection({
           router.push(item.data.target as string);
           break;
       }
+      // Close the preview modal once the action succeeds
+      setPreviewItem((current) => (current?.id === item.id ? null : current));
     } finally {
       setActionInProgress(null);
     }
@@ -155,7 +159,23 @@ export function ForYouSection({
         hideLocally(item.id);
         break;
     }
+    setPreviewItem((current) => (current?.id === item.id ? null : current));
   }, [actions, hideLocally]);
+
+  const handleCardPress = useCallback((item: ForYouItem) => {
+    // For step-like items we open a preview modal so the user can read
+    // the content before adopting. Org blueprints still navigate to the
+    // blueprint page since that's a richer experience.
+    if (item.type === 'org_blueprint') {
+      router.push(`/blueprint/${item.data.blueprintSlug}` as any);
+      return;
+    }
+    if (item.type === 'join_org') {
+      router.push(item.data.target as string);
+      return;
+    }
+    setPreviewItem(item);
+  }, [router]);
 
   // Render nothing if no items
   if (visibleItems.length === 0) return null;
@@ -191,10 +211,7 @@ export function ForYouSection({
               isLoading={actionInProgress === item.id}
               onAction={() => handleAction(item)}
               onDismiss={() => handleDismiss(item)}
-              onNavigate={item.type === 'org_blueprint'
-                ? () => router.push(`/blueprint/${item.data.blueprintSlug}` as any)
-                : undefined
-              }
+              onNavigate={() => handleCardPress(item)}
             />
           ))}
           {hasMore && !showAll && (
@@ -206,6 +223,15 @@ export function ForYouSection({
           )}
         </ScrollView>
       )}
+
+      <ForYouPreviewModal
+        visible={previewItem !== null}
+        item={previewItem}
+        isActionLoading={previewItem ? actionInProgress === previewItem.id : false}
+        onAdopt={() => previewItem && handleAction(previewItem)}
+        onDismiss={() => previewItem && handleDismiss(previewItem)}
+        onClose={() => setPreviewItem(null)}
+      />
     </View>
   );
 }
@@ -367,8 +393,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   dismissBtn: {
-    paddingHorizontal: 8,
-    paddingVertical: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderLeftWidth: StyleSheet.hairlineWidth,
     borderLeftColor: C.cardBorder,
   },

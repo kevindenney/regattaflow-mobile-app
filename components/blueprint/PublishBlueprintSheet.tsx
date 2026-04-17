@@ -20,6 +20,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useAuth } from '@/providers/AuthProvider';
 import { useOrganization } from '@/providers/OrganizationProvider';
 import {
@@ -27,12 +28,15 @@ import {
   useUpdateBlueprint,
   useBlueprintSteps,
   useSetBlueprintSteps,
+  useMigrateBlueprint,
 } from '@/hooks/useBlueprint';
 import { useMyTimeline } from '@/hooks/useTimelineSteps';
-import { generateBlueprintSlug } from '@/services/BlueprintService';
+import { generateBlueprintSlug, backfillAutoCurateSteps } from '@/services/BlueprintService';
+import { StripeConnectService } from '@/services/StripeConnectService';
 import { useOrgPrograms, useProgramCapabilityCount } from '@/hooks/usePrograms';
-import { showAlert } from '@/lib/utils/crossPlatformAlert';
-import type { BlueprintRecord, BlueprintAccessLevel } from '@/types/blueprint';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
+import { useInterest } from '@/providers/InterestProvider';
+import type { BlueprintRecord, BlueprintAccessLevel, BlueprintPricingType } from '@/types/blueprint';
 
 const C = {
   bg: '#FFFFFF',
@@ -70,6 +74,7 @@ export function PublishBlueprintSheet({
   existingBlueprint,
 }: PublishBlueprintSheetProps) {
   const { user } = useAuth();
+  const router = useRouter();
   const { memberships } = useOrganization();
   const createBlueprint = useCreateBlueprint();
   const updateBlueprint = useUpdateBlueprint();
@@ -81,6 +86,10 @@ export function PublishBlueprintSheet({
   const [selectedProgramId, setSelectedProgramId] = useState<string | null>(null);
   const [accessLevel, setAccessLevel] = useState<BlueprintAccessLevel>('public');
   const [priceDollars, setPriceDollars] = useState('');
+  const [pricingType, setPricingType] = useState<BlueprintPricingType>('recurring');
+  const [autoCurate, setAutoCurate] = useState(false);
+  const [stripeConnected, setStripeConnected] = useState<boolean | null>(null);
+  const [stripeLoading, setStripeLoading] = useState(false);
   const [justPublished, setJustPublished] = useState(false);
   const [selectedBlueprint, setSelectedBlueprint] = useState<BlueprintRecord | null>(existingBlueprint ?? null);
   const activeBlueprint = selectedBlueprint;
@@ -88,6 +97,9 @@ export function PublishBlueprintSheet({
   const [showBlueprintPicker, setShowBlueprintPicker] = useState(false);
   const [showStepCurator, setShowStepCurator] = useState(false);
   const [curatingBlueprintId, setCuratingBlueprintId] = useState<string | null>(null);
+  const [showMoveInterest, setShowMoveInterest] = useState(false);
+  const migrateBlueprintMutation = useMigrateBlueprint();
+  const { userInterests } = useInterest();
 
   // Step curation data
   const { data: mySteps } = useMyTimeline(interestId);
@@ -101,7 +113,7 @@ export function PublishBlueprintSheet({
       setSelectedStepIds(new Set(curatedSteps.map((s) => s.id)));
     } else if (mySteps && curatingBlueprintId) {
       // Default: select all non-private steps
-      setSelectedStepIds(new Set(mySteps.filter((s) => s.visibility !== 'private').map((s) => s.id)));
+      setSelectedStepIds(new Set(mySteps.filter((s) => s.visibility !== 'private' && !(s as any)._pinned).map((s) => s.id)));
     }
   }, [curatedSteps, mySteps, curatingBlueprintId]);
 
@@ -136,6 +148,39 @@ export function PublishBlueprintSheet({
       m.organization,
   );
 
+  // Check Stripe Connect status when user picks paid access
+  useEffect(() => {
+    if (accessLevel !== 'paid' || !user?.id || stripeConnected !== null) return;
+    setStripeLoading(true);
+    StripeConnectService.getConnectStatus(user.id)
+      .then((status) => setStripeConnected(status.connected && (status.chargesEnabled === true || status.detailsSubmitted === true)))
+      .catch(() => setStripeConnected(false))
+      .finally(() => setStripeLoading(false));
+  }, [accessLevel, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleConnectStripe = useCallback(async () => {
+    if (!user?.id) return;
+    setStripeLoading(true);
+    const baseUrl = Platform.OS === 'web' ? window.location.origin : 'https://betterat.com';
+    const result = await StripeConnectService.startOnboarding(
+      user.id,
+      `${baseUrl}/settings?stripe_return=true`,
+      `${baseUrl}/settings?stripe_refresh=true`,
+    );
+    setStripeLoading(false);
+    if (result.success && result.url) {
+      if (Platform.OS === 'web') {
+        window.location.href = result.url;
+      } else {
+        // On native, open in browser
+        const { Linking } = require('react-native');
+        Linking.openURL(result.url);
+      }
+    } else {
+      showAlert('Setup Failed', result.error || 'Could not start Stripe setup.');
+    }
+  }, [user?.id]);
+
   // Reset state when sheet visibility changes
   useEffect(() => {
     if (visible) {
@@ -158,6 +203,8 @@ export function PublishBlueprintSheet({
       setSelectedProgramId(activeBlueprint.program_id ?? null);
       setAccessLevel(activeBlueprint.access_level ?? 'public');
       setPriceDollars(activeBlueprint.price_cents ? String(activeBlueprint.price_cents / 100) : '');
+      setPricingType(activeBlueprint.pricing_type ?? 'recurring');
+      setAutoCurate(activeBlueprint.auto_curate ?? false);
     } else {
       const defaultTitle = `${interestName} Blueprint`;
       setTitle(defaultTitle);
@@ -166,6 +213,7 @@ export function PublishBlueprintSheet({
       setSelectedProgramId(null);
       setAccessLevel('public');
       setPriceDollars('');
+      setPricingType('recurring');
       setSlug(generateBlueprintSlug(user?.user_metadata?.display_name ?? 'user', interestName));
     }
   }, [activeBlueprint, interestName, user, visible, justPublished]);
@@ -209,9 +257,15 @@ export function PublishBlueprintSheet({
             program_id: selectedProgramId || null,
             access_level: accessLevel,
             price_cents: priceCents,
+            pricing_type: accessLevel === 'paid' ? pricingType : 'one_time',
+            auto_curate: autoCurate,
           },
         });
         publishedId = activeBlueprint.id;
+        // Backfill existing steps when auto-curate is enabled
+        if (autoCurate) {
+          await backfillAutoCurateSteps(publishedId, user.id, interestId);
+        }
       } else {
         const created = await createBlueprint.mutateAsync({
           user_id: user.id,
@@ -224,6 +278,7 @@ export function PublishBlueprintSheet({
           program_id: selectedProgramId,
           access_level: accessLevel,
           price_cents: priceCents,
+          pricing_type: accessLevel === 'paid' ? pricingType : 'one_time',
         });
         publishedId = created.id;
       }
@@ -274,7 +329,7 @@ export function PublishBlueprintSheet({
                 </Text>
               </View>
 
-              {(mySteps ?? []).filter((s) => s.visibility !== 'private').map((step) => (
+              {(mySteps ?? []).filter((s) => s.visibility !== 'private' && !(s as any)._pinned).map((step) => (
                 <Pressable
                   key={step.id}
                   style={{
@@ -317,7 +372,7 @@ export function PublishBlueprintSheet({
               ))}
 
               <Text style={{ fontSize: 11, color: C.labelMid, textAlign: 'center', marginBottom: 12 }}>
-                {selectedStepIds.size} of {(mySteps ?? []).filter((s) => s.visibility !== 'private').length} steps selected
+                {selectedStepIds.size} of {(mySteps ?? []).filter((s) => s.visibility !== 'private' && !(s as any)._pinned).length} steps selected
               </Text>
 
               <Pressable
@@ -363,6 +418,16 @@ export function PublishBlueprintSheet({
                 <Ionicons name="checkmark-done-outline" size={16} color="#FFFFFF" />
                 <Text style={styles.publishBtnText}>Curate Steps</Text>
               </Pressable>
+              <Pressable
+                style={[styles.publishBtn, { backgroundColor: C.accentBg }]}
+                onPress={() => {
+                  onClose();
+                  router.push(`/blueprint/${slug}` as any);
+                }}
+              >
+                <Ionicons name="eye-outline" size={16} color={C.accent} />
+                <Text style={[styles.publishBtnText, { color: C.accent }]}>View Blueprint Page</Text>
+              </Pressable>
               <Pressable style={styles.cancelBtn} onPress={onClose}>
                 <Text style={styles.cancelText}>Done</Text>
               </Pressable>
@@ -380,7 +445,7 @@ export function PublishBlueprintSheet({
               </View>
 
               {existingBlueprints.map((bp) => (
-                <Pressable
+                <View
                   key={bp.id}
                   style={{
                     flexDirection: 'row',
@@ -392,19 +457,49 @@ export function PublishBlueprintSheet({
                     marginBottom: 8,
                     backgroundColor: bp.is_published ? C.successBg : '#FFFFFF',
                   }}
-                  onPress={() => {
-                    setSelectedBlueprint(bp);
-                    setShowBlueprintPicker(false);
-                  }}
                 >
-                  <View style={{ flex: 1 }}>
+                  <Pressable
+                    style={{ flex: 1 }}
+                    onPress={() => {
+                      setSelectedBlueprint(bp);
+                      setShowBlueprintPicker(false);
+                    }}
+                  >
                     <Text style={{ fontSize: 14, fontWeight: '600', color: C.labelDark }}>{bp.title}</Text>
                     <Text style={{ fontSize: 11, color: C.labelMid, marginTop: 2 }}>
                       {bp.is_published ? 'Published' : 'Draft'} · {bp.subscriber_count} subscriber{bp.subscriber_count !== 1 ? 's' : ''}
                     </Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={16} color={C.labelLight} />
-                </Pressable>
+                  </Pressable>
+                  {bp.is_published && bp.slug && (
+                    <Pressable
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 4,
+                        paddingVertical: 6,
+                        paddingHorizontal: 10,
+                        borderRadius: 6,
+                        backgroundColor: C.accentBg,
+                        marginRight: 8,
+                      }}
+                      onPress={() => {
+                        onClose();
+                        router.push(`/blueprint/${bp.slug}` as any);
+                      }}
+                    >
+                      <Ionicons name="eye-outline" size={14} color={C.accent} />
+                      <Text style={{ fontSize: 12, fontWeight: '600', color: C.accent }}>View</Text>
+                    </Pressable>
+                  )}
+                  <Pressable
+                    onPress={() => {
+                      setSelectedBlueprint(bp);
+                      setShowBlueprintPicker(false);
+                    }}
+                  >
+                    <Ionicons name="chevron-forward" size={16} color={C.labelLight} />
+                  </Pressable>
+                </View>
               ))}
 
               <Pressable
@@ -535,27 +630,89 @@ export function PublishBlueprintSheet({
             </View>
           </View>
 
-          {/* Price — shown when access level is paid */}
+          {/* Pricing — shown when access level is paid */}
           {accessLevel === 'paid' && (
-            <View style={styles.field}>
-              <Text style={styles.fieldLabel}>Price (USD)</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Text style={{ fontSize: 18, fontWeight: '700', color: C.labelDark, marginRight: 4 }}>$</Text>
-                <TextInput
-                  style={[styles.input, { flex: 1 }]}
-                  value={priceDollars}
-                  onChangeText={(text) => setPriceDollars(text.replace(/[^0-9.]/g, ''))}
-                  placeholder="49"
-                  placeholderTextColor={C.labelLight}
-                  keyboardType="decimal-pad"
-                />
-              </View>
-              {selectedOrgId && (
-                <Text style={{ fontSize: 11, color: C.labelMid, marginTop: 4 }}>
-                  Organization members get free access. Non-members pay this price.
-                </Text>
+            <>
+              {/* Stripe Connect banner */}
+              {stripeConnected === false && (
+                <View style={{ backgroundColor: '#FFF8E1', borderRadius: 10, padding: 12, marginBottom: 14, gap: 8 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Ionicons name="card-outline" size={16} color="#F59E0B" />
+                    <Text style={{ fontSize: 13, fontWeight: '600', color: C.labelDark }}>Connect your bank account</Text>
+                  </View>
+                  <Text style={{ fontSize: 12, color: C.labelMid, lineHeight: 17 }}>
+                    To receive payments from blueprint sales, connect a Stripe account. BetterAt takes a 15% platform fee.
+                  </Text>
+                  <Pressable
+                    style={{ backgroundColor: '#00897B', borderRadius: 8, paddingVertical: 10, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 }}
+                    onPress={handleConnectStripe}
+                    disabled={stripeLoading}
+                  >
+                    {stripeLoading ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Ionicons name="link-outline" size={14} color="#FFFFFF" />
+                    )}
+                    <Text style={{ fontSize: 14, fontWeight: '600', color: '#FFFFFF' }}>
+                      {stripeLoading ? 'Setting up...' : 'Connect Stripe'}
+                    </Text>
+                  </Pressable>
+                </View>
               )}
-            </View>
+
+              {/* Pricing type selector */}
+              <View style={styles.field}>
+                <Text style={styles.fieldLabel}>Billing</Text>
+                <View style={styles.segmentRow}>
+                  <Pressable
+                    style={[styles.segmentBtn, pricingType === 'recurring' && styles.segmentBtnActive]}
+                    onPress={() => setPricingType('recurring')}
+                  >
+                    <Ionicons name="repeat-outline" size={13} color={pricingType === 'recurring' ? C.accent : C.labelMid} />
+                    <Text style={[styles.segmentText, pricingType === 'recurring' && styles.segmentTextActive]}>
+                      Monthly
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.segmentBtn, pricingType === 'one_time' && styles.segmentBtnActive]}
+                    onPress={() => setPricingType('one_time')}
+                  >
+                    <Ionicons name="flash-outline" size={13} color={pricingType === 'one_time' ? C.accent : C.labelMid} />
+                    <Text style={[styles.segmentText, pricingType === 'one_time' && styles.segmentTextActive]}>
+                      One-time
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+
+              {/* Price input */}
+              <View style={styles.field}>
+                <Text style={styles.fieldLabel}>
+                  Price (USD){pricingType === 'recurring' ? ' / month' : ''}
+                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={{ fontSize: 18, fontWeight: '700', color: C.labelDark, marginRight: 4 }}>$</Text>
+                  <TextInput
+                    style={[styles.input, { flex: 1 }]}
+                    value={priceDollars}
+                    onChangeText={(text) => setPriceDollars(text.replace(/[^0-9.]/g, ''))}
+                    placeholder={pricingType === 'recurring' ? '10' : '49'}
+                    placeholderTextColor={C.labelLight}
+                    keyboardType="decimal-pad"
+                  />
+                </View>
+                {selectedOrgId && (
+                  <Text style={{ fontSize: 11, color: C.labelMid, marginTop: 4 }}>
+                    Organization members get free access. Non-members pay this price.
+                  </Text>
+                )}
+                {pricingType === 'recurring' && (
+                  <Text style={{ fontSize: 11, color: C.labelMid, marginTop: 4 }}>
+                    Subscribers are charged monthly and can cancel anytime.
+                  </Text>
+                )}
+              </View>
+            </>
           )}
 
           {/* Program Picker — shown when publishing under an org with programs */}
@@ -693,6 +850,110 @@ export function PublishBlueprintSheet({
                   <Ionicons name="checkmark-done-outline" size={16} color={C.accent} />
                   <Text style={{ fontSize: 14, fontWeight: '600', color: C.accent }}>Curate Steps</Text>
                 </Pressable>
+                {/* Auto-curate toggle */}
+                <Pressable
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    paddingVertical: 12,
+                    paddingHorizontal: 4,
+                  }}
+                  onPress={() => setAutoCurate(!autoCurate)}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                    <Ionicons name="flash-outline" size={18} color={C.labelMid} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 14, fontWeight: '500', color: C.labelDark }}>Auto-publish new steps</Text>
+                      <Text style={{ fontSize: 12, color: C.labelMid, marginTop: 2 }}>New timeline steps automatically appear in this blueprint</Text>
+                    </View>
+                  </View>
+                  <View style={{
+                    width: 44, height: 24, borderRadius: 12,
+                    backgroundColor: autoCurate ? C.accent : '#D1D5DB',
+                    justifyContent: 'center',
+                    paddingHorizontal: 2,
+                  }}>
+                    <View style={{
+                      width: 20, height: 20, borderRadius: 10,
+                      backgroundColor: '#FFFFFF',
+                      alignSelf: autoCurate ? 'flex-end' : 'flex-start',
+                    }} />
+                  </View>
+                </Pressable>
+                {/* Move to different interest */}
+                {!showMoveInterest ? (
+                  <Pressable
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6,
+                      borderWidth: 1,
+                      borderColor: C.border,
+                      borderRadius: 10,
+                      paddingVertical: 11,
+                    }}
+                    onPress={() => setShowMoveInterest(true)}
+                  >
+                    <Ionicons name="swap-horizontal-outline" size={16} color={C.labelMid} />
+                    <Text style={{ fontSize: 14, fontWeight: '600', color: C.labelMid }}>Move to Different Interest</Text>
+                  </Pressable>
+                ) : (
+                  <View style={{ backgroundColor: '#F9FAFB', borderRadius: 10, padding: 12, gap: 8, borderWidth: 1, borderColor: C.border }}>
+                    <Text style={{ fontSize: 13, fontWeight: '600', color: C.labelDark }}>Move blueprint to:</Text>
+                    {userInterests
+                      .filter((i) => i.id !== interestId)
+                      .map((interest) => (
+                        <Pressable
+                          key={interest.id}
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 8,
+                            paddingVertical: 8,
+                            paddingHorizontal: 8,
+                            borderRadius: 8,
+                            backgroundColor: '#FFFFFF',
+                            borderWidth: 1,
+                            borderColor: C.border,
+                          }}
+                          onPress={() => {
+                            showConfirm(
+                              'Move Blueprint',
+                              `Move this blueprint to ${interest.name}? Your ${activeBlueprint?.subscriber_count ?? 0} subscriber(s) will keep their adopted steps. The blueprint will appear under ${interest.name} going forward.`,
+                              async () => {
+                                try {
+                                  await migrateBlueprintMutation.mutateAsync({
+                                    blueprintId: activeBlueprint!.id,
+                                    newInterestId: interest.id,
+                                  });
+                                  showAlert('Moved', `Blueprint moved to ${interest.name}`);
+                                  setShowMoveInterest(false);
+                                  onClose();
+                                } catch (err: any) {
+                                  showAlert('Error', err?.message ?? 'Failed to move blueprint');
+                                }
+                              },
+                            );
+                          }}
+                          disabled={migrateBlueprintMutation.isPending}
+                        >
+                          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: interest.accent_color }} />
+                          <Text style={{ fontSize: 14, fontWeight: '500', color: C.labelDark, flex: 1 }}>{interest.name}</Text>
+                          <Ionicons name="arrow-forward" size={14} color={C.labelLight} />
+                        </Pressable>
+                      ))}
+                    {userInterests.filter((i) => i.id !== interestId).length === 0 && (
+                      <Text style={{ fontSize: 13, color: C.labelMid, textAlign: 'center', paddingVertical: 8 }}>
+                        Add another interest first to move this blueprint.
+                      </Text>
+                    )}
+                    <Pressable onPress={() => setShowMoveInterest(false)} style={{ alignSelf: 'center', paddingVertical: 4 }}>
+                      <Text style={{ fontSize: 13, fontWeight: '500', color: C.labelMid }}>Cancel</Text>
+                    </Pressable>
+                  </View>
+                )}
                 <Pressable style={styles.unpublishBtn} onPress={handleUnpublish}>
                   <Text style={styles.unpublishText}>Unpublish</Text>
                 </Pressable>
