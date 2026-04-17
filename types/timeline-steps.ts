@@ -29,6 +29,7 @@ export type TimelineStepRecord = {
   visibility: TimelineStepVisibility;
   share_approximate_location: boolean;
   copied_from_user_id: string | null;
+  source_blueprint_id: string | null;
   sort_order: number;
   metadata: Record<string, unknown>;
   collaborator_user_ids: string[];

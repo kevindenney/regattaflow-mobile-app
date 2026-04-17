@@ -116,6 +116,8 @@ export function useSailInventory({
           status: item.status as SailInventoryItem['status'],
           totalRacesUsed: item.total_races_used || undefined,
           lastUsedDate: item.last_used_date || undefined,
+          sailWeight: (item as any).specifications?.sailWeight as SailInventoryItem['sailWeight'] || undefined,
+          notes: (item as any).notes || undefined,
         }));
 
       setAllSails(sails);

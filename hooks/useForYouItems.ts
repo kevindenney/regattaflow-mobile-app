@@ -112,7 +112,7 @@ export function useForYouItems(options: {
           type: 'blueprint_update',
           priority: 2,
           title: step.step_title,
-          subtitle: `from ${step.author_name ?? step.blueprint_title}`,
+          subtitle: `from ${step.blueprint_title}`,
           data: {
             stepId: step.step_id,
             interestId: step.interest_id,
