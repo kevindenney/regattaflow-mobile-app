@@ -385,10 +385,6 @@ export interface CardContentProps {
   isActive: boolean;
   /** Card dimensions for layout */
   dimensions: CardDimensions;
-  /** Whether the card is expanded (shows full content) */
-  isExpanded: boolean;
-  /** Callback to toggle expansion state */
-  onToggleExpand?: () => void;
   /** Whether the current user can manage (edit/delete) this race */
   canManage?: boolean;
   /** Callback when edit is requested */

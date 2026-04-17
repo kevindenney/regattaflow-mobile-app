@@ -39,7 +39,7 @@ import {
 const PAST_CARD_BG = '#FFFFFF';
 const PAST_CARD_OPACITY = 0.85;
 
-export function CardShell({
+function CardShellImpl({
   position,
   dimensions,
   gridState,
@@ -201,5 +201,10 @@ const styles = StyleSheet.create({
     color: IOS_COLORS.blue,
   },
 });
+
+// Memoize so parent re-renders don't cascade into every card's animated wrapper.
+// Props are either primitives or stable (position/gridState = shared-value refs,
+// dimensions = memoized in parent, children = stable JSX per card).
+export const CardShell = React.memo(CardShellImpl);
 
 export default CardShell;

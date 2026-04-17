@@ -22,7 +22,7 @@ import {
   Sun,
   Map,
 } from 'lucide-react-native';
-import React, { useCallback, useMemo, useState, useRef, Component, ErrorInfo, useEffect } from 'react';
+import React, { useCallback, useMemo, useState, useRef, Component, ErrorInfo, useEffect, Suspense } from 'react';
 import { ActionSheetIOS, LayoutAnimation, NativeScrollEvent, NativeSyntheticEvent, Platform, Pressable, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ScrollView } from 'react-native-gesture-handler';
@@ -76,12 +76,13 @@ import { useProactiveNudge } from '@/hooks/useProactiveNudge';
 import { supabase } from '@/services/supabase';
 import { isMissingSupabaseColumn } from '@/lib/utils/supabaseSchemaFallback';
 import { isUuid } from '@/utils/uuid';
-import {
-  AfterRaceContent,
-  ConfigDrivenPhaseContent,
-  DaysBeforeContent,
-  OnWaterContent,
-} from './phases';
+import { ConfigDrivenPhaseContent } from './phases';
+// Heavy sailing-only phase components are code-split: only one of the three is
+// ever mounted at a time (based on the race's temporal phase), so lazy-loading
+// saves ~6500 lines of component parse cost on first card render.
+const AfterRaceContent = React.lazy(() => import('./phases/AfterRaceContent'));
+const DaysBeforeContent = React.lazy(() => import('./phases/DaysBeforeContent'));
+const OnWaterContent = React.lazy(() => import('./phases/OnWaterContent'));
 import { StepPlanQuestions } from '@/components/step/StepPlanQuestions';
 import { PlanQuestionCard } from '@/components/step/PlanQuestionCard';
 import { StepDrawContent } from '@/components/step/StepDrawContent';
@@ -698,8 +699,6 @@ export function RaceSummaryCard({
   race,
   cardType,
   isActive,
-  isExpanded,
-  onToggleExpand,
   dimensions,
   canManage,
   onEdit,
@@ -1488,10 +1487,6 @@ export function RaceSummaryCard({
   const isTimelineStepOverdue = isTimelineStep && !isExplicitlyCompleted && Boolean((race as any).due_at) && new Date((race as any).due_at) < new Date();
   const isOverdue = !isExplicitlyCompleted && ((countdown.isPast && !isTimelineStep) || isTimelineStepOverdue);
   const isTimelineDone = isExplicitlyCompleted;
-  const isNextStepCard =
-    typeof raceNumber === 'number' &&
-    typeof nextRaceIndex === 'number' &&
-    (raceNumber - 1) === nextRaceIndex;
   const eventSubtype = String((race as any)?.metadata?.event_subtype || '').toLowerCase();
   const isBlankActivitySubtype = eventSubtype === 'blank_activity';
   const isGroupLearningCycleSubtype = eventSubtype === 'group_learning_cycle';
@@ -2181,7 +2176,6 @@ export function RaceSummaryCard({
             race={cardRaceData}
             userId={userId}
             onOpenPostRaceInterview={onOpenPostRaceInterview}
-            isExpanded={isExpanded}
             refetchTrigger={refetchTrigger}
           />
         );
@@ -2313,8 +2307,17 @@ export function RaceSummaryCard({
     return getActivePhaseForProgress(phaseCounts, effectiveIsPast);
   }, [phaseCounts, effectiveIsPast]);
 
-  const showNextRibbon = isNextStepCard && !isTimelineDone && !isOverdue;
-  const hideTypeChipForNextNonSailing = showNextRibbon && !isSailing;
+  // Collaborator-only view: the current user is listed as a collaborator but
+  // not the creator. Used to surface a "Shared with me" chip so the read-only
+  // affordances (no status toggle, no edit menu) are self-explanatory.
+  const isSharedWithMe = Boolean(
+    isTimelineStep &&
+      userId &&
+      race.created_by &&
+      race.created_by !== userId &&
+      Array.isArray((race as any).collaborator_user_ids) &&
+      ((race as any).collaborator_user_ids as string[]).includes(userId),
+  );
 
   return (
     <>
@@ -2332,75 +2335,132 @@ export function RaceSummaryCard({
             <View style={styles.simpleHeaderWrapper}>
             {/* NOW bookmark is now rendered by CardGrid on the card edge */}
             <View style={styles.simpleHeaderRow}>
-          {/* Status badge — for timeline steps, acts as a planned/done toggle */}
-          {isTimelineStep && (onMoveStepToCompletedMostRecent || onMoveStepToPlannedNext) ? (
-            <Pressable
-              onPress={() => {
-                triggerHaptic('impactLight');
-                if (isTimelineDone && onMoveStepToPlannedNext) {
-                  onMoveStepToPlannedNext();
-                } else if (!isTimelineDone && onMoveStepToCompletedMostRecent) {
-                  onMoveStepToCompletedMostRecent();
-                }
-              }}
-              style={[styles.statusToggle, isTimelineDone && styles.statusToggleDone]}
-              accessibilityLabel={isTimelineDone ? 'Mark as planned' : 'Mark as done'}
-              accessibilityRole="checkbox"
-            >
-              <Ionicons
-                name={isTimelineDone ? 'checkmark-circle' : 'ellipse-outline'}
-                size={18}
-                color={isTimelineDone ? IOS_COLORS.green : IOS_COLORS.secondaryLabel}
-              />
-              <Text style={[styles.statusToggleText, isTimelineDone && styles.statusToggleTextDone]}>
-                {isTimelineDone ? 'Done' : 'Planned'}
-              </Text>
-            </Pressable>
-          ) : isTimelineDone ? (
-            <View style={styles.pastRaceBadge}>
-              <Ionicons name="checkmark-circle" size={14} color={IOS_COLORS.green} />
-              <Text style={styles.pastBadgeText}>
-                {analysisData?.selfReportedPosition
-                  ? `${analysisData.selfReportedPosition}${getOrdinalSuffix(analysisData.selfReportedPosition)}`
-                  : 'DONE'}
-              </Text>
-            </View>
-          ) : isOverdue ? (
-            <Pressable style={styles.overdueBadge} onPress={handleOverdueBadgePress}>
-              <Ionicons name="warning" size={13} color="#B45309" />
-              {!isBlankActivitySubtype && (
-                <Text style={styles.overdueBadgeText}>
-                  {/* Regattas can't be "overdue" — the race happened on a date.
-                      What's pending is the debrief / review. For timeline steps,
-                      "Overdue" is correct (the task itself missed its deadline). */}
-                  {isTimelineStep ? 'Overdue' : 'Review Due'}
+          {/* Header chip group — all meta chips live on a single row under the
+              header so status + category + provenance + flags share one visual
+              line. Tightly grouped on the left; countdown stays on the right
+              via the parent's space-between layout. Order:
+                [Status | Overdue] [Category] [Shared] [Provenance] [Pinned]
+              "UP NEXT" is no longer rendered here — the NOW divider between
+              Done and Planned cards in the carousel already carries that signal.
+          */}
+          <View style={styles.headerChipGroup}>
+            {/* Primary status chip
+                - Timeline steps: always show Planned/Done (interactive when
+                  ownable, read-only otherwise). Overdue takes precedence.
+                - Regattas: show race-type / Review-Due / Done-with-position.
+            */}
+            {isTimelineStep ? (
+              isOverdue && !isTimelineDone ? (
+                <Pressable style={styles.overdueBadge} onPress={handleOverdueBadgePress}>
+                  <Ionicons name="warning" size={13} color="#B45309" />
+                  {!isBlankActivitySubtype && (
+                    <Text style={styles.overdueBadgeText}>Overdue</Text>
+                  )}
+                </Pressable>
+              ) : canManage && (onMoveStepToCompletedMostRecent || onMoveStepToPlannedNext) ? (
+                <Pressable
+                  onPress={() => {
+                    triggerHaptic('impactLight');
+                    if (isTimelineDone && onMoveStepToPlannedNext) {
+                      onMoveStepToPlannedNext();
+                    } else if (!isTimelineDone && onMoveStepToCompletedMostRecent) {
+                      onMoveStepToCompletedMostRecent();
+                    }
+                  }}
+                  style={[styles.statusToggle, isTimelineDone && styles.statusToggleDone]}
+                  accessibilityLabel={isTimelineDone ? 'Mark as planned' : 'Mark as done'}
+                  accessibilityRole="checkbox"
+                >
+                  <Ionicons
+                    name={isTimelineDone ? 'checkmark-circle' : 'ellipse-outline'}
+                    size={18}
+                    color={isTimelineDone ? IOS_COLORS.green : IOS_COLORS.secondaryLabel}
+                  />
+                  <Text style={[styles.statusToggleText, isTimelineDone && styles.statusToggleTextDone]}>
+                    {isTimelineDone ? 'Done' : 'Planned'}
+                  </Text>
+                </Pressable>
+              ) : (
+                // Read-only status when user can't manage (e.g., collaborator view).
+                // Same shape as the interactive toggle so owned / shared steps
+                // read consistently.
+                <View style={[styles.statusToggle, isTimelineDone && styles.statusToggleDone]}>
+                  <Ionicons
+                    name={isTimelineDone ? 'checkmark-circle' : 'ellipse-outline'}
+                    size={18}
+                    color={isTimelineDone ? IOS_COLORS.green : IOS_COLORS.secondaryLabel}
+                  />
+                  <Text style={[styles.statusToggleText, isTimelineDone && styles.statusToggleTextDone]}>
+                    {isTimelineDone ? 'Done' : 'Planned'}
+                  </Text>
+                </View>
+              )
+            ) : isTimelineDone ? (
+              <View style={styles.pastRaceBadge}>
+                <Ionicons name="checkmark-circle" size={14} color={IOS_COLORS.green} />
+                <Text style={styles.pastBadgeText}>
+                  {analysisData?.selfReportedPosition
+                    ? `${analysisData.selfReportedPosition}${getOrdinalSuffix(analysisData.selfReportedPosition)}`
+                    : 'DONE'}
                 </Text>
-              )}
-            </Pressable>
-          ) : !hideTypeChipForNextNonSailing ? (
-            <View style={styles.raceTypeBadge}>
-              <Text style={[styles.raceTypeBadgeText, !isSailing && styles.raceTypeBadgeTextSubtle]}>
-                {isSailing
-                  ? (detectedRaceType?.toUpperCase() || 'FLEET')
-                  : nonSailingTypeLabel}
-              </Text>
-            </View>
-          ) : (
-            <View />
-          )}
-          {/* UP NEXT label — shown alongside the toggle for the next step */}
-          {showNextRibbon && !isTimelineDone && (
-            <View style={styles.upNextBadgeDetail}>
-              <Text style={styles.upNextBadgeDetailText}>UP NEXT</Text>
-            </View>
-          )}
-          {/* Pinned from another interest indicator */}
-          {(race as any).isPinned && (
-            <View style={styles.pinnedBadge}>
-              <Ionicons name="pin" size={11} color={IOS_COLORS.secondaryLabel} />
-              <Text style={styles.pinnedBadgeText}>PINNED</Text>
-            </View>
-          )}
+              </View>
+            ) : isOverdue ? (
+              <Pressable style={styles.overdueBadge} onPress={handleOverdueBadgePress}>
+                <Ionicons name="warning" size={13} color="#B45309" />
+                {!isBlankActivitySubtype && (
+                  <Text style={styles.overdueBadgeText}>Review Due</Text>
+                )}
+              </Pressable>
+            ) : (
+              <View style={styles.raceTypeBadge}>
+                <Text style={[styles.raceTypeBadgeText, !isSailing && styles.raceTypeBadgeTextSubtle]}>
+                  {isSailing
+                    ? (detectedRaceType?.toUpperCase() || 'FLEET')
+                    : nonSailingTypeLabel}
+                </Text>
+              </View>
+            )}
+
+            {/* Secondary category chip — non-sailing timeline steps only.
+                Renders alongside status so the orthogonal facts (is-it-done
+                vs what-kind-of-step) are both visible. Skipped for generic
+                "Step" / blank-subtype cases. */}
+            {isTimelineStep && !isSailing && nonSailingTypeLabel && nonSailingTypeLabel !== 'Step' && (
+              <View style={styles.raceTypeBadge}>
+                <Text style={[styles.raceTypeBadgeText, styles.raceTypeBadgeTextSubtle]}>
+                  {nonSailingTypeLabel}
+                </Text>
+              </View>
+            )}
+
+            {/* Shared-with-me chip — explains why the card is read-only for
+                collaborators who don't own the step. */}
+            {isSharedWithMe && (
+              <View style={styles.sharedChip}>
+                <Ionicons name="people-outline" size={11} color={IOS_COLORS.secondaryLabel} />
+                <Text style={styles.sharedChipText}>SHARED</Text>
+              </View>
+            )}
+
+            {/* Provenance chip (Copied / From {blueprint}) — moved inline from
+                its own row so all meta chips share a single line. */}
+            {isTimelineStep && (race as any).source_type && (race as any).source_type !== 'manual' && (
+              <StepProvenanceBanner
+                sourceBlueprintId={(race as any).source_blueprint_id}
+                sourceType={(race as any).source_type}
+                copiedFromUserId={(race as any).copied_from_user_id}
+                variant="compact"
+              />
+            )}
+
+            {/* Pinned from another interest indicator */}
+            {(race as any).isPinned && (
+              <View style={styles.pinnedBadge}>
+                <Ionicons name="pin" size={11} color={IOS_COLORS.secondaryLabel} />
+                <Text style={styles.pinnedBadgeText}>PINNED</Text>
+              </View>
+            )}
+          </View>
         <View style={styles.simpleHeaderRight}>
             {/* Countdown: past = gray relative time; today = bold TODAY; future = large number */}
             {(isSailing || isTimelineDone) && !!race.date && (
@@ -2477,16 +2537,6 @@ export function RaceSummaryCard({
             <Text style={styles.sampleBadgeText}>SAMPLE DATA</Text>
           </View>
         ) : null}
-
-        {/* Step provenance badge — shows source blueprint/template */}
-        {isTimelineStep && (race as any).source_type && (race as any).source_type !== 'manual' && (
-          <StepProvenanceBanner
-            sourceBlueprintId={(race as any).source_blueprint_id}
-            sourceType={(race as any).source_type}
-            copiedFromUserId={(race as any).copied_from_user_id}
-            variant="compact"
-          />
-        )}
 
         {/* Full race/step name — always editable TextInput for timeline steps */}
         {isTimelineStep ? (
@@ -2725,9 +2775,11 @@ export function RaceSummaryCard({
           />
         )}
 
-        {/* Phase-Specific Content */}
+        {/* Phase-Specific Content — lazy phase components need Suspense */}
         <PhaseContentErrorBoundary phase={selectedPhase}>
-          {renderPhaseContent()}
+          <Suspense fallback={null}>
+            {renderPhaseContent()}
+          </Suspense>
         </PhaseContentErrorBoundary>
 
         {/* Suggestions from followers - only renders if pending suggestions exist */}
@@ -4538,6 +4590,29 @@ const styles = StyleSheet.create({
     color: IOS_COLORS.green,
     letterSpacing: 0.5,
   },
+  headerChipGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
+    flexShrink: 1,
+  },
+  // Inline variant of sharedBadge for the header chip row (no marginBottom).
+  sharedChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: 'rgba(142, 142, 147, 0.12)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  sharedChipText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: IOS_COLORS.secondaryLabel,
+    letterSpacing: 0.5,
+  },
   statusToggle: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -4558,18 +4633,6 @@ const styles = StyleSheet.create({
   },
   statusToggleTextDone: {
     color: IOS_COLORS.green,
-  },
-  upNextBadgeDetail: {
-    backgroundColor: '#E8FAE9',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 6,
-  },
-  upNextBadgeDetailText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: IOS_COLORS.green,
-    letterSpacing: 0.5,
   },
   pinnedBadge: {
     flexDirection: 'row',

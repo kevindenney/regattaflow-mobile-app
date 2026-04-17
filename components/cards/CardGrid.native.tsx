@@ -61,8 +61,6 @@ interface CardGridNativeProps extends CardGridProps {
     race: CardRaceData,
     cardType: CardType,
     isActive: boolean,
-    isExpanded: boolean,
-    onToggleExpand: (() => void) | undefined,
     canManage: boolean,
     onEdit?: () => void,
     onDelete?: () => void,
@@ -393,10 +391,6 @@ function CardGridComponent({
                 race,
                 'race_summary',
                 isActive,
-                // Cards in the horizontal carousel are always fully expanded; the
-                // zoomed-out grid view owns the compact/mini-tile variant.
-                true,
-                undefined,
                 canManage,
                 handleEdit,
                 handleDelete,

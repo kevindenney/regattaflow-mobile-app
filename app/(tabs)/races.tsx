@@ -754,7 +754,7 @@ export default function RacesScreen() {
     } catch (error) {
       logger.warn('Unable to scroll to position', { position, error });
     }
-  }, [logger]);
+  }, []);
 
   const handleShowRegulatoryDigest = useCallback(() => {
     scrollToPosition(regulatorySectionY);
@@ -1391,7 +1391,7 @@ export default function RacesScreen() {
         showAlert('Update failed', error?.message || 'Could not mark this step not done.');
       }
     })();
-  }, [applyTimelineStepStatus, user?.id]);
+  }, [applyTimelineStepStatus]);
 
   const handleMoveStepToCompletedMostRecent = useCallback((raceId: string) => {
     if (!raceId) return;
@@ -1403,7 +1403,7 @@ export default function RacesScreen() {
         showAlert('Update failed', error?.message || 'Could not mark this step done.');
       }
     })();
-  }, [applyTimelineStepStatus, user?.id]);
+  }, [applyTimelineStepStatus]);
 
   const handleTimelineGridBulkStatusUpdate = useCallback(async (
     raceIds: string[],
@@ -1418,7 +1418,7 @@ export default function RacesScreen() {
     } catch (error: any) {
       showAlert('Bulk update failed', error?.message || 'Could not update selected steps.');
     }
-  }, [applyTimelineStepStatus, user?.id]);
+  }, [applyTimelineStepStatus]);
 
   const handleSetDueDate = useCallback(async (raceId: string, dateIso: string | null) => {
     const race = orderedBaseCardGridRaces.find((entry) => entry.id === raceId) as any;
@@ -1441,8 +1441,6 @@ export default function RacesScreen() {
       race: CardRaceData,
       cardType: CardType,
       isActive: boolean,
-      isExpanded: boolean,
-      onToggleExpand: () => void,
       canManage: boolean,
       onEdit?: () => void,
       onDelete?: () => void,
@@ -1469,8 +1467,6 @@ export default function RacesScreen() {
           race={race}
           cardType={cardType}
           isActive={isActive}
-          isExpanded={isExpanded}
-          onToggleExpand={onToggleExpand}
           dimensions={cardGridDimensions}
           canManage={canManage}
           onEdit={onEdit}
@@ -1675,7 +1671,7 @@ export default function RacesScreen() {
     } catch (error) {
       logger.error('Error navigating to edit race:', error);
     }
-  }, [currentInterest?.slug, logger]);
+  }, [currentInterest?.slug]);
 
   // Navigate to the comprehensive edit flow for the selected race
   const handleEditSelectedRace = useCallback(() => {
@@ -1906,7 +1902,7 @@ export default function RacesScreen() {
       }
       showAlert('Error', 'Failed to create step. Please try again.');
     }
-  }, [user?.id, currentInterest?.id, vocab, queryClient]);
+  }, [user?.id, currentInterest?.id, queryClient]);
 
   // Quick-create a race day checklist step, auto-dated from the nearest upcoming race
   const handleAddRaceDayChecklist = useCallback(async () => {
@@ -2106,7 +2102,7 @@ export default function RacesScreen() {
         };
       });
     }
-  }, [selectedRaceId, triggerRaceDetailReload, logger]);
+  }, [selectedRaceId, triggerRaceDetailReload]);
 
   const handleHideRace = useCallback(async (raceId: string, raceName?: string) => {
     if (!raceId || !user?.id) {
