@@ -405,19 +405,24 @@ export function CompetencyDetail({
   const { competency, progress, attempts, reviews } = detail;
   const currentStatus: CompetencyStatus = progress?.status ?? 'not_started';
 
-  // Fetch steps that reference this competency
+  // Fetch steps that reference this competency via plan.competency_ids
   const { data: relatedSteps } = useQuery({
     queryKey: ['competency-steps', competency.id, user?.id],
     queryFn: async () => {
       if (!user?.id) return [];
       const { data } = await supabase
-        .from('timeline_steps')
-        .select('id, title, status, created_at')
+        .from('betterat_timeline_steps')
+        .select('id, title, status, created_at, plan, review')
         .eq('user_id', user.id)
-        .contains('metadata', { plan: { competency_ids: [competency.id] } })
+        .not('plan', 'is', null)
         .order('created_at', { ascending: false })
-        .limit(10);
-      return data ?? [];
+        .limit(50);
+
+      // Filter client-side: plan.competency_ids includes this competency
+      return (data ?? []).filter((row: any) => {
+        const ids = row.plan?.competency_ids;
+        return Array.isArray(ids) && ids.includes(competency.id);
+      }).slice(0, 10);
     },
     enabled: !!user?.id,
   });
@@ -666,44 +671,112 @@ export function CompetencyDetail({
       )}
 
       {/* ----------------------------------------------------------------- */}
-      {/* 6. Related Steps                                                  */}
+      {/* 6. Related Steps with Evidence                                    */}
       {/* ----------------------------------------------------------------- */}
       {(relatedSteps ?? []).length > 0 && (
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Related Steps</Text>
-          <View style={{ gap: 2 }}>
-            {(relatedSteps ?? []).map((step: any) => (
-              <Pressable
-                key={step.id}
-                style={styles.relatedStepRow}
-                onPress={() => router.push(`/step/${step.id}` as any)}
-              >
-                <Ionicons
-                  name={
-                    step.status === 'completed'
-                      ? 'checkmark-circle'
-                      : step.status === 'in_progress'
-                        ? 'time-outline'
-                        : 'ellipse-outline'
-                  }
-                  size={18}
-                  color={
-                    step.status === 'completed'
-                      ? '#15803D'
-                      : step.status === 'in_progress'
-                        ? accentColor
-                        : '#9CA3AF'
-                  }
-                />
-                <Text style={styles.relatedStepTitle} numberOfLines={1}>
-                  {step.title || 'Untitled step'}
-                </Text>
-                <Text style={styles.relatedStepStatus}>
-                  {step.status === 'completed' ? 'Done' : step.status === 'in_progress' ? 'Active' : 'Planned'}
-                </Text>
-                <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
-              </Pressable>
-            ))}
+          <Text style={styles.sectionTitle}>
+            Related Steps ({(relatedSteps ?? []).length})
+          </Text>
+          <View style={{ gap: 8 }}>
+            {(relatedSteps ?? []).map((step: any) => {
+              // Find this competency's assessment evidence from the step review
+              const assessment = step.review?.competency_assessment;
+              const evidence = [
+                ...(assessment?.planned_competency_results ?? []),
+                ...(assessment?.additional_competencies_found ?? []),
+              ].find(
+                (item: any) =>
+                  item.competency_id === competency.id ||
+                  item.competency_title === competency.title,
+              );
+
+              return (
+                <Pressable
+                  key={step.id}
+                  style={styles.relatedStepCard}
+                  onPress={() => router.push(`/step/${step.id}` as any)}
+                >
+                  <View style={styles.relatedStepRow}>
+                    <Ionicons
+                      name={
+                        step.status === 'completed'
+                          ? 'checkmark-circle'
+                          : step.status === 'in_progress'
+                            ? 'time-outline'
+                            : 'ellipse-outline'
+                      }
+                      size={18}
+                      color={
+                        step.status === 'completed'
+                          ? '#15803D'
+                          : step.status === 'in_progress'
+                            ? accentColor
+                            : '#9CA3AF'
+                      }
+                    />
+                    <Text style={styles.relatedStepTitle} numberOfLines={1}>
+                      {step.title || 'Untitled step'}
+                    </Text>
+                    <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
+                  </View>
+
+                  {/* Evidence from AI assessment */}
+                  {evidence && (
+                    <View style={styles.evidenceRow}>
+                      <View
+                        style={[
+                          styles.evidenceLevelBadge,
+                          {
+                            backgroundColor:
+                              evidence.demonstrated_level === 'proficient'
+                                ? '#DCFCE7'
+                                : evidence.demonstrated_level === 'developing'
+                                  ? '#FEF3C7'
+                                  : evidence.demonstrated_level === 'initial_exposure'
+                                    ? '#DBEAFE'
+                                    : '#FEE2E2',
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.evidenceLevelText,
+                            {
+                              color:
+                                evidence.demonstrated_level === 'proficient'
+                                  ? '#15803D'
+                                  : evidence.demonstrated_level === 'developing'
+                                    ? '#B45309'
+                                    : evidence.demonstrated_level === 'initial_exposure'
+                                      ? '#2563EB'
+                                      : '#DC2626',
+                            },
+                          ]}
+                        >
+                          {evidence.demonstrated_level === 'initial_exposure'
+                            ? 'Initial Exposure'
+                            : evidence.demonstrated_level === 'not_demonstrated'
+                              ? 'Not Demonstrated'
+                              : evidence.demonstrated_level.charAt(0).toUpperCase() +
+                                evidence.demonstrated_level.slice(1)}
+                        </Text>
+                      </View>
+                      {evidence.evidence_basis && (
+                        <Text style={styles.evidenceBasis} numberOfLines={2}>
+                          {evidence.evidence_basis}
+                        </Text>
+                      )}
+                    </View>
+                  )}
+
+                  {/* Step date */}
+                  <Text style={styles.relatedStepDate}>
+                    {formatRelativeDate(step.created_at)}
+                  </Text>
+                </Pressable>
+              );
+            })}
           </View>
         </View>
       )}
@@ -1099,14 +1172,17 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
   },
 
-  // 6. Lesson Link Card
+  // 6. Related Steps with Evidence
+  relatedStepCard: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 10,
+    padding: 12,
+    gap: 6,
+  },
   relatedStepRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#F3F4F6',
   },
   relatedStepTitle: {
     flex: 1,
@@ -1114,8 +1190,27 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#1F2937',
   },
-  relatedStepStatus: {
+  relatedStepDate: {
     fontSize: 12,
     color: '#9CA3AF',
+  },
+  evidenceRow: {
+    gap: 4,
+    paddingLeft: 26,
+  },
+  evidenceLevelBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  evidenceLevelText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  evidenceBasis: {
+    fontSize: 12,
+    color: '#6B7280',
+    lineHeight: 17,
   },
 });

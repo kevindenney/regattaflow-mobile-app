@@ -4,3 +4,8 @@ export { PersonalAchievementMatrix } from './PersonalAchievementMatrix';
 export { SelfAssessmentFlow } from './SelfAssessmentFlow';
 export { PreceptorValidationCard } from './PreceptorValidationCard';
 export { CompetencyProgressRing, CompetencyProgressRingCompact } from './CompetencyProgressRing';
+export { CompetencyProgressSection } from './CompetencyProgressSection';
+export { CompetencySummaryBar } from './CompetencySummaryBar';
+export { CompetencyViewToggle } from './CompetencyViewToggle';
+export { CompetencyCard } from './CompetencyCard';
+export { CompetencyCardList } from './CompetencyCardList';
