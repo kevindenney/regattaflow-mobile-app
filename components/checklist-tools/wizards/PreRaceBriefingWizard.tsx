@@ -24,9 +24,8 @@ import {
   ActivityIndicator,
   Linking,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+// SafeAreaView removed — wizard is rendered inside ToolPopupModal which handles chrome
 import {
-  X,
   Calendar,
   Map,
   Shield,
@@ -61,9 +60,10 @@ import {
 import type { ChecklistToolProps } from '@/lib/checklists/toolRegistry';
 import { supabase } from '@/services/supabase';
 import { DemoRaceService } from '@/services/DemoRaceService';
-import { useRacePreparation } from '@/hooks/useRacePreparation';
-import type { BriefingSchedule, BriefingComms } from '@/types/raceIntentions';
+import type { RaceIntentions, RaceIntentionUpdate, BriefingSchedule, BriefingComms } from '@/types/raceIntentions';
 import CourseMapView from '@/components/courses/CourseMapView';
+import { CourseMapTile } from '@/components/races/prep/CourseMapTile';
+import { NativeCourseOverlayMap } from '@/components/races/NativeCourseOverlayMap';
 import {
   courseTemplateService,
   type CourseTemplate,
@@ -104,6 +104,27 @@ type TabId = typeof BRIEFING_TABS[number]['id'];
 interface PreRaceBriefingWizardProps extends ChecklistToolProps {
   raceName?: string;
   raceDate?: string | null;
+  /** Positioned course from CoursePositionEditor (same map as checklist tile) */
+  positionedCourse?: import('@/types/courses').PositionedCourse | null;
+  /** Venue coordinates for the map */
+  coords?: { lat: number; lng: number } | null;
+  /** Marine overlay data for wind/current visualization */
+  marineOverlayData?: {
+    windDirection?: number;
+    windSpeed?: number;
+    currentDirection?: number;
+    currentSpeed?: number;
+    waveHeight?: number;
+    waveDirection?: number;
+  } | null;
+  /** Race preparation state — passed from parent to avoid Portal context loss */
+  intentions?: RaceIntentions;
+  updateIntentions?: (update: RaceIntentionUpdate) => void;
+  savePreparation?: () => Promise<void>;
+  isPreparationLoading?: boolean;
+  isSaving?: boolean;
+  hasPendingChanges?: boolean;
+  lastSavedAt?: string | null;
 }
 
 interface ExtractedRaceData {
@@ -622,6 +643,16 @@ export function PreRaceBriefingWizard({
   onCancel,
   raceName,
   raceDate,
+  positionedCourse,
+  coords,
+  marineOverlayData,
+  intentions,
+  updateIntentions,
+  savePreparation,
+  isPreparationLoading,
+  isSaving,
+  hasPendingChanges,
+  lastSavedAt,
 }: PreRaceBriefingWizardProps) {
   const [activeTab, setActiveTab] = useState<TabId>('schedule');
   const [completedSections, setCompletedSections] = useState<Set<string>>(new Set());
@@ -632,15 +663,29 @@ export function PreRaceBriefingWizard({
 
   // Course layout state
   const [selectedCourseType, setSelectedCourseType] = useState<'windward_leeward' | 'triangle' | 'olympic' | null>(null);
-  const [windDirection, setWindDirection] = useState<number>(225); // Default SW
+  // Seed from the live forecast (or the already-positioned course) so the picker,
+  // the pill on the map, and the course orientation all start out in sync. Falls
+  // back to SW only if nothing is known.
+  const [windDirection, setWindDirection] = useState<number>(
+    () => marineOverlayData?.windDirection
+      ?? positionedCourse?.windDirection
+      ?? 225
+  );
+  const userEditedWindRef = useRef(false);
   const [courseTemplates, setCourseTemplates] = useState<CourseTemplate[]>([]);
 
-  // Race preparation hook for persisting schedule & comms data
-  const {
-    intentions,
-    updateIntentions,
-    isLoading: isPreparationLoading,
-  } = useRacePreparation({ regattaId });
+  // Keep the picker aligned with newer forecast data, but never clobber a
+  // direction the user has explicitly chosen via the chips.
+  useEffect(() => {
+    if (userEditedWindRef.current) return;
+    if (marineOverlayData?.windDirection != null) {
+      setWindDirection(marineOverlayData.windDirection);
+    }
+  }, [marineOverlayData?.windDirection]);
+
+  // No-op fallbacks if props not provided
+  const safeUpdateIntentions = updateIntentions ?? (() => {});
+  const safeSavePreparation = savePreparation ?? (async () => {});
 
   // Schedule editable state
   const [scheduleData, setScheduleData] = useState({
@@ -788,10 +833,10 @@ export function PreRaceBriefingWizard({
   const markSectionReviewed = useCallback((sectionId: string) => {
     setCompletedSections((prev) => {
       const next = new Set([...prev, sectionId]);
-      updateIntentions({ briefingSectionsReviewed: [...next] });
+      safeUpdateIntentions({ briefingSectionsReviewed: [...next] });
       return next;
     });
-  }, [updateIntentions]);
+  }, [safeUpdateIntentions]);
 
   // Check if current section is reviewed
   const isCurrentSectionReviewed = completedSections.has(activeTab);
@@ -803,11 +848,6 @@ export function PreRaceBriefingWizard({
   const handleTabChange = useCallback((tabId: TabId) => {
     setActiveTab(tabId);
   }, []);
-
-  // Handle complete
-  const handleComplete = useCallback(() => {
-    onComplete();
-  }, [onComplete]);
 
   // Format date for display
   const formatDate = useCallback((dateString: string) => {
@@ -897,41 +937,65 @@ export function PreRaceBriefingWizard({
     setRaceData(prev => prev ? { ...prev, [field]: url } : prev);
   }, [regattaId]);
 
-  // Debounced save for schedule and comms data
-  const scheduleSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const commsSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const buildBriefingSchedule = useCallback((data: typeof scheduleData): BriefingSchedule => ({
+    meetAtDockTime: data.meetAtDockTime || undefined,
+    departDockTime: data.departDockTime || undefined,
+    numberOfRaces: data.numberOfRaces || undefined,
+    numberOfClasses: data.numberOfClasses || undefined,
+    startOrder: data.startOrder.length > 0 ? data.startOrder : undefined,
+    myClassStartNumber: data.myClassStartNumber,
+    classFlag: data.classFlag || undefined,
+    socialEvents: data.socialEvents.length > 0 ? data.socialEvents : undefined,
+  }), []);
 
   const persistSchedule = useCallback((data: typeof scheduleData) => {
-    if (scheduleSaveTimerRef.current) clearTimeout(scheduleSaveTimerRef.current);
-    scheduleSaveTimerRef.current = setTimeout(() => {
-      const briefingSchedule: BriefingSchedule = {
-        meetAtDockTime: data.meetAtDockTime || undefined,
-        departDockTime: data.departDockTime || undefined,
-        numberOfRaces: data.numberOfRaces || undefined,
-        numberOfClasses: data.numberOfClasses || undefined,
-        startOrder: data.startOrder.length > 0 ? data.startOrder : undefined,
-        myClassStartNumber: data.myClassStartNumber,
-        classFlag: data.classFlag || undefined,
-        socialEvents: data.socialEvents.length > 0 ? data.socialEvents : undefined,
-      };
-      updateIntentions({ briefingSchedule });
-    }, 800);
-  }, [updateIntentions]);
+    const built = buildBriefingSchedule(data);
+    safeUpdateIntentions({ briefingSchedule: built });
+  }, [safeUpdateIntentions, buildBriefingSchedule]);
 
   const persistComms = useCallback((data: BriefingComms) => {
-    if (commsSaveTimerRef.current) clearTimeout(commsSaveTimerRef.current);
-    commsSaveTimerRef.current = setTimeout(() => {
-      updateIntentions({ briefingComms: data });
-    }, 800);
-  }, [updateIntentions]);
+    safeUpdateIntentions({ briefingComms: data });
+  }, [safeUpdateIntentions]);
 
-  // Cleanup timers on unmount
+  // Flush pending saves on unmount (don't discard unsaved changes)
+  const scheduleDataRef = useRef(scheduleData);
+  scheduleDataRef.current = scheduleData;
+  const commsDataRef = useRef(commsData);
+  commsDataRef.current = commsData;
+
   useEffect(() => {
     return () => {
-      if (scheduleSaveTimerRef.current) clearTimeout(scheduleSaveTimerRef.current);
-      if (commsSaveTimerRef.current) clearTimeout(commsSaveTimerRef.current);
+      // Always flush the latest schedule & comms data on unmount.
+      safeUpdateIntentions({
+        briefingSchedule: buildBriefingSchedule(scheduleDataRef.current),
+        briefingComms: commsDataRef.current,
+      });
     };
-  }, []);
+  }, [safeUpdateIntentions, buildBriefingSchedule]);
+
+  // Flush all pending data immediately, then save to DB
+  const flushAndSave = useCallback(async () => {
+    const scheduleSnapshot = scheduleDataRef.current;
+    const builtSchedule = buildBriefingSchedule(scheduleSnapshot);
+    safeUpdateIntentions({
+      briefingSchedule: builtSchedule,
+      briefingComms: commsDataRef.current,
+    });
+    await safeSavePreparation();
+  }, [safeUpdateIntentions, buildBriefingSchedule, safeSavePreparation]);
+
+  // Handle complete
+  const handleComplete = useCallback(async () => {
+    await flushAndSave();
+    onComplete();
+  }, [flushAndSave, onComplete]);
+
+  // Handle cancel - flush data before closing
+  const handleCancel = useCallback(async () => {
+    await flushAndSave();
+    onCancel();
+  }, [flushAndSave, onCancel]);
 
   // Schedule helpers
   const updateScheduleField = useCallback(<K extends keyof typeof scheduleData>(
@@ -1028,6 +1092,17 @@ export function PreRaceBriefingWizard({
     });
   }, [persistComms]);
 
+  // Check if a schedule field value has been confirmed saved to DB
+  // Only returns true when: value is non-empty, matches intentions, and no pending changes remain
+  const isFieldSaved = useCallback((field: keyof BriefingSchedule, localValue: string) => {
+    if (!localValue) return false;
+    if (hasPendingChanges) return false; // still waiting for DB write
+    if (!lastSavedAt) return false; // never saved in this session
+    const saved = intentions?.briefingSchedule;
+    if (!saved) return false;
+    return saved[field] === localValue;
+  }, [intentions?.briefingSchedule, hasPendingChanges, lastSavedAt]);
+
   // Render Schedule tab
   const renderScheduleTab = () => {
     const hasAnyData = raceData || scheduleData.numberOfRaces || scheduleData.meetAtDockTime;
@@ -1048,44 +1123,66 @@ export function PreRaceBriefingWizard({
           {/* Meet at Dock - editable */}
           <View style={styles.editableRow}>
             <View style={styles.dataFieldIcon}>
-              <Anchor size={16} color={IOS_COLORS.green} />
+              <Anchor size={16} color={isFieldSaved('meetAtDockTime', scheduleData.meetAtDockTime) ? IOS_COLORS.green : IOS_COLORS.gray} />
             </View>
             <View style={styles.editableRowContent}>
               <Text style={styles.dataFieldLabel}>Meet at Dock</Text>
-              <TextInput
-                style={[
-                  styles.timeInput,
-                  !scheduleData.meetAtDockTime && styles.timeInputEmpty,
-                ]}
-                value={scheduleData.meetAtDockTime}
-                onChangeText={(v) => updateScheduleField('meetAtDockTime', v)}
-                placeholder="e.g. 08:30"
-                placeholderTextColor={IOS_COLORS.gray}
-                keyboardType="numbers-and-punctuation"
-                returnKeyType="done"
-              />
+              <View style={styles.timeInputRow}>
+                <TextInput
+                  style={[
+                    styles.timeInput,
+                    styles.timeInputFlex,
+                    !scheduleData.meetAtDockTime && styles.timeInputEmpty,
+                    isFieldSaved('meetAtDockTime', scheduleData.meetAtDockTime) && styles.timeInputSaved,
+                  ]}
+                  value={scheduleData.meetAtDockTime}
+                  onChangeText={(v) => updateScheduleField('meetAtDockTime', v)}
+                  placeholder="e.g. 08:30"
+                  placeholderTextColor={IOS_COLORS.gray}
+                  keyboardType="numbers-and-punctuation"
+                  returnKeyType="done"
+                />
+                {scheduleData.meetAtDockTime ? (
+                  isFieldSaved('meetAtDockTime', scheduleData.meetAtDockTime) ? (
+                    <Check size={14} color={IOS_COLORS.green} style={{ marginLeft: 6 }} />
+                  ) : isSaving ? (
+                    <ActivityIndicator size="small" color={IOS_COLORS.orange} style={{ marginLeft: 6 }} />
+                  ) : null
+                ) : null}
+              </View>
             </View>
           </View>
 
           {/* Depart to Race Area - editable */}
           <View style={styles.editableRow}>
             <View style={styles.dataFieldIcon}>
-              <Navigation size={16} color={IOS_COLORS.blue} />
+              <Navigation size={16} color={isFieldSaved('departDockTime', scheduleData.departDockTime) ? IOS_COLORS.green : IOS_COLORS.blue} />
             </View>
             <View style={styles.editableRowContent}>
               <Text style={styles.dataFieldLabel}>Depart to Race Area</Text>
-              <TextInput
-                style={[
-                  styles.timeInput,
-                  !scheduleData.departDockTime && styles.timeInputEmpty,
-                ]}
-                value={scheduleData.departDockTime}
-                onChangeText={(v) => updateScheduleField('departDockTime', v)}
-                placeholder="e.g. 09:00"
-                placeholderTextColor={IOS_COLORS.gray}
-                keyboardType="numbers-and-punctuation"
-                returnKeyType="done"
-              />
+              <View style={styles.timeInputRow}>
+                <TextInput
+                  style={[
+                    styles.timeInput,
+                    styles.timeInputFlex,
+                    !scheduleData.departDockTime && styles.timeInputEmpty,
+                    isFieldSaved('departDockTime', scheduleData.departDockTime) && styles.timeInputSaved,
+                  ]}
+                  value={scheduleData.departDockTime}
+                  onChangeText={(v) => updateScheduleField('departDockTime', v)}
+                  placeholder="e.g. 09:00"
+                  placeholderTextColor={IOS_COLORS.gray}
+                  keyboardType="numbers-and-punctuation"
+                  returnKeyType="done"
+                />
+                {scheduleData.departDockTime ? (
+                  isFieldSaved('departDockTime', scheduleData.departDockTime) ? (
+                    <Check size={14} color={IOS_COLORS.green} style={{ marginLeft: 6 }} />
+                  ) : isSaving ? (
+                    <ActivityIndicator size="small" color={IOS_COLORS.orange} style={{ marginLeft: 6 }} />
+                  ) : null
+                ) : null}
+              </View>
             </View>
           </View>
 
@@ -1377,8 +1474,37 @@ export function PreRaceBriefingWizard({
 
     return (
       <ScrollView style={styles.tabContent} contentContainerStyle={styles.tabContentContainer} showsVerticalScrollIndicator={false}>
-        {/* Course Map - always shown when we have coordinates */}
-        {hasMapData && (
+        {/* Course Map - use the positioned course map when available (same as checklist tile) */}
+        {/* DEBUG: remove after fixing course marks */}
+        {(() => { console.debug('[PreRaceBriefingWizard] Course tab render:', { hasPositionedCourse: !!positionedCourse, marksCount: positionedCourse?.marks?.length, hasCoords: !!coords, coordsValue: coords, windDir: marineOverlayData?.windDirection }); return null; })()}
+        {positionedCourse && coords ? (
+          <View style={styles.courseMapContainerLarge}>
+            {Platform.OS !== 'web' ? (
+              <NativeCourseOverlayMap
+                positionedCourse={positionedCourse}
+                windDirection={windDirection}
+                currentDirection={marineOverlayData?.currentDirection}
+                currentSpeed={marineOverlayData?.currentSpeed}
+                style={{ flex: 1, minHeight: 300 }}
+              />
+            ) : (
+              <CourseMapTile
+                coords={coords}
+                positionedCourse={positionedCourse}
+                isComplete={true}
+                onPress={() => {}}
+                disabled
+                fullWidth
+                windDirection={windDirection}
+                windSpeed={marineOverlayData?.windSpeed}
+                currentDirection={marineOverlayData?.currentDirection}
+                currentSpeed={marineOverlayData?.currentSpeed}
+                waveHeight={marineOverlayData?.waveHeight}
+                waveDirection={marineOverlayData?.waveDirection}
+              />
+            )}
+          </View>
+        ) : hasMapData ? (
           <View style={styles.courseMapContainerLarge}>
             <CourseMapView
               courseMarks={displayMarks}
@@ -1386,7 +1512,7 @@ export function PreRaceBriefingWizard({
               compact={true}
             />
           </View>
-        )}
+        ) : null}
 
         {/* Course Layout Selector */}
         <SectionHeader title="Lay a Course" />
@@ -1411,7 +1537,10 @@ export function PreRaceBriefingWizard({
                   <Pressable
                     key={preset.label}
                     style={[styles.windPresetChip, isActive && styles.windPresetChipActive]}
-                    onPress={() => setWindDirection(preset.degrees)}
+                    onPress={() => {
+                      userEditedWindRef.current = true;
+                      setWindDirection(preset.degrees);
+                    }}
                   >
                     <Text style={[styles.windPresetText, isActive && styles.windPresetTextActive]}>
                       {preset.label}
@@ -1945,21 +2074,7 @@ export function PreRaceBriefingWizard({
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Pressable style={styles.closeButton} onPress={onCancel}>
-          <X size={24} color={IOS_COLORS.blue} />
-        </Pressable>
-        <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>Pre-Race Briefing</Text>
-          <Text style={styles.headerSubtitle} numberOfLines={1}>
-            {raceName || raceData?.name || 'Race Documents Review'}
-          </Text>
-        </View>
-        <View style={styles.headerRight} />
-      </View>
-
+    <View style={styles.container}>
       {/* Tab Bar */}
       <ScrollView
         horizontal
@@ -2022,7 +2137,7 @@ export function PreRaceBriefingWizard({
       </View>
 
       {/* Footer */}
-      <SafeAreaView edges={['bottom']} style={styles.footer}>
+      <View style={styles.footer}>
         {/* Section Review Button */}
         {!isCurrentSectionReviewed && (
           <Pressable
@@ -2062,8 +2177,8 @@ export function PreRaceBriefingWizard({
             Complete Briefing
           </Text>
         </Pressable>
-      </SafeAreaView>
-    </SafeAreaView>
+      </View>
+    </View>
   );
 }
 
@@ -2522,6 +2637,17 @@ const styles = StyleSheet.create({
   timeInputEmpty: {
     borderColor: IOS_COLORS.blue + '40',
     borderStyle: 'dashed' as const,
+  },
+  timeInputSaved: {
+    borderColor: IOS_COLORS.green,
+    color: IOS_COLORS.green,
+  },
+  timeInputFlex: {
+    flex: 1,
+  },
+  timeInputRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
   },
   numberInput: {
     fontSize: 15,
