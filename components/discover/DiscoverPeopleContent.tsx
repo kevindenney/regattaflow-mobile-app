@@ -219,7 +219,7 @@ export function DiscoverPeopleContent({
               <TextInput
                 ref={searchInputRef}
                 style={styles.searchInput}
-                placeholder="Search sailors"
+                placeholder="Search people"
                 placeholderTextColor={IOS_COLORS.secondaryLabel}
                 value={searchQuery}
                 onChangeText={setSearchQuery}

@@ -36,7 +36,7 @@ export function SubscribeCTA({ accentColor = '#1A1A1A', interestSlug }: Subscrib
           {interestSlug ? `Explore more in ${ctx.interestName}` : 'Welcome back'}
         </Text>
         <Text style={styles.subtext}>
-          Track your own progress, follow programs, and connect with others.
+          Track your own progress, subscribe to programs, and connect with others.
         </Text>
         <View style={styles.buttons}>
           <TouchableOpacity

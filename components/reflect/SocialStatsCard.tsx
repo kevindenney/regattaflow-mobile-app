@@ -100,7 +100,7 @@ export function SocialStatsCard({
           onPress={() => router.push('/search')}
         >
           <Ionicons name="person-add" size={16} color={IOS_COLORS.systemBlue} />
-          <Text style={styles.findFriendsText}>Find Sailors to Follow</Text>
+          <Text style={styles.findFriendsText}>Find People to Follow</Text>
         </Pressable>
       )}
     </View>
