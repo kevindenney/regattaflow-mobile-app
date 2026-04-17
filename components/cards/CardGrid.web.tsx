@@ -105,6 +105,12 @@ function CardGridComponent({
   const [dimensions, setDimensions] = useState<CardDimensions>(() =>
     calculateCardDimensions(containerWidth, typeof window !== 'undefined' ? window.innerHeight : 667)
   );
+  // Stable CardWidthContext value — one object per cardWidth instead of a fresh
+  // object on every render inside the per-card renderCard loop.
+  const cardWidthContextValue = useMemo(
+    () => ({ cardWidth: dimensions.cardWidth }),
+    [dimensions.cardWidth],
+  );
   const [currentRaceIndex, setCurrentRaceIndex] = useState(initialRaceIndex);
   const currentRaceIdRef = useRef<string | null>(races[initialRaceIndex]?.id ?? null);
   const [isHovering, setIsHovering] = useState(false);
@@ -386,7 +392,7 @@ function CardGridComponent({
               <Text style={styles.badgeTextDone}>LAST DONE</Text>
             </View>
           ) : null}
-          <CardWidthContext.Provider value={{ cardWidth: dimensions.cardWidth }}>
+          <CardWidthContext.Provider value={cardWidthContextValue}>
             {renderCardContent(
             race,
             'race_summary',

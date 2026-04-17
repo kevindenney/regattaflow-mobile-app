@@ -156,6 +156,12 @@ function CardGridComponent({
     };
   }, [effectiveWidth, effectiveHeight, currentTopInset]);
 
+  // Stable CardWidthContext value — one object per cardWidth instead of one per card per render.
+  const cardWidthContextValue = useMemo(
+    () => ({ cardWidth: dimensions.cardWidth }),
+    [dimensions.cardWidth],
+  );
+
   // Update horizontal offset when dimensions change
   useEffect(() => {
     horizontalOffset.value = jsRaceIndex * dimensions.horizontalSnapInterval;
@@ -386,7 +392,7 @@ function CardGridComponent({
             testID={`card-${race.id}`}
             isDeleting={deletingRaceId === race.id}
           >
-            <CardWidthContext.Provider value={{ cardWidth: dimensions.cardWidth }}>
+            <CardWidthContext.Provider value={cardWidthContextValue}>
               {renderCardContent(
                 race,
                 'race_summary',

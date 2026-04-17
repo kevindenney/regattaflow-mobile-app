@@ -9,7 +9,7 @@
  */
 
 import { router } from 'expo-router';
-import React, { createContext, useCallback, useContext } from 'react';
+import React, { createContext, useCallback, useContext, useMemo } from 'react';
 
 interface GlobalSearchContextValue {
   openGlobalSearch: () => void;
@@ -23,8 +23,11 @@ export function GlobalSearchProvider({ children }: { children: React.ReactNode }
     router.push('/search');
   }, []);
 
+  // Stable context value so memoized consumers aren't invalidated per render.
+  const value = useMemo(() => ({ openGlobalSearch }), [openGlobalSearch]);
+
   return (
-    <GlobalSearchContext.Provider value={{ openGlobalSearch }}>
+    <GlobalSearchContext.Provider value={value}>
       {children}
     </GlobalSearchContext.Provider>
   );
