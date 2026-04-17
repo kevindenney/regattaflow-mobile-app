@@ -95,6 +95,7 @@ function CardGridComponent({
   nowBarWeather,
   expandedRaceId,
   onToggleRaceExpand,
+  renderFooter,
 }: CardGridWebProps & { nextRaceIndex?: number | null; topInset?: number }) {
   // Refs for scroll container
   const horizontalScrollRef = useRef<ScrollView>(null);
@@ -502,6 +503,10 @@ function CardGridComponent({
           );
         })}
       </ScrollView>
+
+      {/* Footer (subscribed blueprints + followed peers) — sibling below the
+          horizontal scroll so it doesn't pan with the cards */}
+      {renderFooter?.()}
 
       {/* Navigation Arrows - appear on hover */}
       {isHovering && showLeftArrow && (

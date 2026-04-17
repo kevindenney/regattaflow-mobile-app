@@ -379,6 +379,13 @@ export interface CardGridProps {
   expandedRaceId?: string | null;
   /** Toggle expansion for a given race: expand if collapsed, collapse if already expanded. */
   onToggleRaceExpand?: (raceId: string) => void;
+  /**
+   * Optional footer rendered BELOW the horizontal card strip (sibling of the
+   * ScrollView, not inside it). Used to surface supplementary sections like
+   * subscribed-blueprint panels and followed peers without having them scroll
+   * horizontally with the cards.
+   */
+  renderFooter?: () => React.ReactNode;
 }
 
 /**

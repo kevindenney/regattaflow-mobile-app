@@ -4533,6 +4533,15 @@ export default function RacesScreen() {
               onToggleRaceExpand={(raceId) => {
                 setSelectedRaceId((prev) => (prev === raceId ? null : raceId));
               }}
+              // Subscribed blueprints + followed peers panel below the card
+              // strip (parity with TimelineGridView on non-sailing interests).
+              renderFooter={!isViewingOtherTimeline ? () => (
+                <BlueprintPanelsStack
+                  interestId={currentInterest?.id}
+                  subscribedBlueprints={subscribedBlueprints ?? []}
+                  myTimelineSteps={myTimelineSteps}
+                />
+              ) : undefined}
             />
           )}
         </View>

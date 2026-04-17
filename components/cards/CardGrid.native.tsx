@@ -114,6 +114,7 @@ function CardGridComponent({
   nowBarWeather,
   expandedRaceId,
   onToggleRaceExpand,
+  renderFooter,
 }: CardGridNativeProps) {
   // Track actual container dimensions
   const [containerSize, setContainerSize] = useState<{ width: number; height: number } | null>(null);
@@ -492,6 +493,10 @@ function CardGridComponent({
           </Animated.View>
         </GestureDetector>
       </Animated.View>
+
+      {/* Footer (subscribed blueprints + followed peers) — sibling below the
+          horizontal gesture container so it doesn't pan with the cards */}
+      {renderFooter?.()}
 
     </GestureHandlerRootView>
   );
