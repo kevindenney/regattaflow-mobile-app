@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="ring" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0F172A"/>
+      <stop offset="100%" stop-color="#1E3A5F"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Circle ring -->
+  <circle cx="512" cy="420" r="280" fill="none" stroke="url(#ring)" stroke-width="24"/>
+
+  <!-- "B" letter -->
+  <text x="512" y="460" text-anchor="middle" dominant-baseline="central"
+        font-family="'SF Pro Display', 'Helvetica Neue', Arial, sans-serif"
+        font-size="260" font-weight="700" fill="#0F172A"
+        letter-spacing="-8">B</text>
+
+  <!-- Wave accent inside circle -->
+  <path d="M 380 560 Q 420 530, 460 560 Q 500 590, 540 560 Q 580 530, 620 560 Q 660 590, 700 560"
+        fill="none" stroke="#0F172A" stroke-width="16" stroke-linecap="round"/>
+
+  <!-- "BetterAt" wordmark -->
+  <text x="512" y="800" text-anchor="middle"
+        font-family="'SF Pro Display', 'Helvetica Neue', Arial, sans-serif"
+        font-size="130" font-weight="600" fill="#0F172A"
+        letter-spacing="-2">BetterAt</text>
+</svg>

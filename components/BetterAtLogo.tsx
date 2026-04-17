@@ -13,7 +13,7 @@ export const BetterAtLogo: React.FC<BetterAtLogoProps> = ({
   const colors = {
     white: { stroke: '#FFFFFF', text: '#FFFFFF', bg: 'none' },
     dark: { stroke: '#1A1A1A', text: '#1A1A1A', bg: 'none' },
-    filled: { stroke: '#FFFFFF', text: '#FFFFFF', bg: '#1A1A1A' },
+    filled: { stroke: '#FFFFFF', text: '#FFFFFF', bg: '#0a1832' },
   };
 
   const { stroke, text, bg } = colors[variant];

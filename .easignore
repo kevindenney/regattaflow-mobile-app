@@ -1,7 +1,11 @@
 android/
+ios/build/
+ios/Pods/
 node_modules/
 .expo/
+.claude/
 dist/
+dist-test/
 logs/
 *.log
 .git/

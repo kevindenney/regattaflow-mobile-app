@@ -34,24 +34,24 @@ module.exports = {
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
         NSLocationWhenInUseUsageDescription:
-          'RegattaFlow needs your location to track race performance and provide accurate wind and current data.',
+          'BetterAt needs your location to track race performance and provide accurate wind and current data.',
         NSLocationAlwaysAndWhenInUseUsageDescription:
-          'RegattaFlow needs your location to track race performance and provide accurate wind and current data.',
+          'BetterAt needs your location to track race performance and provide accurate wind and current data.',
         NSCameraUsageDescription:
-          'RegattaFlow needs camera access to capture race moments and scan course marks.',
+          'BetterAt needs camera access to capture race moments and scan course marks.',
         NSMicrophoneUsageDescription:
-          'RegattaFlow needs microphone access for voice notes and coaching feedback.',
+          'BetterAt needs microphone access for voice notes and coaching feedback.',
         NSPhotoLibraryUsageDescription:
-          'RegattaFlow needs photo library access to save and share race media.',
+          'BetterAt needs photo library access to save and share race media.',
         NSSpeechRecognitionUsageDescription:
-          'RegattaFlow uses speech recognition for voice commands and hands-free operation while sailing.',
+          'BetterAt uses speech recognition for voice commands and hands-free operation while sailing.',
       },
     },
     android: {
       package: 'com.regattaflow.app',
       versionCode: 5,
       adaptiveIcon: {
-        backgroundColor: '#E6F4FE',
+        backgroundColor: '#0a1832',
         foregroundImage: './assets/images/android-icon-foreground.png',
         backgroundImage: './assets/images/android-icon-background.png',
         monochromeImage: './assets/images/android-icon-monochrome.png',
@@ -74,7 +74,7 @@ module.exports = {
         'The deliberate practice platform. Plan, Do, Review — whatever your discipline. Sailing, nursing, drawing, fitness, and more.',
       lang: 'en',
       scope: '/',
-      themeColor: '#1A1A1A',
+      themeColor: '#0a1832',
       backgroundColor: '#ffffff',
       display: 'standalone',
       orientation: 'portrait',
