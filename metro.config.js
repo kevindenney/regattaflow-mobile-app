@@ -111,6 +111,8 @@ if (process.env.NODE_ENV === 'production') {
 // Only apply Sentry serializer for native production builds.
 // withSentryConfig crashes web exports — its resolver calls .match() on undefined
 // module names during web bundling (Sentry RN SDK bug).
+// Set SKIP_SENTRY_BUNDLE=1 to also skip Sentry on native (e.g., for local perf tests).
 const isWebExport = process.argv.some(a => a === '--platform' && process.argv[process.argv.indexOf(a) + 1] === 'web') ||
   process.argv.includes('web');
-module.exports = (process.env.NODE_ENV === 'production' && !isWebExport) ? withSentryConfig(config) : config;
+const skipSentry = process.env.SKIP_SENTRY_BUNDLE === '1' || isWebExport;
+module.exports = (process.env.NODE_ENV === 'production' && !skipSentry) ? withSentryConfig(config) : config;

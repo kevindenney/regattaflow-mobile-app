@@ -2032,6 +2032,112 @@ const GOLF_DATA: InterestConnectData = {
 // Lookup
 // ---------------------------------------------------------------------------
 
+const LAC_CRAFT_DATA: InterestConnectData = {
+  peersHeader: 'SHG Members & Mentors',
+  searchPlaceholder: 'Search members',
+  peers: [
+    {
+      id: 'lac-1',
+      name: 'Phulmani Oraon',
+      subtitle: 'Lac bangles · Completed MUDRA loan',
+      avatarInitials: 'PO',
+      avatarColor: '#E67E22',
+      stat: '6 steps completed',
+      isFollowing: false,
+    },
+    {
+      id: 'lac-2',
+      name: 'Champa Kumari',
+      subtitle: 'Puffed rice business · Mukhyamantri scheme',
+      avatarInitials: 'CK',
+      avatarColor: '#27AE60',
+      stat: '4 steps in progress',
+      isFollowing: false,
+    },
+    {
+      id: 'lac-3',
+      name: 'Basanti Mahto',
+      subtitle: 'Tasar silk thread · Just started',
+      avatarInitials: 'BM',
+      avatarColor: '#8E44AD',
+      stat: '1 step completed',
+      isFollowing: false,
+    },
+    {
+      id: 'lac-4',
+      name: 'Suman Tirkey',
+      subtitle: 'PRADAN Field Coordinator · Khunti',
+      avatarInitials: 'ST',
+      avatarColor: '#2980B9',
+      stat: '4 programs published',
+      isFollowing: true,
+    },
+    {
+      id: 'lac-5',
+      name: 'Rakesh Kumar Singh',
+      subtitle: 'Block Development Officer · Khunti',
+      avatarInitials: 'RS',
+      avatarColor: '#C0392B',
+      stat: 'Government liaison',
+      isFollowing: false,
+    },
+  ],
+  communities: [
+    {
+      id: 'lac-comm-1',
+      name: 'Johar Mahila Mandal',
+      description: 'Self-help group for women artisans in Khunti block',
+      memberCount: 12,
+      icon: 'people',
+      iconColor: '#E67E22',
+      iconBgColor: '#FDF2E9',
+      postCount: 8,
+    },
+    {
+      id: 'lac-comm-2',
+      name: 'PRADAN Jharkhand Network',
+      description: 'Livelihoods support across Ranchi, Khunti, and Hazaribagh',
+      memberCount: 340,
+      icon: 'globe',
+      iconColor: '#2980B9',
+      iconBgColor: '#EBF5FB',
+      postCount: 45,
+    },
+  ],
+  posts: [
+    {
+      id: 'lac-post-1',
+      communityName: 'Johar Mahila Mandal',
+      authorName: 'Phulmani Oraon',
+      authorInitials: 'PO',
+      authorColor: '#E67E22',
+      title: 'MUDRA loan approved — what I learned',
+      body: 'Got ₹40,000 from SBI Khunti. Took 3 visits. Make sure you get a receipt with application number on first visit.',
+      postType: 'tip',
+      topicTags: [{ label: 'MUDRA', color: '#E67E22' }, { label: 'Bank Tips', color: '#27AE60' }],
+      upvotes: 12,
+      commentCount: 4,
+      viewCount: 67,
+      timeAgo: '3d ago',
+    },
+    {
+      id: 'lac-post-2',
+      communityName: 'PRADAN Jharkhand Network',
+      authorName: 'Suman Tirkey',
+      authorInitials: 'ST',
+      authorColor: '#2980B9',
+      title: 'New Mukhyamantri scheme guidelines for 2026',
+      body: 'Updated eligibility: income limit raised to ₹6 lakh. Women in SHGs get priority processing. Contact your VO for applications.',
+      postType: 'discussion',
+      topicTags: [{ label: 'Schemes', color: '#8E44AD' }, { label: 'Jharkhand', color: '#2980B9' }],
+      upvotes: 28,
+      commentCount: 11,
+      viewCount: 203,
+      timeAgo: '1w ago',
+    },
+  ],
+};
+
 const CONNECT_DATA_BY_INTEREST: Record<string, InterestConnectData> = {
   nursing: NURSING_DATA,
   drawing: DRAWING_DATA,
@@ -2045,6 +2151,7 @@ const CONNECT_DATA_BY_INTEREST: Record<string, InterestConnectData> = {
   'painting-printing': PAINTING_DATA,
   'lifelong-learning': LIFELONG_LEARNING_DATA,
   'regenerative-agriculture': REGEN_AG_DATA,
+  'lac-craft-business': LAC_CRAFT_DATA,
 };
 
 /**

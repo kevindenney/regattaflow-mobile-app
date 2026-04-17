@@ -17,6 +17,7 @@ export { LIFELONG_LEARNING_EVENT_CONFIG } from './lifelong-learning'
 export { REGENERATIVE_AGRICULTURE_EVENT_CONFIG } from './regenerative-agriculture'
 export { GLOBAL_HEALTH_EVENT_CONFIG } from './global-health'
 export { SELF_MASTERY_EVENT_CONFIG } from './self-mastery'
+export { GENERIC_EVENT_CONFIG, makeGenericEventConfig } from './generic'
 
 import type { InterestEventConfig } from '@/types/interestEventConfig'
 import { SAILING_EVENT_CONFIG } from './sailing'
@@ -31,6 +32,7 @@ import { LIFELONG_LEARNING_EVENT_CONFIG } from './lifelong-learning'
 import { REGENERATIVE_AGRICULTURE_EVENT_CONFIG } from './regenerative-agriculture'
 import { GLOBAL_HEALTH_EVENT_CONFIG } from './global-health'
 import { SELF_MASTERY_EVENT_CONFIG } from './self-mastery'
+import { makeGenericEventConfig, GENERIC_EVENT_CONFIG } from './generic'
 
 /**
  * Lookup map: interest slug → event config.
@@ -50,12 +52,16 @@ export const INTEREST_EVENT_CONFIGS: Record<string, InterestEventConfig> = {
   'regenerative-agriculture': REGENERATIVE_AGRICULTURE_EVENT_CONFIG,
   'global-health': GLOBAL_HEALTH_EVENT_CONFIG,
   'self-mastery': SELF_MASTERY_EVENT_CONFIG,
+  'lac-craft-business': makeGenericEventConfig('lac-craft-business', 'Activity', { teamNoun: 'Self-Help Group' }),
+  'food-processing': makeGenericEventConfig('food-processing', 'Activity', { teamNoun: 'Self-Help Group' }),
+  'textile-weaving': makeGenericEventConfig('textile-weaving', 'Activity', { teamNoun: 'Self-Help Group' }),
+  golf: makeGenericEventConfig('golf', 'Round', { teamNoun: 'Group' }),
 }
 
 /**
  * Get the event config for an interest slug.
- * Falls back to sailing if the slug is not found.
+ * Falls back to a generic config (not sailing) for unknown interests.
  */
 export function getInterestEventConfig(slug: string): InterestEventConfig {
-  return INTEREST_EVENT_CONFIGS[slug] ?? SAILING_EVENT_CONFIG
+  return INTEREST_EVENT_CONFIGS[slug] ?? GENERIC_EVENT_CONFIG
 }
