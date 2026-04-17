@@ -8,7 +8,7 @@
  * with Dismiss, Add to Timeline, and Close (leave in bar) options.
  */
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -18,8 +18,10 @@ import {
   StyleSheet,
   Platform,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useCollaboratedSteps, useMyTimeline } from '@/hooks/useTimelineSteps';
+import { useAuth } from '@/providers/AuthProvider';
 import type { TimelineStepRecord } from '@/types/timeline-steps';
 import type { StepMetadata, StepPlanData } from '@/types/step-detail';
 
@@ -63,8 +65,21 @@ interface SharedWithMeSectionProps {
 export function SharedWithMeSection({ interestId, onSelectStep }: SharedWithMeSectionProps) {
   const { data: steps } = useCollaboratedSteps(interestId);
   const { data: mySteps } = useMyTimeline(interestId);
+  const { user } = useAuth();
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const [previewStep, setPreviewStep] = useState<TimelineStepRecord | null>(null);
+
+  // Persist dismissed IDs via AsyncStorage
+  const dismissKey = user?.id ? `step-dismissed-${user.id}` : null;
+
+  useEffect(() => {
+    if (!dismissKey) return;
+    AsyncStorage.getItem(dismissKey).then((raw) => {
+      if (raw) {
+        try { setDismissedIds(new Set(JSON.parse(raw))); } catch {}
+      }
+    });
+  }, [dismissKey]);
 
   // Hide steps that are already on the user's timeline (getUserTimeline now includes collaborated steps)
   const myStepIds = new Set((mySteps ?? []).map((s) => s.id));
@@ -82,9 +97,15 @@ export function SharedWithMeSection({ interestId, onSelectStep }: SharedWithMeSe
   );
 
   const handleDismiss = useCallback((stepId: string) => {
-    setDismissedIds((prev) => new Set(prev).add(stepId));
+    setDismissedIds((prev) => {
+      const next = new Set(prev).add(stepId);
+      if (dismissKey) {
+        AsyncStorage.setItem(dismissKey, JSON.stringify([...next])).catch(() => {});
+      }
+      return next;
+    });
     setPreviewStep(null);
-  }, []);
+  }, [dismissKey]);
 
   if (!visibleSteps || visibleSteps.length === 0) return null;
 

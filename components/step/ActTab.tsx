@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { IOS_COLORS, IOS_SPACING } from '@/lib/design-tokens-ios';
 import { STEP_COLORS } from '@/lib/step-theme';
 import { StepDrawContent } from './StepDrawContent';
+import { StepFocusConcepts } from './StepFocusConcepts';
 import { DateEnrichmentCard } from './DateEnrichmentCard';
 import type { DateEnrichment } from '@/types/step-detail';
 
@@ -23,6 +24,8 @@ interface ActTabProps {
 }
 
 export function ActTab({ stepId, dateEnrichment, onNextTab, readOnly, footer, interestId, interestName, interestSlug }: ActTabProps) {
+  const hasConditions = dateEnrichment && (dateEnrichment.wind || dateEnrichment.tide);
+
   return (
     <ScrollView
       style={styles.container}
@@ -31,7 +34,7 @@ export function ActTab({ stepId, dateEnrichment, onNextTab, readOnly, footer, in
       keyboardShouldPersistTaps="handled"
     >
       {/* Conditions reference card */}
-      {dateEnrichment && (dateEnrichment.wind || dateEnrichment.tide) && (
+      {hasConditions ? (
         <View style={styles.conditionsContainer}>
           <DateEnrichmentCard
             dateLabel="today's session"
@@ -39,7 +42,14 @@ export function ActTab({ stepId, dateEnrichment, onNextTab, readOnly, footer, in
             enrichment={dateEnrichment}
           />
         </View>
-      )}
+      ) : dateEnrichment && !hasConditions ? (
+        <View style={styles.conditionsUnavailable}>
+          <Ionicons name="cloud-offline-outline" size={16} color={IOS_COLORS.tertiaryLabel} />
+          <Text style={styles.conditionsUnavailableText}>Weather data not available for this date</Text>
+        </View>
+      ) : null}
+
+      <StepFocusConcepts stepId={stepId} />
 
       <StepDrawContent stepId={stepId} readOnly={readOnly} interestId={interestId} interestName={interestName} interestSlug={interestSlug} />
 
@@ -47,8 +57,8 @@ export function ActTab({ stepId, dateEnrichment, onNextTab, readOnly, footer, in
       {onNextTab && !readOnly && (
         <View style={styles.nextCtaContainer}>
           <Pressable style={styles.nextCtaPrimary} onPress={onNextTab}>
-            <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
-            <Text style={styles.nextCtaPrimaryText}>Next: Review & Reflect</Text>
+            <Ionicons name="checkmark-done" size={18} color="#FFFFFF" />
+            <Text style={styles.nextCtaPrimaryText}>Save & Reflect</Text>
           </Pressable>
         </View>
       )}
@@ -68,6 +78,18 @@ const styles = StyleSheet.create({
   conditionsContainer: {
     paddingHorizontal: IOS_SPACING.md,
     marginBottom: IOS_SPACING.md,
+  },
+  conditionsUnavailable: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: IOS_SPACING.md,
+    paddingVertical: 10,
+    marginBottom: IOS_SPACING.sm,
+  },
+  conditionsUnavailableText: {
+    fontSize: 13,
+    color: IOS_COLORS.tertiaryLabel,
   },
   nextCtaContainer: {
     paddingHorizontal: IOS_SPACING.md,

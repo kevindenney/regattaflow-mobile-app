@@ -38,6 +38,11 @@ interface ConversationalCaptureProps {
   embedded?: boolean;
   /** Step category for AI context (e.g. 'nutrition', 'strength') */
   stepCategory?: string;
+  /** When true, focus the input on mount and bring up the keyboard. Use this
+   *  when the component renders inside a freshly-created step — the user
+   *  already expressed intent ("+ → Add Step"), so the next gesture is to
+   *  describe what they're working on. */
+  autoFocus?: boolean;
 }
 
 export function ConversationalCapture({
@@ -47,6 +52,7 @@ export function ConversationalCapture({
   onCreateStep,
   embedded,
   stepCategory,
+  autoFocus,
 }: ConversationalCaptureProps) {
   const { user } = useAuth();
   const [input, setInput] = useState('');
@@ -54,6 +60,19 @@ export function ConversationalCapture({
   const [pasteText, setPasteText] = useState('');
   const [isStructuring, setIsStructuring] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
+  const inputRef = useRef<TextInput>(null);
+
+  // Honor autoFocus once the input has mounted. We don't pass `autoFocus`
+  // directly to TextInput because Android occasionally drops it when the
+  // input mounts inside a sheet/modal — calling .focus() on a layout tick
+  // is more reliable across platforms.
+  useEffect(() => {
+    if (!autoFocus) return;
+    const t = setTimeout(() => {
+      inputRef.current?.focus();
+    }, 80);
+    return () => clearTimeout(t);
+  }, [autoFocus]);
 
   // Build system prompt with manifesto + insights context
   const [systemPrompt, setSystemPrompt] = useState('');
@@ -340,6 +359,7 @@ Respond with ONLY valid JSON:
           <Ionicons name="clipboard-outline" size={18} color={IOS_COLORS.systemPurple} />
         </Pressable>
         <TextInput
+          ref={inputRef}
           style={styles.input}
           value={input}
           onChangeText={setInput}

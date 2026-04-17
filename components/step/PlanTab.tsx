@@ -14,7 +14,8 @@ import { ConversationalCapture } from './ConversationalCapture';
 import { PlaybookPicker, type PlaybookPickerSelection } from '@/components/playbook/PlaybookPicker';
 import { ResourceTypeIcon } from '@/components/library/ResourceTypeIcon';
 import { getResourcesByIds } from '@/services/LibraryService';
-import { addStepLink } from '@/services/PlaybookService';
+import { addStepLink, removeStepLink, getStepLinks } from '@/services/PlaybookService';
+import { supabase } from '@/services/supabase';
 import { CrossInterestSuggestions } from './CrossInterestSuggestions';
 import { FromOtherPlaybooks } from './FromOtherPlaybooks';
 import { DateEnrichmentCard } from './DateEnrichmentCard';
@@ -28,6 +29,7 @@ import { useCompetenciesForInterest } from '@/hooks/useCompetencies';
 import { CollaboratorPicker } from './CollaboratorPicker';
 import { LocationMapPicker as LocationMapPickerModal } from '@/components/races/LocationMapPicker';
 import { Linking } from 'react-native';
+import { router } from 'expo-router';
 import { getStepCategoryLabels } from '@/lib/step-category-config';
 
 interface PlanTabProps {
@@ -66,6 +68,7 @@ export function PlanTab({
   const [showCollaboratorPicker, setShowCollaboratorPicker] = useState(false);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [linkedResources, setLinkedResources] = useState<LibraryResourceRecord[]>([]);
+  const [linkedConcepts, setLinkedConcepts] = useState<{ id: string; title: string; slug?: string }[]>([]);
   const { data: availableCompetencies } = useCompetenciesForInterest(interestId);
   const [competencySearch, setCompetencySearch] = useState('');
 
@@ -79,7 +82,37 @@ export function PlanTab({
     getResourcesByIds(linkedIds).then(setLinkedResources).catch(() => {});
   }, [linkedIds.join(',')]);
 
-  const handleSelectPlaybookItems = useCallback((selections: PlaybookPickerSelection[]) => {
+  // Load linked concepts from step_playbook_links
+  useEffect(() => {
+    if (!stepId) return;
+    let cancelled = false;
+    async function loadConcepts() {
+      try {
+        const links = await getStepLinks(stepId!);
+        const conceptLinks = links.filter((l) => l.item_type === 'concept');
+        if (conceptLinks.length === 0) {
+          if (!cancelled) setLinkedConcepts([]);
+          return;
+        }
+        const conceptIds = conceptLinks.map((l) => l.item_id);
+        const { data } = await supabase
+          .from('playbook_concepts')
+          .select('id, title, slug')
+          .in('id', conceptIds);
+        if (!cancelled) {
+          setLinkedConcepts(
+            (data || []).map((c: any) => ({ id: c.id, title: c.title, slug: c.slug }))
+          );
+        }
+      } catch {
+        if (!cancelled) setLinkedConcepts([]);
+      }
+    }
+    loadConcepts();
+    return () => { cancelled = true; };
+  }, [stepId]);
+
+  const handleSelectPlaybookItems = useCallback(async (selections: PlaybookPickerSelection[]) => {
     // Dual-write: maintain linked_resource_ids for resource-type selections (one-release migration safety)
     const newResourceIds = selections
       .filter((s) => s.item_type === 'resource')
@@ -89,10 +122,25 @@ export function PlanTab({
       const mergedIds = [...new Set([...existingIds, ...newResourceIds])];
       onUpdate({ linked_resource_ids: mergedIds });
     }
-    // Typed step_playbook_links for every selection (fire-and-forget)
+    // Write step_playbook_links for every selection (await so other tabs see them)
     if (stepId) {
-      selections.forEach((s) => {
-        addStepLink(stepId, s.item_type, s.item_id).catch(() => {});
+      await Promise.all(
+        selections.map((s) =>
+          addStepLink(stepId!, s.item_type, s.item_id).catch((err) => {
+            console.error('[PlanTab] addStepLink failed:', s.item_type, s.item_id, err);
+          })
+        )
+      );
+    }
+    // Optimistically add concept selections to the UI
+    const conceptSelections = selections.filter((s) => s.item_type === 'concept');
+    if (conceptSelections.length > 0) {
+      setLinkedConcepts((prev) => {
+        const existingIds = new Set(prev.map((c) => c.id));
+        const newConcepts = conceptSelections
+          .filter((s) => !existingIds.has(s.item_id))
+          .map((s) => ({ id: s.item_id, title: s.label }));
+        return [...prev, ...newConcepts];
       });
     }
     setShowPlaybookPicker(false);
@@ -102,6 +150,13 @@ export function PlanTab({
     const updated = (planData.linked_resource_ids ?? []).filter((id) => id !== resourceId);
     onUpdate({ linked_resource_ids: updated });
   }, [planData.linked_resource_ids, onUpdate]);
+
+  const handleRemoveConcept = useCallback(async (conceptId: string) => {
+    setLinkedConcepts((prev) => prev.filter((c) => c.id !== conceptId));
+    if (stepId) {
+      await removeStepLink(stepId, 'concept', conceptId).catch(() => {});
+    }
+  }, [stepId]);
 
   const handleSubStepsChange = useCallback((subSteps: SubStep[]) => {
     onUpdate({ how_sub_steps: subSteps });
@@ -237,6 +292,33 @@ export function PlanTab({
                     <Ionicons name="close-circle" size={16} color={IOS_COLORS.systemGray3} />
                   </Pressable>
                 )}
+              </Pressable>
+            ))}
+          </View>
+        )}
+
+        {/* Linked concepts */}
+        {linkedConcepts.length > 0 && (
+          <View style={styles.conceptsSection}>
+            <Text style={styles.conceptsSectionLabel}>FOCUS CONCEPTS</Text>
+            {linkedConcepts.map((concept) => (
+              <Pressable
+                key={concept.id}
+                style={styles.conceptCard}
+                onPress={() => {
+                  if (concept.slug) {
+                    router.push(`/(tabs)/playbook/concept/${concept.slug}` as any);
+                  }
+                }}
+              >
+                <Ionicons name="book-outline" size={16} color={STEP_COLORS.accent} />
+                <Text style={styles.conceptCardTitle} numberOfLines={2}>{concept.title}</Text>
+                {!readOnly && (
+                  <Pressable onPress={() => handleRemoveConcept(concept.id)} hitSlop={6}>
+                    <Ionicons name="close-circle" size={16} color={IOS_COLORS.systemGray3} />
+                  </Pressable>
+                )}
+                {concept.slug && <Ionicons name="chevron-forward" size={14} color={IOS_COLORS.systemGray3} />}
               </Pressable>
             ))}
           </View>
@@ -445,27 +527,38 @@ export function PlanTab({
                 placeholder="Search competencies..."
                 placeholderTextColor={IOS_COLORS.tertiaryLabel}
               />
-              {(availableCompetencies ?? [])
-                .filter((c: Competency) =>
-                  !(planData.competency_ids ?? []).includes(c.id) &&
-                  (!competencySearch.trim() ||
-                    c.title.toLowerCase().includes(competencySearch.toLowerCase()))
-                )
-                .slice(0, 8)
-                .map((comp: Competency) => (
-                  <Pressable
-                    key={comp.id}
-                    style={styles.competencyOption}
-                    onPress={() => {
-                      const existing = planData.competency_ids ?? [];
-                      onUpdate({ competency_ids: [...existing, comp.id] });
-                      setCompetencySearch('');
-                    }}
-                  >
-                    <Ionicons name="add-circle-outline" size={16} color={STEP_COLORS.accent} />
-                    <Text style={styles.competencyOptionText} numberOfLines={1}>{comp.title}</Text>
-                  </Pressable>
-                ))}
+              {(() => {
+                const filtered = (availableCompetencies ?? [])
+                  .filter((c: Competency) =>
+                    !(planData.competency_ids ?? []).includes(c.id) &&
+                    (!competencySearch.trim() ||
+                      c.title.toLowerCase().includes(competencySearch.toLowerCase()))
+                  );
+                const shown = filtered.slice(0, 8);
+                return (
+                  <>
+                    {shown.map((comp: Competency) => (
+                      <Pressable
+                        key={comp.id}
+                        style={styles.competencyOption}
+                        onPress={() => {
+                          const existing = planData.competency_ids ?? [];
+                          onUpdate({ competency_ids: [...existing, comp.id] });
+                          setCompetencySearch('');
+                        }}
+                      >
+                        <Ionicons name="add-circle-outline" size={16} color={STEP_COLORS.accent} />
+                        <Text style={styles.competencyOptionText} numberOfLines={1}>{comp.title}</Text>
+                      </Pressable>
+                    ))}
+                    {filtered.length > 8 && (
+                      <Text style={{ fontSize: 12, color: IOS_COLORS.secondaryLabel, paddingVertical: 4, paddingHorizontal: 4 }}>
+                        Showing 8 of {filtered.length} — type to narrow
+                      </Text>
+                    )}
+                  </>
+                );
+              })()}
             </View>
           )}
         </PlanQuestionCard>
@@ -643,6 +736,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     maxWidth: '100%',
+  },
+  conceptsSection: {
+    gap: 6,
+    marginTop: 4,
+  },
+  conceptsSectionLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#8E8E93',
+    letterSpacing: 1,
+  },
+  conceptCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#EFF6FF',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  conceptCardTitle: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#000000',
   },
   chipText: {
     fontSize: 13,

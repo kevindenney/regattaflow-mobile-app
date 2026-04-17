@@ -18,7 +18,8 @@ import { CollaboratorPicker } from './CollaboratorPicker';
 import { CourseContextSheet } from './CourseContextSheet';
 import { PlaybookPicker, type PlaybookPickerSelection } from '@/components/playbook/PlaybookPicker';
 import { ResourceTypeIcon } from '@/components/library/ResourceTypeIcon';
-import { addStepLink } from '@/services/PlaybookService';
+import { addStepLink, removeStepLink, getStepLinks } from '@/services/PlaybookService';
+import { router } from 'expo-router';
 import { FromOtherPlaybooks } from './FromOtherPlaybooks';
 import { useStepDetail, useUpdateStepMetadata } from '@/hooks/useStepDetail';
 import { useUpdateStep } from '@/hooks/useTimelineSteps';
@@ -74,8 +75,10 @@ export function StepPlanQuestions({
   const [showPlaybookPicker, setShowPlaybookPicker] = useState(false);
   const [showCompetencyPicker, setShowCompetencyPicker] = useState(false);
   const [linkedResources, setLinkedResources] = useState<LibraryResourceRecord[]>([]);
+  const [linkedConcepts, setLinkedConcepts] = useState<{ id: string; title: string; slug?: string }[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiSuggestion, setAiSuggestion] = useState('');
+  const [showManualFields, setShowManualFields] = useState(false);
   const [refinementChat, setRefinementChat] = useState<ChatMessage[]>([]);
   const [refinementInput, setRefinementInput] = useState('');
   const [localGoals, setLocalGoals] = useState<string[]>([]);
@@ -285,6 +288,40 @@ export function StepPlanQuestions({
     getResourcesByIds(linkedIds).then(setLinkedResources).catch(() => {});
   }, [linkedIds.join(',')]);
 
+  // Load linked concepts from step_playbook_links
+  useEffect(() => {
+    let cancelled = false;
+    async function loadConcepts() {
+      try {
+        const links = await getStepLinks(stepId);
+        const conceptLinks = links.filter((l) => l.item_type === 'concept');
+        if (conceptLinks.length === 0) {
+          if (!cancelled) setLinkedConcepts([]);
+          return;
+        }
+        const conceptIds = conceptLinks.map((l) => l.item_id);
+        const { data } = await supabase
+          .from('playbook_concepts')
+          .select('id, title, slug')
+          .in('id', conceptIds);
+        if (!cancelled) {
+          setLinkedConcepts(
+            (data || []).map((c: any) => ({ id: c.id, title: c.title, slug: c.slug }))
+          );
+        }
+      } catch {
+        if (!cancelled) setLinkedConcepts([]);
+      }
+    }
+    loadConcepts();
+    return () => { cancelled = true; };
+  }, [stepId]);
+
+  const handleRemoveConcept = useCallback(async (conceptId: string) => {
+    setLinkedConcepts((prev) => prev.filter((c) => c.id !== conceptId));
+    await removeStepLink(stepId, 'concept', conceptId).catch(() => {});
+  }, [stepId]);
+
   const handleWhatChange = useCallback((text: string) => {
     setLocalWhat(text);
     debouncedSave({ what_will_you_do: text });
@@ -361,10 +398,26 @@ export function StepPlanQuestions({
   }, [debouncedSave]);
 
   const handleSelectPlaybookItems = useCallback(async (selections: PlaybookPickerSelection[]) => {
-    // Write typed step_playbook_links for every selection (fire-and-forget)
-    selections.forEach((s) => {
-      addStepLink(stepId, s.item_type, s.item_id).catch(() => {});
-    });
+    // Write typed step_playbook_links for every selection (await so other tabs see them)
+    await Promise.all(
+      selections.map((s) =>
+        addStepLink(stepId, s.item_type, s.item_id).catch((err) => {
+          console.error('[StepPlanQuestions] addStepLink failed:', s.item_type, s.item_id, err);
+        })
+      )
+    );
+
+    // Optimistically add concept selections to the UI immediately
+    const conceptSelections = selections.filter((s) => s.item_type === 'concept');
+    if (conceptSelections.length > 0) {
+      setLinkedConcepts((prev) => {
+        const existingIds = new Set(prev.map((c) => c.id));
+        const newConcepts = conceptSelections
+          .filter((s) => !existingIds.has(s.item_id))
+          .map((s) => ({ id: s.item_id, title: s.label }));
+        return [...prev, ...newConcepts];
+      });
+    }
 
     // Dual-write linked_resource_ids for resource-type selections (one-release migration safety)
     const newResourceIds = selections
@@ -439,7 +492,8 @@ export function StepPlanQuestions({
   const handleRemoveResource = useCallback((resourceId: string) => {
     const updated = (planDataRef.current.linked_resource_ids ?? []).filter((id) => id !== resourceId);
     debouncedSave({ linked_resource_ids: updated });
-  }, [debouncedSave]);
+    removeStepLink(stepId, 'resource', resourceId).catch(() => {});
+  }, [debouncedSave, stepId]);
 
   const handleSubStepsChange = useCallback((subSteps: SubStep[]) => {
     setLocalSubSteps(subSteps);
@@ -601,8 +655,10 @@ export function StepPlanQuestions({
       const category = step?.category || 'general';
       const isNutrition = category === 'nutrition';
 
-      const prompt = isNutrition
-        ? `Based on my nutrition plan "${localWhat.trim()}", generate a structured meal list for the day.
+      const isReading = category === 'reading' || category === 'reading_study';
+      let prompt: string;
+      if (isNutrition) {
+        prompt = `Based on my nutrition plan "${localWhat.trim()}", generate a structured meal list for the day.
 
 RULES:
 - Output ONLY meals/snacks, one per line
@@ -610,8 +666,22 @@ RULES:
 - Include macro estimates if possible (e.g. "~35g protein, 50g carbs")
 - Cover all meals: breakfast, lunch, dinner, snacks
 - NO advice, NO explanations, NO commentary, NO numbering
-- Just the meal lines, nothing else`
-        : `Based on my plan "${localWhat.trim()}", generate ONLY a list of exercises with sets, reps, and weights. Use my measurement history for progressive overload.
+- Just the meal lines, nothing else`;
+      } else if (isReading) {
+        prompt = `Based on my reading plan "${localWhat.trim()}", generate a focused list of reading tasks and reflection exercises.
+
+RULES:
+- Output ONLY actionable tasks, one per line
+- Include specific reading assignments (chapters, pages, sections)
+- Include reflection prompts or application exercises tied to the reading
+- Format: clear action item (e.g. "Read Chapter 3: The Power of Yet")
+- 4-6 items total
+- NO advice, NO explanations, NO commentary, NO numbering
+- Just the task lines, nothing else`;
+      } else {
+        const isFitness = ['strength', 'cardio', 'flexibility', 'workout', 'training', 'exercise'].includes(category);
+        if (isFitness) {
+          prompt = `Based on my plan "${localWhat.trim()}", generate ONLY a list of exercises with sets, reps, and weights. Use my measurement history for progressive overload.
 
 RULES:
 - Output ONLY exercises, one per line
@@ -620,6 +690,18 @@ RULES:
 - Include warmup sets as separate lines (e.g. "Bench press (warmup): 2x5 @ 95 lbs")
 - NO advice, NO explanations, NO commentary, NO separators, NO numbering
 - Just the exercise lines, nothing else`;
+        } else {
+          prompt = `Based on my plan "${localWhat.trim()}", generate a focused list of actionable sub-steps to accomplish this.
+
+RULES:
+- Output ONLY actionable steps, one per line
+- Each step should be specific and completable
+- Format: clear action item (e.g. "Review patient chart and identify relevant history")
+- 4-8 items total, ordered logically
+- NO advice, NO explanations, NO commentary, NO numbering
+- Just the step lines, nothing else`;
+        }
+      }
 
       const text = await generateChatPlanSuggestion(ctx, [
         { role: 'user', content: prompt, timestamp: new Date().toISOString() },
@@ -628,7 +710,8 @@ RULES:
       const lines = text.split('\n').map((l) => l.trim()).filter((l) => {
         if (l.length === 0 || l.length > 150) return false;
         if (/^[-–—=]+$/.test(l)) return false; // separators
-        // Must contain a colon (item: detail) or common patterns
+        // Reading/general: accept any substantive line; fitness/nutrition: require structured format
+        if (isReading || category === 'general') return l.length >= 10;
         return l.includes(':') || /\d+x\d+/.test(l) || /\d+\s*sets?/i.test(l) || /\d+[gG]\b/.test(l);
       });
       const newSubSteps: SubStep[] = lines.map((line, i) => ({
@@ -690,10 +773,16 @@ RULES:
 
   return (
     <View style={styles.container}>
-      {/* Section header */}
+      {/* Section header — warmer when empty */}
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>{catLabels.planHeader}</Text>
-        <Text style={styles.sectionSubtitle}>{catLabels.planSubheader}</Text>
+        <Text style={showConversational ? styles.sectionTitleWelcome : styles.sectionTitle}>
+          {showConversational ? 'Plan this step' : catLabels.planHeader}
+        </Text>
+        <Text style={styles.sectionSubtitle}>
+          {showConversational
+            ? 'Chat with AI Coach or fill in the fields below'
+            : catLabels.planSubheader}
+        </Text>
       </View>
 
       {/* Course context banner — tap to see full course */}
@@ -731,6 +820,10 @@ RULES:
             onCreateStep={onConversationalCreate!}
             embedded
             stepCategory={step?.category}
+            // The user just created this step (showConversational gates on
+            // "no plan content yet") — drop them straight into the input
+            // so a single typing gesture replaces 5 form fields.
+            autoFocus
           />
         </View>
       )}
@@ -768,6 +861,21 @@ RULES:
           )}
         </View>
       )}
+
+      {/* Manual fields toggle — when AI Coach is shown, collapse form fields */}
+      {showConversational && !showManualFields && (
+        <Pressable
+          style={styles.manualFieldsToggle}
+          onPress={() => setShowManualFields(true)}
+        >
+          <Ionicons name="create-outline" size={16} color={IOS_COLORS.systemBlue} />
+          <Text style={styles.manualFieldsToggleText}>Fill in manually</Text>
+          <Ionicons name="chevron-down" size={14} color={IOS_COLORS.systemBlue} style={{ marginLeft: 'auto' }} />
+        </Pressable>
+      )}
+
+      {/* Q1: What will you do? — hidden behind toggle when AI Coach is the entry point */}
+      {(!showConversational || showManualFields) && (<>
 
       {/* Q1: What will you do? */}
       <PlanQuestionCard
@@ -883,13 +991,39 @@ RULES:
           </View>
         )}
 
+        {linkedConcepts.length > 0 && (
+          <View style={styles.conceptsSection}>
+            <Text style={styles.conceptsSectionLabel}>FOCUS CONCEPTS</Text>
+            {linkedConcepts.map((concept) => (
+              <Pressable
+                key={concept.id}
+                style={styles.conceptCard}
+                onPress={() => {
+                  if (concept.slug) {
+                    router.push(`/(tabs)/playbook/concept/${concept.slug}` as any);
+                  }
+                }}
+              >
+                <Ionicons name="book-outline" size={16} color={STEP_COLORS.accent} />
+                <Text style={styles.conceptCardTitle} numberOfLines={2}>{concept.title}</Text>
+                {!readOnly && (
+                  <Pressable onPress={() => handleRemoveConcept(concept.id)} hitSlop={6}>
+                    <Ionicons name="close-circle" size={16} color={IOS_COLORS.systemGray3} />
+                  </Pressable>
+                )}
+                {concept.slug && <Ionicons name="chevron-forward" size={14} color={IOS_COLORS.systemGray3} />}
+              </Pressable>
+            ))}
+          </View>
+        )}
+
         {!readOnly && (
           <Pressable
             style={styles.addLibraryButton}
             onPress={() => setShowPlaybookPicker(true)}
           >
             <Ionicons name="library-outline" size={18} color={STEP_COLORS.accent} />
-            <Text style={styles.addLibraryText}>Add from Library</Text>
+            <Text style={styles.addLibraryText}>Add from Playbook</Text>
           </Pressable>
         )}
       </PlanQuestionCard>
@@ -918,7 +1052,13 @@ RULES:
               <>
                 <Ionicons name="sparkles" size={16} color={IOS_COLORS.systemPurple} />
                 <Text style={styles.aiSuggestText}>
-                  {q2Complete ? 'Regenerate exercises' : 'Generate exercises'}
+                  {(() => {
+                    const cat = step?.category || 'general';
+                    const isReadingCat = cat === 'reading' || cat === 'reading_study';
+                    const isFitness = ['strength', 'cardio', 'flexibility', 'workout', 'training', 'exercise'].includes(cat);
+                    const label = isReadingCat ? 'tasks' : cat === 'nutrition' ? 'meals' : isFitness ? 'exercises' : 'sub-steps';
+                    return q2Complete ? `Regenerate ${label}` : `Generate ${label}`;
+                  })()}
                 </Text>
               </>
             )}
@@ -1330,6 +1470,8 @@ RULES:
         }}
       />}
 
+      </>)}
+
       {/* Playbook picker modal */}
       {!readOnly && (
         <PlaybookPicker
@@ -1372,6 +1514,19 @@ const styles = StyleSheet.create({
   brainDumpBadge: {
     marginLeft: 4,
   },
+  manualFieldsToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    marginBottom: 4,
+  },
+  manualFieldsToggleText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.systemBlue,
+  },
   sectionHeader: {
     marginBottom: IOS_SPACING.sm,
   },
@@ -1380,6 +1535,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: IOS_COLORS.secondaryLabel,
     letterSpacing: 0.5,
+  },
+  sectionTitleWelcome: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+    letterSpacing: -0.2,
   },
   sectionSubtitle: {
     fontSize: 13,
@@ -1433,6 +1594,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     maxWidth: '100%',
+  },
+  conceptsSection: {
+    gap: 6,
+    marginTop: 4,
+  },
+  conceptsSectionLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#8E8E93',
+    letterSpacing: 1,
+  },
+  conceptCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#EFF6FF',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  conceptCardTitle: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#000000',
   },
   chipText: {
     fontSize: 13,

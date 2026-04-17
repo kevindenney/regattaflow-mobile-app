@@ -470,8 +470,28 @@ export function StepDrawContent({ stepId, readOnly, interestId, interestName, in
 
   if (!step) return null;
 
+  const hasAnyActContent = Boolean(
+    completedCount > 0 || localNotes.trim() || mediaLinks.length > 0 ||
+    (actData.observations?.length ?? 0) > 0
+  );
+
   return (
     <View style={styles.container}>
+      {/* Welcome prompt when nothing recorded yet */}
+      {!hasAnyActContent && !readOnly && (
+        <View style={styles.emptyWelcome}>
+          <Ionicons name="rocket-outline" size={20} color={STEP_COLORS.accent} />
+          <View style={styles.emptyWelcomeContent}>
+            <Text style={styles.emptyWelcomeTitle}>Time to do the work</Text>
+            <Text style={styles.emptyWelcomeSubtitle}>
+              {subSteps.length > 0
+                ? 'Check off sub-steps as you go, capture notes and observations below.'
+                : 'Record what happens — add notes, photos, or observations as you go.'}
+            </Text>
+          </View>
+        </View>
+      )}
+
       {/* Sub-step checklist */}
       {subSteps.length > 0 && (
         <View style={styles.section}>
@@ -1039,6 +1059,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: IOS_SPACING.md,
     paddingBottom: IOS_SPACING.md,
     gap: IOS_SPACING.md,
+  },
+  emptyWelcome: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    backgroundColor: `${STEP_COLORS.accent}08`,
+    borderRadius: 10,
+    padding: 12,
+  },
+  emptyWelcomeContent: {
+    flex: 1,
+    gap: 2,
+  },
+  emptyWelcomeTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+  },
+  emptyWelcomeSubtitle: {
+    fontSize: 13,
+    color: IOS_COLORS.secondaryLabel,
+    lineHeight: 18,
   },
   section: {
     gap: IOS_SPACING.xs,

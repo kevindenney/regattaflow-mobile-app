@@ -3,9 +3,12 @@
  */
 
 import React from 'react';
-import { ScrollView, StyleSheet } from 'react-native';
-import { IOS_SPACING } from '@/lib/design-tokens-ios';
+import { ScrollView, StyleSheet, View, Text } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { IOS_COLORS, IOS_SPACING } from '@/lib/design-tokens-ios';
+import { useStepDetail } from '@/hooks/useTimelineSteps';
 import { StepCritiqueContent } from './StepCritiqueContent';
+import { StepFocusConcepts } from './StepFocusConcepts';
 
 interface ReviewTabProps {
   stepId: string;
@@ -21,9 +24,82 @@ export function ReviewTab({ stepId, readOnly, footer }: ReviewTabProps) {
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
     >
+      <InstructorFeedbackCard stepId={stepId} />
+      <StepFocusConcepts stepId={stepId} variant="review" />
       <StepCritiqueContent stepId={stepId} readOnly={readOnly} />
       {footer}
     </ScrollView>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Instructor Feedback Card — shown when blueprint author has left feedback
+// ---------------------------------------------------------------------------
+
+const FC = {
+  green: '#16A34A',
+  greenBg: '#DCFCE7',
+  orange: '#EA580C',
+  orangeBg: '#FFF7ED',
+  accent: '#00897B',
+  accentBg: 'rgba(0,137,123,0.08)',
+  labelDark: '#1A1918',
+  labelMid: '#6D6C6A',
+  border: '#E5E4E1',
+} as const;
+
+function InstructorFeedbackCard({ stepId }: { stepId: string }) {
+  const { data: step } = useStepDetail(stepId);
+  const review = (step?.metadata as any)?.review;
+
+  if (!review) return null;
+
+  const status = review.instructor_review_status as string | undefined;
+  const note = review.instructor_review_note as string | undefined;
+  const suggestedNext = review.instructor_suggested_next as string | undefined;
+
+  if (!status && !suggestedNext) return null;
+
+  const isApproved = status === 'approved';
+  const isRevision = status === 'needs_revision';
+
+  return (
+    <View style={styles.feedbackCard}>
+      <View style={styles.feedbackHeader}>
+        <Ionicons name="school-outline" size={16} color={FC.accent} />
+        <Text style={styles.feedbackTitle}>Instructor Feedback</Text>
+      </View>
+
+      {/* Review status */}
+      {(isApproved || isRevision) && (
+        <View style={[
+          styles.statusBadge,
+          { backgroundColor: isApproved ? FC.greenBg : FC.orangeBg },
+        ]}>
+          <Ionicons
+            name={isApproved ? 'checkmark-circle' : 'alert-circle'}
+            size={16}
+            color={isApproved ? FC.green : FC.orange}
+          />
+          <Text style={[styles.statusText, { color: isApproved ? FC.green : FC.orange }]}>
+            {isApproved ? 'Approved' : 'Revision Requested'}
+          </Text>
+        </View>
+      )}
+
+      {/* Review note */}
+      {note ? (
+        <Text style={styles.feedbackNote}>{note}</Text>
+      ) : null}
+
+      {/* Suggested next */}
+      {suggestedNext ? (
+        <View style={styles.suggestedBox}>
+          <Text style={styles.suggestedLabel}>Suggested next</Text>
+          <Text style={styles.suggestedText}>{suggestedNext}</Text>
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -34,5 +110,61 @@ const styles = StyleSheet.create({
   content: {
     paddingTop: IOS_SPACING.md,
     paddingBottom: 100,
+  },
+  feedbackCard: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    backgroundColor: FC.accentBg,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: FC.border,
+    padding: 14,
+    gap: 10,
+  },
+  feedbackHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  feedbackTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: FC.accent,
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  statusText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  feedbackNote: {
+    fontSize: 14,
+    color: FC.labelDark,
+    lineHeight: 20,
+  },
+  suggestedBox: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    padding: 10,
+    gap: 4,
+  },
+  suggestedLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: FC.labelMid,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  suggestedText: {
+    fontSize: 14,
+    color: FC.labelDark,
+    lineHeight: 20,
   },
 });

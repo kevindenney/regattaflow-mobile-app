@@ -17,6 +17,7 @@ import {
   KeyboardAvoidingView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IOS_COLORS, IOS_SPACING } from '@/lib/design-tokens-ios';
 import { STEP_COLORS } from '@/lib/step-theme';
 import { useAuth } from '@/providers/AuthProvider';
@@ -44,6 +45,7 @@ interface UserRow {
 export function CollaboratorPicker({ visible, onClose, onAdd, existingIds }: CollaboratorPickerProps) {
   const { user } = useAuth();
   const { activeOrganizationId } = useOrganization();
+  const insets = useSafeAreaInsets();
   const [query, setQuery] = useState('');
   const [orgMembers, setOrgMembers] = useState<UserRow[]>([]);
   const [following, setFollowing] = useState<UserRow[]>([]);
@@ -55,6 +57,7 @@ export function CollaboratorPicker({ visible, onClose, onAdd, existingIds }: Col
   const [externalName, setExternalName] = useState('');
   const [hasFollows, setHasFollows] = useState(false);
   const [hasOrgMembers, setHasOrgMembers] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Load org members + following/all users on mount
   useEffect(() => {
@@ -98,6 +101,7 @@ export function CollaboratorPicker({ visible, onClose, onAdd, existingIds }: Col
     };
 
     const loadPeople = async () => {
+      setLoadError(null);
       // Load org members first (if in an org)
       const orgResults = await loadOrgMembers();
       if (orgResults.length > 0) {
@@ -137,6 +141,7 @@ export function CollaboratorPicker({ visible, onClose, onAdd, existingIds }: Col
         }
       } catch (err) {
         console.error('[CollaboratorPicker] Failed to load people:', err);
+        setLoadError('Could not load people. Check your connection.');
       }
       setLoadingPeople(false);
     };
@@ -237,56 +242,118 @@ export function CollaboratorPicker({ visible, onClose, onAdd, existingIds }: Col
     );
   };
 
+  const isLoading = (loadingPeople && !isSearching) || (loadingSearch && isSearching);
+  const hasAnyPeople = hasOrgMembers || otherPeopleList.length > 0;
+
+  const renderEmptyState = () => {
+    if (loadError) {
+      return (
+        <View style={styles.emptyContainer}>
+          <View style={styles.emptyIconCircle}>
+            <Ionicons name="cloud-offline-outline" size={26} color={IOS_COLORS.systemOrange} />
+          </View>
+          <Text style={styles.emptyTitle}>{loadError}</Text>
+          <Pressable
+            style={styles.retryButton}
+            onPress={() => {
+              setLoadingPeople(true);
+              setLoadError(null);
+              // Re-trigger the effect by toggling visibility isn't possible,
+              // so re-run inline
+              const reload = async () => {
+                try {
+                  const { users } = await SailorProfileService.getFollowing(user!.id, user!.id, { limit: 50, offset: 0 });
+                  if (users.length > 0) {
+                    setHasFollows(true);
+                    setFollowing(users.map((u) => ({ userId: u.userId, displayName: u.displayName, avatarUrl: u.avatarUrl, avatarEmoji: u.avatarEmoji, avatarColor: u.avatarColor })));
+                  }
+                } catch {
+                  setLoadError('Could not load people. Check your connection.');
+                }
+                setLoadingPeople(false);
+              };
+              reload();
+            }}
+          >
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </Pressable>
+        </View>
+      );
+    }
+    if (isSearching) {
+      return (
+        <View style={styles.emptyContainer}>
+          <View style={styles.emptyIconCircle}>
+            <Ionicons name="search" size={26} color={IOS_COLORS.systemGray2} />
+          </View>
+          <Text style={styles.emptyTitle}>No results for "{query.trim()}"</Text>
+          <Text style={styles.emptyBody}>
+            Try a different name, or add them as an off-platform person below.
+          </Text>
+        </View>
+      );
+    }
+    return (
+      <View style={styles.emptyContainer}>
+        <View style={styles.emptyIconCircle}>
+          <Ionicons name="people-outline" size={28} color={IOS_COLORS.systemGray2} />
+        </View>
+        <Text style={styles.emptyTitle}>No people to show yet</Text>
+        <Text style={styles.emptyBody}>
+          Search for someone on BetterAt, or add a collaborator who isn't on the app.
+        </Text>
+      </View>
+    );
+  };
+
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={handleClose}>
       <KeyboardAvoidingView
-        style={styles.container}
+        style={[styles.container, { paddingTop: Platform.OS === 'android' ? insets.top : 0 }]}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Add People</Text>
-          <Pressable onPress={handleClose} hitSlop={8}>
-            <Ionicons name="close-circle-outline" size={28} color={IOS_COLORS.secondaryLabel} />
+          <View style={styles.headerTextColumn}>
+            <Text style={styles.headerTitle}>Add people</Text>
+            <Text style={styles.headerSubtitle}>Collaborators you add can view and edit this step.</Text>
+          </View>
+          <Pressable onPress={handleClose} hitSlop={12} style={styles.closeButton}>
+            <Ionicons name="close" size={22} color={IOS_COLORS.secondaryLabel} />
           </Pressable>
         </View>
 
         {/* Search */}
-        <View style={styles.searchContainer}>
-          <Ionicons name="search" size={18} color={IOS_COLORS.tertiaryLabel} />
-          <TextInput
-            style={styles.searchInput}
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Search people..."
-            placeholderTextColor={IOS_COLORS.tertiaryLabel}
-            autoCorrect={false}
-          />
-          {query.length > 0 && (
-            <Pressable onPress={() => setQuery('')} hitSlop={6}>
-              <Ionicons name="close-circle" size={18} color={IOS_COLORS.systemGray3} />
-            </Pressable>
-          )}
+        <View style={styles.searchWrapper}>
+          <View style={styles.searchContainer}>
+            <Ionicons name="search" size={18} color={IOS_COLORS.tertiaryLabel} />
+            <TextInput
+              style={styles.searchInput}
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Search by name..."
+              placeholderTextColor={IOS_COLORS.tertiaryLabel}
+              autoCorrect={false}
+              returnKeyType="search"
+            />
+            {query.length > 0 && (
+              <Pressable onPress={() => setQuery('')} hitSlop={6}>
+                <Ionicons name="close-circle" size={18} color={IOS_COLORS.systemGray3} />
+              </Pressable>
+            )}
+          </View>
         </View>
 
-        {/* Section header */}
-        {!isSearching && hasOrgMembers && orgMembers.length > 0 && (
-          <Text style={styles.sectionLabel}>YOUR ORGANIZATION</Text>
-        )}
-
-        {/* List — combined org members + other people, or search results */}
-        {(loadingPeople && !isSearching) || (loadingSearch && isSearching) ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="small" color={STEP_COLORS.accent} />
-          </View>
-        ) : isSearching ? (
-          searchResults.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No results found</Text>
+        {/* List */}
+        <View style={styles.listWrapper}>
+          {isLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color={STEP_COLORS.accent} />
             </View>
-          ) : (
-            <>
-              <Text style={styles.sectionLabel}>SEARCH RESULTS</Text>
+          ) : isSearching ? (
+            searchResults.length === 0 ? (
+              renderEmptyState()
+            ) : (
               <FlatList
                 data={searchResults}
                 keyExtractor={(item) => item.userId}
@@ -294,41 +361,50 @@ export function CollaboratorPicker({ visible, onClose, onAdd, existingIds }: Col
                 style={styles.list}
                 contentContainerStyle={styles.listContent}
                 keyboardShouldPersistTaps="handled"
+                ListHeaderComponent={<Text style={styles.sectionLabelInline}>SEARCH RESULTS</Text>}
               />
-            </>
-          )
-        ) : (
-          <FlatList
-            data={(() => {
-              const orgIds = new Set(hasOrgMembers ? orgMembers.map((m) => m.userId) : []);
-              const dedupedDisplayList = displayList.filter((u) => !orgIds.has(u.userId));
-              return [
-                ...(hasOrgMembers ? orgMembers : []),
-                ...(dedupedDisplayList.length > 0
-                  ? [{ userId: '__section__', displayName: hasFollows ? 'PEOPLE YOU FOLLOW' : 'PEOPLE ON BETTERAT' } as UserRow, ...dedupedDisplayList]
-                  : []),
-              ];
-            })()}
-            keyExtractor={(item) => item.userId}
-            renderItem={({ item }) => {
-              if (item.userId === '__section__') {
-                return <Text style={styles.sectionLabelInline}>{item.displayName}</Text>;
-              }
-              return renderUserRow({ item });
-            }}
-            style={styles.list}
-            contentContainerStyle={styles.listContent}
-            keyboardShouldPersistTaps="handled"
-            ListEmptyComponent={
-              <View style={styles.emptyContainer}>
-                <Text style={styles.emptyText}>No people found — try searching above</Text>
-              </View>
-            }
-          />
-        )}
+            )
+          ) : !hasAnyPeople ? (
+            renderEmptyState()
+          ) : (
+            <FlatList
+              data={(() => {
+                const orgIds = new Set(hasOrgMembers ? orgMembers.map((m) => m.userId) : []);
+                const dedupedDisplayList = displayList.filter((u) => !orgIds.has(u.userId));
+                return [
+                  ...(hasOrgMembers
+                    ? [
+                        { userId: '__section_org__', displayName: 'YOUR ORGANIZATION' } as UserRow,
+                        ...orgMembers,
+                      ]
+                    : []),
+                  ...(dedupedDisplayList.length > 0
+                    ? [
+                        {
+                          userId: '__section__',
+                          displayName: hasFollows ? 'PEOPLE YOU FOLLOW' : 'PEOPLE ON BETTERAT',
+                        } as UserRow,
+                        ...dedupedDisplayList,
+                      ]
+                    : []),
+                ];
+              })()}
+              keyExtractor={(item) => item.userId}
+              renderItem={({ item }) => {
+                if (item.userId === '__section__' || item.userId === '__section_org__') {
+                  return <Text style={styles.sectionLabelInline}>{item.displayName}</Text>;
+                }
+                return renderUserRow({ item });
+              }}
+              style={styles.list}
+              contentContainerStyle={styles.listContent}
+              keyboardShouldPersistTaps="handled"
+            />
+          )}
+        </View>
 
-        {/* External person entry */}
-        <View style={styles.externalSection}>
+        {/* External person entry — always visible as a clear secondary action */}
+        <View style={[styles.externalSection, { paddingBottom: Math.max(insets.bottom, IOS_SPACING.md) }]}>
           {showExternalInput ? (
             <View style={styles.externalInputRow}>
               <TextInput
@@ -348,14 +424,27 @@ export function CollaboratorPicker({ visible, onClose, onAdd, existingIds }: Col
               >
                 <Text style={styles.externalAddText}>Add</Text>
               </Pressable>
-              <Pressable onPress={() => { setShowExternalInput(false); setExternalName(''); }} hitSlop={6}>
+              <Pressable
+                onPress={() => {
+                  setShowExternalInput(false);
+                  setExternalName('');
+                }}
+                hitSlop={6}
+                style={styles.externalCancelButton}
+              >
                 <Ionicons name="close" size={20} color={IOS_COLORS.secondaryLabel} />
               </Pressable>
             </View>
           ) : (
             <Pressable style={styles.addExternalButton} onPress={() => setShowExternalInput(true)}>
-              <Ionicons name="person-add-outline" size={18} color={STEP_COLORS.accent} />
-              <Text style={styles.addExternalText}>Add someone not on BetterAt</Text>
+              <View style={styles.addExternalIconCircle}>
+                <Ionicons name="person-add-outline" size={18} color={STEP_COLORS.accent} />
+              </View>
+              <View style={styles.addExternalTextColumn}>
+                <Text style={styles.addExternalTitle}>Add someone not on BetterAt</Text>
+                <Text style={styles.addExternalSubtitle}>They'll appear as a named person without an account.</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={IOS_COLORS.tertiaryLabel} />
             </Pressable>
           )}
         </View>
@@ -371,25 +460,47 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    paddingHorizontal: IOS_SPACING.md,
-    paddingTop: IOS_SPACING.md,
-    paddingBottom: IOS_SPACING.sm,
+    paddingHorizontal: IOS_SPACING.lg,
+    paddingTop: IOS_SPACING.lg,
+    paddingBottom: IOS_SPACING.md,
+    gap: IOS_SPACING.md,
+  },
+  headerTextColumn: {
+    flex: 1,
+    gap: 4,
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: '700',
     color: IOS_COLORS.label,
+    letterSpacing: -0.3,
+  },
+  headerSubtitle: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: IOS_COLORS.secondaryLabel,
+  },
+  closeButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: IOS_COLORS.systemGray6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchWrapper: {
+    paddingHorizontal: IOS_SPACING.lg,
+    paddingBottom: IOS_SPACING.sm,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: IOS_COLORS.systemGray6,
-    borderRadius: 10,
-    marginHorizontal: IOS_SPACING.md,
-    paddingHorizontal: IOS_SPACING.sm,
-    paddingVertical: 8,
+    borderRadius: 12,
+    paddingHorizontal: IOS_SPACING.sm + 2,
+    paddingVertical: 10,
     gap: 8,
   },
   searchInput: {
@@ -401,26 +512,56 @@ const styles = StyleSheet.create({
       web: { outlineStyle: 'none' } as any,
     }),
   },
-  sectionLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: IOS_COLORS.tertiaryLabel,
-    letterSpacing: 0.5,
-    paddingHorizontal: IOS_SPACING.md,
-    paddingTop: IOS_SPACING.md,
-    paddingBottom: IOS_SPACING.xs,
+  listWrapper: {
+    flex: 1,
   },
   loadingContainer: {
-    paddingVertical: IOS_SPACING.xl,
+    flex: 1,
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: IOS_SPACING.xxl,
   },
   emptyContainer: {
-    paddingVertical: IOS_SPACING.xl,
+    flex: 1,
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: IOS_SPACING.xl,
+    paddingVertical: IOS_SPACING.xxl,
+    gap: IOS_SPACING.sm,
   },
-  emptyText: {
+  emptyIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: IOS_COLORS.systemGray6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: IOS_SPACING.xs,
+  },
+  emptyTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+    textAlign: 'center',
+  },
+  emptyBody: {
     fontSize: 14,
-    color: IOS_COLORS.tertiaryLabel,
+    lineHeight: 20,
+    color: IOS_COLORS.secondaryLabel,
+    textAlign: 'center',
+    maxWidth: 280,
+  },
+  retryButton: {
+    marginTop: IOS_SPACING.md,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: IOS_COLORS.systemBlue,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
   sectionLabelInline: {
     fontSize: 12,
@@ -434,12 +575,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   listContent: {
-    paddingHorizontal: IOS_SPACING.md,
+    paddingHorizontal: IOS_SPACING.lg,
+    paddingBottom: IOS_SPACING.md,
   },
   userRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
+    paddingVertical: 12,
     gap: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: IOS_COLORS.systemGray5,
@@ -448,14 +590,14 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarEmoji: {
-    fontSize: 18,
+    fontSize: 20,
   },
   userName: {
     flex: 1,
@@ -464,44 +606,63 @@ const styles = StyleSheet.create({
     color: IOS_COLORS.label,
   },
   externalSection: {
-    paddingHorizontal: IOS_SPACING.md,
-    paddingVertical: IOS_SPACING.md,
+    paddingHorizontal: IOS_SPACING.lg,
+    paddingTop: IOS_SPACING.md,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: IOS_COLORS.systemGray4,
+    backgroundColor: IOS_COLORS.systemBackground,
   },
   addExternalButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingVertical: IOS_SPACING.xs,
+    gap: 12,
+    paddingVertical: 10,
   },
-  addExternalText: {
+  addExternalIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: STEP_COLORS.accent + '15',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addExternalTextColumn: {
+    flex: 1,
+    gap: 2,
+  },
+  addExternalTitle: {
     fontSize: 15,
-    fontWeight: '500',
-    color: STEP_COLORS.accent,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+  },
+  addExternalSubtitle: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: IOS_COLORS.secondaryLabel,
   },
   externalInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    paddingVertical: IOS_SPACING.xs,
   },
   externalInput: {
     flex: 1,
     fontSize: 15,
     color: IOS_COLORS.label,
     backgroundColor: IOS_COLORS.systemGray6,
-    borderRadius: 8,
-    paddingHorizontal: IOS_SPACING.sm,
-    paddingVertical: 8,
+    borderRadius: 10,
+    paddingHorizontal: IOS_SPACING.sm + 2,
+    paddingVertical: 10,
     ...Platform.select({
       web: { outlineStyle: 'none' } as any,
     }),
   },
   externalAddButton: {
     backgroundColor: STEP_COLORS.accent,
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
   },
   externalAddButtonDisabled: {
     backgroundColor: IOS_COLORS.systemGray4,
@@ -510,5 +671,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  externalCancelButton: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

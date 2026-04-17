@@ -32,6 +32,8 @@ import { resolveEntities, buildEntityInput } from '@/services/ai/EntityResolutio
 import { enrichDateForSailing } from '@/services/ai/DateEnrichmentService';
 import { sailorBoatService } from '@/services/SailorBoatService';
 import { equipmentService } from '@/services/EquipmentService';
+import { StepPinInterests } from './StepPinInterests';
+import { StepProvenanceBanner } from './StepProvenanceBanner';
 
 type TabValue = 'plan' | 'act' | 'review';
 
@@ -49,11 +51,15 @@ interface StepDetailContentProps {
 }
 
 export function StepDetailContent({ stepId, readOnly: readOnlyProp }: StepDetailContentProps) {
-  const { vocab } = useVocabulary();
   const { user } = useAuth();
   const { currentInterest } = useInterest();
 
   const { data: step, isLoading, error } = useStepDetail(stepId);
+
+  // Use the step's own interest for vocabulary so labels match the step's
+  // domain (e.g. sail-racing labels for a sailing step, even when the viewer's
+  // active interest is nursing).
+  const { vocab } = useVocabulary(step?.interest_id);
   const queryClient = useQueryClient();
   const updateMetadata = useUpdateStepMetadata(stepId);
   const updateStep = useUpdateStep();
@@ -97,6 +103,7 @@ export function StepDetailContent({ stepId, readOnly: readOnlyProp }: StepDetail
         onSuccess: () => {
           // Clear local editing state — server is now the source of truth
           setEditingTitle(null);
+          setLastSavedWithFlash(new Date());
         },
       },
     );
@@ -458,8 +465,38 @@ export function StepDetailContent({ stepId, readOnly: readOnlyProp }: StepDetail
     { value: 'review' as const, label: categoryLabels.tabs.review !== 'Review' ? categoryLabels.tabs.review : vocab('Review Phase'), completed: isReviewComplete },
   ], [vocab, isPlanComplete, isActComplete, isReviewComplete, categoryLabels]);
 
-  // Auto-save status tracking
+  // Auto-save status tracking — flash "Saved" for 3 seconds then fade
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const saveFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const setLastSavedWithFlash = useCallback((date: Date) => {
+    setLastSaved(date);
+    if (saveFlashTimerRef.current) clearTimeout(saveFlashTimerRef.current);
+    saveFlashTimerRef.current = setTimeout(() => setLastSaved(null), 3000);
+  }, []);
+
+  // Step date (starts_at) management
+  const handleSetStepDate = useCallback((dateStr: string) => {
+    if (!step || !isOwner) return;
+    const startsAt = dateStr ? new Date(dateStr + 'T00:00:00').toISOString() : null;
+    queryClient.setQueryData(
+      ['timeline-steps', 'detail', stepId],
+      (old: any) => old ? { ...old, starts_at: startsAt } : old,
+    );
+    queryClient.invalidateQueries({ queryKey: ['timeline-steps'] });
+    updateStep.mutate({ stepId, input: { starts_at: startsAt } });
+  }, [step, stepId, isOwner, updateStep, queryClient]);
+
+  const handlePromptStepDate = useCallback(() => {
+    if (!step || !isOwner) return;
+    const existing = step.starts_at ? new Date(step.starts_at).toISOString().slice(0, 10) : '';
+    const input = window.prompt('Set date (YYYY-MM-DD):', existing);
+    if (input === null) return;
+    handleSetStepDate(input.trim());
+  }, [step, isOwner, handleSetStepDate]);
+
+  const handleClearStepDate = useCallback(() => {
+    handleSetStepDate('');
+  }, [handleSetStepDate]);
 
   // Due date management
   const isOverdue = Boolean(
@@ -522,7 +559,7 @@ export function StepDetailContent({ stepId, readOnly: readOnlyProp }: StepDetail
       // Use refs to avoid stale closures in the timeout
       updateMetadataRef.current.mutate(
         { plan: { ...serverPlanDataRef.current, ...pending } },
-        { onSuccess: () => setLastSaved(new Date()) },
+        { onSuccess: () => setLastSavedWithFlash(new Date()) },
       );
     }, 800);
   }, []);
@@ -663,16 +700,42 @@ export function StepDetailContent({ stepId, readOnly: readOnlyProp }: StepDetail
         {step.description && (
           <Text style={styles.description} numberOfLines={2}>{step.description}</Text>
         )}
-        {/* Due date chip */}
-        {(step.due_at || isOwner) && (
+        {/* Date chips row */}
+        {(step.starts_at || step.due_at || isOwner) && (
           <View style={styles.dueDateRow}>
+            {/* Step date (starts_at) */}
+            {step.starts_at ? (
+              <Pressable
+                style={styles.dueDateChip}
+                onPress={isOwner ? handlePromptStepDate : undefined}
+              >
+                <Ionicons name="calendar" size={13} color={STEP_COLORS.accent} />
+                <Text style={[styles.dueDateText, { color: STEP_COLORS.accent }]}>
+                  {new Date(step.starts_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                </Text>
+                {isOwner && (
+                  <Pressable onPress={handleClearStepDate} hitSlop={8}>
+                    <Ionicons name="close-circle" size={14} color={STEP_COLORS.tertiaryLabel} />
+                  </Pressable>
+                )}
+              </Pressable>
+            ) : isOwner ? (
+              <Pressable
+                style={styles.addDueDateButton}
+                onPress={handlePromptStepDate}
+              >
+                <Ionicons name="calendar-outline" size={13} color={STEP_COLORS.tertiaryLabel} />
+                <Text style={styles.addDueDateText}>Add date</Text>
+              </Pressable>
+            ) : null}
+            {/* Due date */}
             {step.due_at ? (
               <Pressable
                 style={[styles.dueDateChip, isOverdue && styles.dueDateChipOverdue]}
                 onPress={isOwner ? handlePromptDueDate : undefined}
               >
                 <Ionicons
-                  name={isOverdue ? 'alert-circle' : 'calendar-outline'}
+                  name={isOverdue ? 'alert-circle' : 'time-outline'}
                   size={13}
                   color={isOverdue ? '#FF3B30' : STEP_COLORS.secondaryLabel}
                 />
@@ -686,17 +749,10 @@ export function StepDetailContent({ stepId, readOnly: readOnlyProp }: StepDetail
                   </Pressable>
                 )}
               </Pressable>
-            ) : isOwner ? (
-              <Pressable
-                style={styles.addDueDateButton}
-                onPress={handlePromptDueDate}
-              >
-                <Ionicons name="calendar-outline" size={13} color={STEP_COLORS.tertiaryLabel} />
-                <Text style={styles.addDueDateText}>Add due date</Text>
-              </Pressable>
             ) : null}
           </View>
         )}
+        {isOwner && <StepPinInterests stepId={stepId} stepInterestId={step.interest_id} />}
         {isCollaborator && (() => {
           const planCollabs = serverPlanData.collaborators ?? [];
           const ownerCollab = planCollabs.find(
@@ -712,6 +768,16 @@ export function StepDetailContent({ stepId, readOnly: readOnlyProp }: StepDetail
             </View>
           );
         })()}
+
+        {/* Step provenance — shows source blueprint with author profile link */}
+        {step.source_type !== 'manual' && (
+          <StepProvenanceBanner
+            sourceBlueprintId={step.source_blueprint_id}
+            sourceType={step.source_type}
+            copiedFromUserId={step.copied_from_user_id}
+            variant="full"
+          />
+        )}
       </View>
 
       {/* Tabs */}
@@ -819,6 +885,7 @@ const styles = StyleSheet.create({
   dueDateRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
     marginTop: 6,
   },
   dueDateChip: {
