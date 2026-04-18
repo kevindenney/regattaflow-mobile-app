@@ -1300,7 +1300,7 @@ function OnWaterContentImpl({
           raceDate={race.date ?? ''}
           raceTime={race.startTime || '10:00'}
           raceType={(raceType || 'fleet') as TimerRaceType}
-          timeLimitHours={(race as any).time_limit_hours}
+          timeLimitHours={race.time_limit_hours}
           onRaceComplete={handleRaceComplete}
         />
       ) : (

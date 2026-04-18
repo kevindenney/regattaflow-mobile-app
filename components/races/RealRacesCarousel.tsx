@@ -182,13 +182,13 @@ export function RealRacesCarousel({
     // This keeps carousel scroll order in sync with grid card order so a single
     // drag updates both views the same way.
     items.sort((a, b) => {
-      const aSort = ((a.data as any).sort_order ?? 0) as number;
-      const bSort = ((b.data as any).sort_order ?? 0) as number;
+      const aSort = (a.data.sort_order ?? 0) as number;
+      const bSort = (b.data.sort_order ?? 0) as number;
       if (aSort !== bSort) return aSort - bSort;
       const aD = a.hasDate ? a.date.getTime() : Infinity;
       const bD = b.hasDate ? b.date.getTime() : Infinity;
       if (aD !== bD) return aD - bD;
-      return String((a.data as any).id ?? '').localeCompare(String((b.data as any).id ?? ''));
+      return String(a.data.id ?? '').localeCompare(String(b.data.id ?? ''));
     });
     return items;
   }, [races, practiceSessions]);

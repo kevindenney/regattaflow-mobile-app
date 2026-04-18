@@ -303,6 +303,85 @@ export interface CardRaceData {
   source_blueprint_id?: string | null;
   /** Collaborator user ids — present on shared timeline steps. */
   collaborator_user_ids?: string[];
+
+  // -------------------------------------------------------------------------
+  // Timeline-step fields (present when isTimelineStep=true)
+  // -------------------------------------------------------------------------
+  /** Timeline step status — canonical pending/in_progress/completed/skipped. */
+  stepStatus?: string;
+  /** Loose status field — varies by source (regatta, event, step). */
+  status?: string;
+  /** Due date for timeline steps. */
+  due_at?: string | null;
+  /** Title of the subscribed-blueprint this step was adopted from. */
+  blueprintTitle?: string;
+  /** Interest that owns this step. */
+  interest_id?: string;
+  /** TimelineStepVisibility — 'private' | 'followers' | 'public'. */
+  visibility?: string;
+  /** Ownership / collaboration flags attached by the races tab. */
+  isOwner?: boolean;
+  isCollaborator?: boolean;
+  isPendingInvite?: boolean;
+  collaboratorId?: string;
+  /** Ancestry for adopted steps. */
+  source_type?: string;
+  copied_from_user_id?: string | null;
+  isPinned?: boolean;
+  /** Step category key (e.g. "race_prep", "fitness"). */
+  category?: string;
+  /** Step long-form description. */
+  description?: string | null;
+  /** Step completion timestamp. */
+  completed_at?: string | null;
+  /** Legacy fleet identifier distinct from fleet_name. */
+  fleet?: string;
+
+  // -------------------------------------------------------------------------
+  // Race / event fields
+  // -------------------------------------------------------------------------
+  /** Race type / event subtype discriminators. */
+  event_type?: string;
+  eventType?: string;
+  event_id?: string;
+  eventId?: string;
+  /** Final / interim result strings surfaced on the review tile. */
+  result?: string;
+  finalResult?: string;
+  /** Course geometry and marks. */
+  course_name?: string;
+  courseName?: string;
+  course_type?: string;
+  course?: { type?: string;[k: string]: unknown };
+  course_distance_nm?: number;
+  total_distance_nm?: number;
+  route_waypoints?: unknown[];
+  number_of_legs?: number;
+  marks?: unknown[];
+  /** Fleet / class / entrant info. */
+  boat_class?: string;
+  class_name?: string;
+  fleet_size?: number;
+  entry_count?: number;
+  entries?: unknown[];
+  competitors?: unknown[];
+  fleet_name?: string;
+  series_name?: string;
+  /** Parent regatta/season ids. */
+  season_id?: string;
+  regatta_id?: string;
+  /** Venue denormalized data attached by enrichment. */
+  venue_data?: any;
+  venue_info?: any;
+  venue_id?: string;
+  racing_area_name?: string;
+  /** Direct lat/lng (used by demo races and some ingest paths). */
+  latitude?: number | string;
+  longitude?: number | string;
+  /** Source document / notice-of-race URL. */
+  notice_of_race_url?: string;
+  /** Timeline ordering — integer sort_order from timeline_steps. */
+  sort_order?: number;
   /** Any additional fields from the race */
   [key: string]: unknown;
 }

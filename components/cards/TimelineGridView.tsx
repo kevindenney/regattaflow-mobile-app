@@ -109,14 +109,14 @@ function groupByMonthIndexed(
 }
 
 function isStepOverdue(race: CardRaceData): boolean {
-  if (!(race as any).isTimelineStep) return false;
-  const status = (race as any).stepStatus || (race as any).status;
+  if (!race.isTimelineStep) return false;
+  const status = race.stepStatus || race.status;
   if (status === 'completed' || status === 'in_progress') return false;
   // Steps are only overdue when the user set an explicit due date that's now
   // in the past. This matches the carousel's RaceSummaryCard rule and keeps
   // brand-new (undated) steps from immediately appearing as OVERDUE just
   // because the RPC assigns starts_at = NOW() at creation.
-  const dueAt = (race as any).due_at;
+  const dueAt = race.due_at;
   if (!dueAt) return false;
   const t = new Date(dueAt).getTime();
   if (Number.isNaN(t)) return false;
@@ -128,10 +128,10 @@ function isStepOverdue(race: CardRaceData): boolean {
 // not "DONE" (gray). Only regattas that passed *and* were explicitly completed
 // sink to the gray DONE state.
 function isRegattaReviewDue(race: CardRaceData): boolean {
-  if ((race as any).isTimelineStep) return false;
-  const status = String((race as any).status || '').toLowerCase();
+  if (race.isTimelineStep) return false;
+  const status = String(race.status || '').toLowerCase();
   if (status === 'completed' || status === 'done') return false;
-  const dateStr = (race as any).start_date || race.date;
+  const dateStr = race.start_date || race.date;
   if (!dateStr) return false;
   return isRacePast(dateStr, race.startTime);
 }
@@ -144,13 +144,13 @@ function getRaceStatusColor(race: CardRaceData, isNext: boolean): string {
   // Past regatta with no explicit completion → review pending (amber).
   if (isRegattaReviewDue(race)) return '#B45309';
   // Timeline steps carry an explicit status — use it instead of date logic
-  if ((race as any).isTimelineStep) {
-    const s = (race as any).status;
+  if (race.isTimelineStep) {
+    const s = race.status;
     if (s === 'completed') return IOS_COLORS.gray3;
     if (s === 'in_progress') return IOS_COLORS.green;
     return IOS_COLORS.blue; // scheduled / abandoned
   }
-  const dateStr = (race as any).start_date || race.date;
+  const dateStr = race.start_date || race.date;
   const isPast = isRacePast(dateStr, race.startTime);
   if (isPast) return IOS_COLORS.gray3;
   return IOS_COLORS.blue;
@@ -161,20 +161,20 @@ function getRaceStatusLabel(race: CardRaceData, isNext: boolean): string {
   if (isStepOverdue(race)) return 'OVERDUE';
   if (isRegattaReviewDue(race)) return 'REVIEW DUE';
   // Timeline steps carry an explicit status — use it instead of date logic
-  if ((race as any).isTimelineStep) {
-    const s = (race as any).stepStatus || (race as any).status;
+  if (race.isTimelineStep) {
+    const s = race.stepStatus || race.status;
     if (s === 'completed') return 'DONE';
     if (s === 'in_progress') return 'IN PROGRESS';
     return 'PLANNED';
   }
-  const dateStr = (race as any).start_date || race.date;
+  const dateStr = race.start_date || race.date;
   const isPast = isRacePast(dateStr, race.startTime);
   if (isPast) return 'DONE';
   return formatTimeUntilRace(dateStr, race.startTime);
 }
 
 function getRaceTypeIcon(race: CardRaceData): string {
-  const subtype = (race as any).metadata?.event_subtype;
+  const subtype = race.metadata?.event_subtype;
   if (subtype === 'blank_activity') return 'add-circle-outline';
   switch (race.race_type) {
     case 'distance': return 'compass-outline';
@@ -196,9 +196,9 @@ function getRegattaNextActionHint(
   _statusLabel: string,
 ): { text: string; icon: string; color: string; bg: string } | null {
   // Completed regatta — surface result if we have one, otherwise stay quiet
-  const status = String((race as any).status || '').toLowerCase();
+  const status = String(race.status || '').toLowerCase();
   if (status === 'completed' || status === 'done') {
-    const result = (race as any).result || (race as any).finalResult;
+    const result = race.result || race.finalResult;
     if (result) {
       return {
         text: typeof result === 'string' ? result : `Finished: ${result}`,
@@ -232,7 +232,7 @@ function getRegattaNextActionHint(
 
   // Future race — show countdown if within 14 days (actionable horizon).
   // Further-out races stay quiet so the eye isn't overwhelmed.
-  const dateStr = (race as any).start_date || race.date;
+  const dateStr = race.start_date || race.date;
   if (dateStr) {
     const dayMs = 24 * 60 * 60 * 1000;
     const diff = new Date(dateStr).getTime() - Date.now();
@@ -312,25 +312,25 @@ const MiniCard = React.memo(function MiniCard({
 
   const statusColor = getRaceStatusColor(race, isNext);
   const statusLabel = getRaceStatusLabel(race, isNext);
-  const dateStr = (race as any).start_date || race.date;
+  const dateStr = race.start_date || race.date;
   const d = new Date(dateStr);
   const dayNum = d.getDate();
   const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
-  const isBlankActivity = (race as any).metadata?.event_subtype === 'blank_activity';
-  const isTimelineStep = !!(race as any).isTimelineStep;
+  const isBlankActivity = race.metadata?.event_subtype === 'blank_activity';
+  const isTimelineStep = !!race.isTimelineStep;
 
   // Compute phase badge + progress counts for timeline steps
   const stepPhase = useMemo(() => {
     if (!isTimelineStep) return null;
-    const status = (race as any).status;
+    const status = race.status;
     if (status === 'completed') return { label: 'Done', color: IOS_COLORS.gray3 };
     if (status === 'in_progress') return { label: 'Do', color: IOS_COLORS.green };
     return { label: 'Plan', color: IOS_COLORS.blue };
-  }, [isTimelineStep, (race as any).status]);
+  }, [isTimelineStep, race.status]);
 
   const stepInfo = useMemo(() => {
     if (!isTimelineStep) return null;
-    const metadata = (race as any).metadata;
+    const metadata = race.metadata;
     const howSubSteps: any[] = metadata?.plan?.how_sub_steps || [];
     const subStepProgress: Record<string, boolean> = metadata?.act?.sub_step_progress || {};
 
@@ -350,16 +350,16 @@ const MiniCard = React.memo(function MiniCard({
     const planPreview = whatRaw.split(/[.\n]/).filter(Boolean)[0]?.trim().slice(0, 60) || '';
 
     // Due date info
-    const dueAt: string | null = (race as any).due_at || null;
-    const isOverdue = !!dueAt && (race as any).stepStatus !== 'completed' && new Date(dueAt) < new Date();
-    const isDueSoon = !!dueAt && !isOverdue && (race as any).stepStatus !== 'completed' &&
+    const dueAt: string | null = race.due_at || null;
+    const isOverdue = !!dueAt && race.stepStatus !== 'completed' && new Date(dueAt) < new Date();
+    const isDueSoon = !!dueAt && !isOverdue && race.stepStatus !== 'completed' &&
       (new Date(dueAt).getTime() - Date.now()) < 2 * 24 * 60 * 60 * 1000; // within 2 days
 
     // Collaborators
-    const collaboratorIds: string[] = (race as any).collaborator_user_ids || [];
+    const collaboratorIds: string[] = race.collaborator_user_ids || [];
 
     // Has any real plan content been filled in?
-    const hasContent = !!planPreview || totalSubSteps > 0 || !!race.venue || !!(race as any).blueprintTitle;
+    const hasContent = !!planPreview || totalSubSteps > 0 || !!race.venue || !!race.blueprintTitle;
 
     return {
       totalSubSteps,
@@ -371,7 +371,7 @@ const MiniCard = React.memo(function MiniCard({
       isDueSoon,
       collaboratorCount: collaboratorIds.length,
     };
-  }, [isTimelineStep, (race as any).metadata, race.venue, (race as any).due_at, (race as any).collaborator_user_ids]);
+  }, [isTimelineStep, race.metadata, race.venue, race.due_at, race.collaborator_user_ids]);
 
   // Web DnD: attach native HTML drag events via ref since AnimatedPressable
   // doesn't forward unknown DOM props like draggable/onDragStart.
@@ -615,11 +615,11 @@ const MiniCard = React.memo(function MiniCard({
           )}
 
           {/* Blueprint provenance chip */}
-          {(race as any).blueprintTitle ? (
+          {race.blueprintTitle ? (
             <View style={miniStyles.blueprintChip}>
               <Ionicons name="book-outline" size={10} color={IOS_COLORS.secondaryLabel} />
               <Text style={miniStyles.blueprintChipText} numberOfLines={1}>
-                {(race as any).blueprintTitle}
+                {race.blueprintTitle}
               </Text>
             </View>
           ) : null}
@@ -1171,7 +1171,7 @@ export function TimelineGridView({
             <View key={race.id} style={[{ width: cardWidth }, openMenuRaceId === race.id && { zIndex: 50 }]}>
               {(() => {
                 const canManage = !!userId && race.created_by === userId && !race.isDemo;
-                const isStep = !!(race as any).isTimelineStep;
+                const isStep = !!race.isTimelineStep;
                 const handleEdit = canManage
                   ? (isStep ? () => handleCardPress(index, race) : onEditRace ? () => onEditRace(race.id) : undefined)
                   : undefined;
@@ -1283,7 +1283,7 @@ export function TimelineGridView({
             >
               {(() => {
                 const canManage = !!userId && race.created_by === userId && !race.isDemo;
-                const isStep = !!(race as any).isTimelineStep;
+                const isStep = !!race.isTimelineStep;
                 const handleEdit = canManage
                   ? (isStep ? () => handleCardPress(index, race) : onEditRace ? () => onEditRace(race.id) : undefined)
                   : undefined;

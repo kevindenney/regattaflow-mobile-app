@@ -217,10 +217,10 @@ function CardGridComponent({
       id: race.id,
       date: race.start_date || race.date || new Date().toISOString(),
       raceType: (race.race_type as 'fleet' | 'distance' | 'match' | 'team') || 'fleet',
-      seriesName: race.series_name || (race as any).metadata?.series_name,
+      seriesName: race.series_name || race.metadata?.series_name,
       name: race.name,
-      interestSlug: String((race as any)?.metadata?.interest_slug || ''),
-      metadata: (race as any)?.metadata,
+      interestSlug: String(race.metadata?.interest_slug || ''),
+      metadata: race.metadata,
     }));
   }, [races]);
 

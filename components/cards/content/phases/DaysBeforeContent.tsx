@@ -368,17 +368,17 @@ function DaysBeforeContentImpl({
 
   // Build venue object from race data for weather fetching (same as RaceMorningContent)
   // The race may have venueCoordinates (from useEnrichedRaces) or coordinates in metadata
-  const venueCoordinates = (race as any).venueCoordinates;
+  const venueCoordinates = race.venueCoordinates;
   const venueName = race.venue || 'Racing Area';
-  const venueId = (race as any).venue_id || race.id;
+  const venueId = race.venue_id || race.id;
 
   // Also check metadata for coordinates (start_coordinates, venue_coordinates, etc.)
-  const metadata = (race as any).metadata || {};
+  const metadata = race.metadata || {};
   const metadataCoords = metadata.start_coordinates || metadata.venue_coordinates || metadata.racing_area_coordinates;
 
   // Also check for direct latitude/longitude fields (used by demo races)
-  const directCoords = (race as any).latitude != null && (race as any).longitude != null
-    ? { lat: Number((race as any).latitude), lng: Number((race as any).longitude) }
+  const directCoords = race.latitude != null && race.longitude != null
+    ? { lat: Number(race.latitude), lng: Number(race.longitude) }
     : null;
 
   // Priority: venueCoordinates (enriched) > metadataCoords > directCoords (demo/fallback)
@@ -1517,9 +1517,9 @@ function DaysBeforeContentImpl({
       )}
 
       {/* Source document banner — prominent link when race was created from a URL */}
-      {(race as any).notice_of_race_url && (
+      {race.notice_of_race_url && (
         <Pressable
-          onPress={() => Linking.openURL((race as any).notice_of_race_url)}
+          onPress={() => Linking.openURL(race.notice_of_race_url!)}
           style={{
             flexDirection: 'row',
             alignItems: 'center',
@@ -1537,7 +1537,7 @@ function DaysBeforeContentImpl({
               Source Document
             </Text>
             <Text style={{ fontSize: 12, color: '#3b82f6', marginTop: 1 }} numberOfLines={1}>
-              {(race as any).notice_of_race_url.replace(/^https?:\/\//, '')}
+              {race.notice_of_race_url.replace(/^https?:\/\//, '')}
             </Text>
           </View>
           <ExternalLink size={16} color="#2563eb" />
@@ -1598,7 +1598,7 @@ function DaysBeforeContentImpl({
         {/* AI Conditions Brief — personalized tactical advice from Playbook */}
         {currentInterest?.id && marineOverlayData?.windSpeed != null && (
           <ConditionsBriefCard
-            interestId={(race as any).interest_id ?? currentInterest.id}
+            interestId={race.interest_id ?? currentInterest.id}
             weather={{
               wind_speed_kt: marineOverlayData.windSpeed,
               wind_direction: degreesToCardinal(marineOverlayData.windDirection),

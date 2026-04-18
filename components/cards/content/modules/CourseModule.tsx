@@ -28,9 +28,9 @@ function CourseModule({
   }
 
   // Extract course info from race data
-  const courseName = (race as any).course_name || (race as any).courseName;
-  const marks = (race as any).marks || [];
-  const totalDistance = (race as any).total_distance_nm;
+  const courseName = race.course_name || race.courseName;
+  const marks = race.marks || [];
+  const totalDistance = race.total_distance_nm;
 
   return (
     <View style={styles.container}>

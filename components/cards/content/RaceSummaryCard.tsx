@@ -99,7 +99,7 @@ import type { BrainDumpData, StepMetadata, StepPlanData, StepCollaborator, SubSt
 import { useUpdateStepMetadata } from '@/hooks/useStepDetail';
 import { useUserBlueprints } from '@/hooks/useBlueprint';
 import { useUpdateStep } from '@/hooks/useTimelineSteps';
-import type { TimelineStepVisibility } from '@/types/timeline-steps';
+import type { TimelineStepVisibility, TimelineStepSourceType } from '@/types/timeline-steps';
 import { useAuth } from '@/providers/AuthProvider';
 import { structureBrainDump } from '@/services/ai/StepPlanAIService';
 import { saveUrlsToLibrary } from '@/services/ai/BrainDumpAIService';
@@ -736,22 +736,22 @@ function RaceSummaryCardImpl({
   const isSailing = interestSlug === 'sail-racing';
   // Vocab follows the step's interest when present (e.g. viewing another user's
   // step from a different interest), otherwise the viewer's active interest.
-  const { vocab } = useVocabulary((race as any).interest_id ?? currentInterest?.id);
+  const { vocab } = useVocabulary(race.interest_id ?? currentInterest?.id);
 
   // Temporal phase state — for timeline steps, map status to the right tab
-  const isTimelineStep = Boolean((race as any).isTimelineStep);
-  const stepStatus = (race as any).stepStatus ?? (race as any).status;
+  const isTimelineStep = Boolean(race.isTimelineStep);
+  const stepStatus = race.stepStatus ?? race.status;
   const currentPhase = useMemo(() => {
     if (isTimelineStep) {
       if (stepStatus === 'completed' || stepStatus === 'done') return 'after_race' as RacePhase;
       if (stepStatus === 'in_progress') return 'on_water' as RacePhase;
       // Auto-advance overdue steps: if due date has passed, show Review tab
-      const dueAt = (race as any).due_at;
+      const dueAt = race.due_at;
       if (dueAt && new Date(dueAt) < new Date()) return 'after_race' as RacePhase;
       return 'days_before' as RacePhase; // pending, planned, or any other
     }
     return getCurrentPhaseForRace(race.date ?? '', race.startTime);
-  }, [race.date, race.startTime, isTimelineStep, stepStatus, (race as any).due_at]);
+  }, [race.date, race.startTime, isTimelineStep, stepStatus, race.due_at]);
   // Restore last-used tab for this step, falling back to status-derived default
   const [selectedPhase, setSelectedPhase] = useState<RacePhase>(() => {
     if (isTimelineStep && typeof window !== 'undefined') {
@@ -769,7 +769,7 @@ function RaceSummaryCardImpl({
   }, [selectedPhase, isTimelineStep, race.id]);
 
   // Proactive AI coaching nudge
-  const stepInterestId = (race as any).interest_id ?? currentInterest?.id;
+  const stepInterestId = race.interest_id ?? currentInterest?.id;
   const { nudge: coachNudge, dismiss: dismissNudge } = useProactiveNudge(stepInterestId, selectedPhase);
 
   // Inline title editing for timeline steps
@@ -840,7 +840,7 @@ function RaceSummaryCardImpl({
   }, [editTitle, race.name, race.id, updateStepMutation, queryClient]);
 
   // Visibility change handler for timeline steps
-  const currentVisibility = ((race as any)?.visibility as TimelineStepVisibility) ?? 'followers';
+  const currentVisibility = (race?.visibility as TimelineStepVisibility) ?? 'followers';
   const [showVisibilityPicker, setShowVisibilityPicker] = useState(false);
 
   const handleChangeVisibility = useCallback(() => {
@@ -878,7 +878,7 @@ function RaceSummaryCardImpl({
   }, [currentVisibility, race.id, updateStepMutation]);
 
   // Brain dump state for timeline steps
-  const metadata = (race as any)?.metadata as StepMetadata | undefined;
+  const metadata = race?.metadata as StepMetadata | undefined;
   const serverBrainDump = metadata?.brain_dump;
   // Local brain dump state tracks the latest data (server metadata may lag behind)
   const [localBrainDump, setLocalBrainDump] = useState<BrainDumpData | undefined>(serverBrainDump);
@@ -946,7 +946,7 @@ function RaceSummaryCardImpl({
     setAiStructuring(true);
 
     // Save extracted URLs to library in the background
-    const resolvedInterestId = (race as any).interest_id ?? currentInterest?.id;
+    const resolvedInterestId = race.interest_id ?? currentInterest?.id;
     if (dump.extracted_urls.length > 0 && user?.id && resolvedInterestId) {
       saveUrlsToLibrary(dump.extracted_urls, user.id, resolvedInterestId)
         .then((savedIds) => {
@@ -959,7 +959,7 @@ function RaceSummaryCardImpl({
       const result = await structureBrainDump({
         brainDump: dump,
         interestName: currentInterest?.name ?? 'sailing',
-        interestId: (race as any).interest_id ?? currentInterest?.id,
+        interestId: race.interest_id ?? currentInterest?.id,
         interestSlug: currentInterest?.slug,
         userId: user?.id ?? '',
       });
@@ -1162,10 +1162,10 @@ function RaceSummaryCardImpl({
   const [advancedCompetencyCount, setAdvancedCompetencyCount] = useState(0);
   const [hasValidatedCompetency, setHasValidatedCompetency] = useState(false);
   const moduleArtifactContext = useMemo(() => {
-    const source = String((race as any)?._source || (race as any)?.source || (race as any)?.source_table || '').toLowerCase();
-    const explicitType = String((race as any)?.event_type || (race as any)?.eventType || (race as any)?.metadata?.event_type || '').toLowerCase();
-    const explicitId = String((race as any)?.event_id || (race as any)?.eventId || (race as any)?.metadata?.event_id || '').trim();
-    const fallbackId = String((race as any)?.id || '').trim();
+    const source = String(race?._source || race?.source || race?.source_table || '').toLowerCase();
+    const explicitType = String(race?.event_type || race?.eventType || race?.metadata?.event_type || '').toLowerCase();
+    const explicitId = String(race?.event_id || race?.eventId || race?.metadata?.event_id || '').trim();
+    const fallbackId = String(race?.id || '').trim();
     const eventId = explicitId || fallbackId;
 
     let eventType: 'regatta' | 'race_event' | null = null;
@@ -1306,10 +1306,10 @@ function RaceSummaryCardImpl({
   }, [eventConfig.eventNoun, isSailing, isTimelineStep, race.id, race.name, race.date, race.venue, metadata?.plan?.what_will_you_do]);
 
   // Extract collaboration flags from race
-  const isOwner = (race as any).isOwner ?? true; // Default true for backward compatibility
-  const isCollaborator = (race as any).isCollaborator ?? false;
-  const isPendingInvite = (race as any).isPendingInvite ?? false;
-  const collaboratorId = (race as any).collaboratorId;
+  const isOwner = race.isOwner ?? true; // Default true for backward compatibility
+  const isCollaborator = race.isCollaborator ?? false;
+  const isPendingInvite = race.isPendingInvite ?? false;
+  const collaboratorId = race.collaboratorId;
 
   // Accept/decline invite handlers
   const [isAccepting, setIsAccepting] = useState(false);
@@ -1449,9 +1449,9 @@ function RaceSummaryCardImpl({
   // Detect race type from name or explicit setting
   const detectedRaceType = useMemo(() => {
     const explicit = race.race_type as 'fleet' | 'distance' | 'match' | 'team' | undefined;
-    const distance = (race as any).total_distance_nm;
+    const distance = race.total_distance_nm;
     return detectRaceType(race.name, explicit, distance) as 'fleet' | 'distance' | 'match' | 'team';
-  }, [race.name, race.race_type, (race as any).total_distance_nm]);
+  }, [race.name, race.race_type, race.total_distance_nm]);
 
   const isDistanceRace = detectedRaceType === 'distance';
 
@@ -1482,12 +1482,12 @@ function RaceSummaryCardImpl({
     () => calculateCountdown(race.date ?? '', effectiveCountdownStartTime),
     [race.date, effectiveCountdownStartTime]
   );
-  const rawTimelineStatus = String((race as any)?.status || (race as any)?.metadata?.status || '').toLowerCase();
+  const rawTimelineStatus = String(race?.status || race?.metadata?.status || '').toLowerCase();
   const isExplicitlyCompleted = rawTimelineStatus === 'completed' || rawTimelineStatus === 'done';
-  const isTimelineStepOverdue = isTimelineStep && !isExplicitlyCompleted && Boolean((race as any).due_at) && new Date((race as any).due_at) < new Date();
+  const isTimelineStepOverdue = isTimelineStep && !isExplicitlyCompleted && !!race.due_at && new Date(race.due_at) < new Date();
   const isOverdue = !isExplicitlyCompleted && ((countdown.isPast && !isTimelineStep) || isTimelineStepOverdue);
   const isTimelineDone = isExplicitlyCompleted;
-  const eventSubtype = String((race as any)?.metadata?.event_subtype || '').toLowerCase();
+  const eventSubtype = String(race?.metadata?.event_subtype || '').toLowerCase();
   const isBlankActivitySubtype = eventSubtype === 'blank_activity';
   const isGroupLearningCycleSubtype = eventSubtype === 'group_learning_cycle';
   const normalizedStepDateTime = useMemo(
@@ -1529,10 +1529,10 @@ function RaceSummaryCardImpl({
   );
 
   // Extract distance race fields
-  const totalDistanceNm = (race as any).total_distance_nm;
-  const timeLimitHours = race.time_limit_hours || (race as any).time_limit_hours;
-  const routeWaypoints = (race as any).route_waypoints || [];
-  const numberOfLegs = (race as any).number_of_legs || routeWaypoints.length || 0;
+  const totalDistanceNm = race.total_distance_nm;
+  const timeLimitHours = race.time_limit_hours || race.time_limit_hours;
+  const routeWaypoints = race.route_waypoints || [];
+  const numberOfLegs = race.number_of_legs || routeWaypoints.length || 0;
 
   // Extract conditions data
   const windData = race.wind;
@@ -1544,8 +1544,8 @@ function RaceSummaryCardImpl({
 
   // Fetch weather forecast for sparklines
   // Check multiple possible venue data sources (full venue object or raw coordinates)
-  const venueObj = (race as any).venue_data || (race as any).venue_info;
-  const venueCoords = (race as any).venueCoordinates; // From useEnrichedRaces
+  const venueObj = race.venue_data || race.venue_info;
+  const venueCoords = race.venueCoordinates; // From useEnrichedRaces
   // Construct synthetic venue if we have coordinates but no full venue object
   // Use global region to trigger the global fallback weather model (GFS Global)
   // which works for any location without requiring specific country matching
@@ -1559,10 +1559,10 @@ function RaceSummaryCardImpl({
   const { data: forecastData } = useRaceWeatherForecast(venue, race.date, isActive && !!venue);
 
   // Extract additional data for Tufte density
-  const fleetSize = (race as any).fleet_size || (race as any).entry_count || (race as any).competitors?.length;
-  const courseType = (race as any).course_type || (race as any).course?.type;
-  const courseDistance = (race as any).course_distance_nm || (race as any).total_distance_nm;
-  const boatClassName = race.boatClass || (race as any).boat_class || (race as any).class_name;
+  const fleetSize = race.fleet_size || race.entry_count || race.competitors?.length;
+  const courseType = race.course_type || race.course?.type;
+  const courseDistance = race.course_distance_nm || race.total_distance_nm;
+  const boatClassName = race.boatClass || race.boat_class || race.class_name;
 
   // Get rig tuning recommendations (only for upcoming races)
   // Only fetch rig tuning when we have wind data to base recommendations on
@@ -1576,7 +1576,7 @@ function RaceSummaryCardImpl({
   });
 
   // Get race series/day position
-  const seasonId = (race as any).season_id;
+  const seasonId = race.season_id;
   const { data: seriesPosition } = useRaceSeriesPosition({
     raceId: race.id,
     raceDate: race.date ?? '',
@@ -1585,8 +1585,8 @@ function RaceSummaryCardImpl({
   });
 
   // Get start order info (only for upcoming races)
-  const regattaId = (race as any).regatta_id;
-  const fleetName = (race as any).fleet_name || (race as any).fleet;
+  const regattaId = race.regatta_id;
+  const fleetName = race.fleet_name || race.fleet;
   const { data: startOrderData } = useRaceStartOrder({
     raceId: race.id,
     fleetName,
@@ -1640,7 +1640,7 @@ function RaceSummaryCardImpl({
   const isNursingInterest = normalizedInterestSlug === 'nursing';
   const templateSuggestedCompetencyTitles = useMemo(() => {
     if (!isNursingInterest) return [];
-    const metadata = ((race as any)?.metadata || {}) as Record<string, unknown>;
+    const metadata = (race?.metadata || {}) as Record<string, unknown>;
     const suggestedIds = parseStringIdList(metadata.org_template_suggested_competency_ids);
     return suggestedIds.map((id) => NURSING_CAPABILITY_TITLE_BY_ID.get(id) || id);
   }, [isNursingInterest, race]);
@@ -1683,7 +1683,7 @@ function RaceSummaryCardImpl({
       // Mark Done / Mark Not Done handled by the status toggle in the header
       // Due date
       if (onSetDueDate && isTimelineStep) {
-        const currentDueAt = (race as any).due_at;
+        const currentDueAt = race.due_at;
         if (currentDueAt) {
           const dueLabel = new Date(currentDueAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
           items.push({
@@ -1716,7 +1716,7 @@ function RaceSummaryCardImpl({
       }
     }
     // For demo races, show dismiss option instead of edit/delete
-    if ((race as any).isDemo && onDismiss) {
+    if (race.isDemo && onDismiss) {
       items.push({ label: 'Dismiss sample', icon: 'close-outline', onPress: onDismiss });
     }
     return items;
@@ -1929,12 +1929,12 @@ function RaceSummaryCardImpl({
       wind: windData,
       tide: tideData,
       isDemo: race.isDemo, // Preserve isDemo flag for demo race handling
-      metadata: (race as any).metadata, // Preserve metadata for coordinates/venue info
-      venueCoordinates: (race as any).venueCoordinates, // Preserve coordinates for weather fetching
+      metadata: race.metadata, // Preserve metadata for coordinates/venue info
+      venueCoordinates: race.venueCoordinates, // Preserve coordinates for weather fetching
       created_by: race.created_by, // Preserve for edit/delete permissions
       time_limit_hours: timeLimitHours, // Distance race duration for Forecast Check wizard
-      boat_id: (race as any).boat_id, // Preserve for sail selection/equipment
-      class_id: (race as any).class_id, // Preserve for tuning recommendations
+      boat_id: race.boat_id, // Preserve for sail selection/equipment
+      class_id: race.class_id, // Preserve for tuning recommendations
       // Distance racing fields for Weather Routing wizard
       route_waypoints: routeWaypoints, // Already extracted above
       total_distance_nm: totalDistanceNm,
@@ -1949,7 +1949,7 @@ function RaceSummaryCardImpl({
     const nudgeBanner = coachNudge ? <CoachNudgeBanner insight={coachNudge} onDismiss={dismissNudge} /> : null;
 
     // Demo timeline steps: show phase-specific read-only content
-    if ((race as any).isDemo && isTimelineStep) {
+    if (race.isDemo && isTimelineStep) {
       const plan = metadata?.plan as any;
       const demoMeta = metadata as any;
 
@@ -2096,7 +2096,7 @@ function RaceSummaryCardImpl({
             {nudgeBanner}
             <StepPlanQuestions
               stepId={race.id}
-              interestId={(race as any).interest_id ?? currentInterest?.id}
+              interestId={race.interest_id ?? currentInterest?.id}
               brainDumpData={brainDumpData}
               onBrainDumpChange={handleDraftChange}
               onStructureWithAI={handleStructureWithAI}
@@ -2123,7 +2123,7 @@ function RaceSummaryCardImpl({
               </View>
             )}
             <StepFocusConcepts stepId={race.id} />
-            <StepDrawContent stepId={race.id} interestId={(race as any).interest_id ?? currentInterest?.id} interestName={currentInterest?.name} interestSlug={currentInterest?.slug} />
+            <StepDrawContent stepId={race.id} interestId={race.interest_id ?? currentInterest?.id} interestName={currentInterest?.name} interestSlug={currentInterest?.slug} />
           </>
         );
       }
@@ -2140,7 +2140,7 @@ function RaceSummaryCardImpl({
 
     // Non-sailing interests use config-driven rendering;
     // blank_activity events also use config-driven rendering even for sailing
-    const isBlankActivity = (race as any)?.metadata?.event_subtype === 'blank_activity';
+    const isBlankActivity = race?.metadata?.event_subtype === 'blank_activity';
     if (!isSailing || isBlankActivity) {
       // Non-timeline or inactive cards use config-driven rendering
       return (
@@ -2191,7 +2191,7 @@ function RaceSummaryCardImpl({
       name: race.name,
       wind: windData,
       tide: tideData,
-      courseName: (race as any).course_name,
+      courseName: race.course_name,
       courseType: courseType,
       vhfChannel: vhfChannel,
       fleetName: fleetName,
@@ -2266,8 +2266,8 @@ function RaceSummaryCardImpl({
     const parts: string[] = [];
 
     // Get venue name from various possible sources, avoiding raw coordinates
-    const venueInfo = (race as any).venue_info || (race as any).venue_data;
-    const racingAreaName = (race as any).racing_area_name;
+    const venueInfo = race.venue_info || race.venue_data;
+    const racingAreaName = race.racing_area_name;
     const rawVenue = race.venue;
 
     // Check if rawVenue looks like coordinates (e.g., "22.3361, 114.2911")
@@ -2287,12 +2287,12 @@ function RaceSummaryCardImpl({
       : formatTime(race.startTime);
     parts.push(`${dateStr} ${timeStr}`);
     return parts.join(' · ');
-  }, [race.venue, race.date, race.startTime, (race as any).venue_info, (race as any).racing_area_name]);
+  }, [race.venue, race.date, race.startTime, race.venue_info, race.racing_area_name]);
 
   const nonSailingTypeLabel = useMemo(() => {
     if (isBlankActivitySubtype) return 'Step';
     // Check event_subtype in metadata, then category on the step record
-    const subtypeId = (race as any)?.metadata?.event_subtype || (race as any)?.category;
+    const subtypeId = race?.metadata?.event_subtype || race?.category;
     const subtypeMatch = subtypeId
       ? eventConfig.eventSubtypes.find((s) => s.id === subtypeId)
       : undefined;
@@ -2315,8 +2315,8 @@ function RaceSummaryCardImpl({
       userId &&
       race.created_by &&
       race.created_by !== userId &&
-      Array.isArray((race as any).collaborator_user_ids) &&
-      ((race as any).collaborator_user_ids as string[]).includes(userId),
+      Array.isArray(race.collaborator_user_ids) &&
+      (race.collaborator_user_ids as string[]).includes(userId),
   );
 
   return (
@@ -2444,17 +2444,17 @@ function RaceSummaryCardImpl({
 
             {/* Provenance chip (Copied / From {blueprint}) — moved inline from
                 its own row so all meta chips share a single line. */}
-            {isTimelineStep && (race as any).source_type && (race as any).source_type !== 'manual' && (
+            {isTimelineStep && race.source_type && race.source_type !== 'manual' && (
               <StepProvenanceBanner
-                sourceBlueprintId={(race as any).source_blueprint_id}
-                sourceType={(race as any).source_type}
-                copiedFromUserId={(race as any).copied_from_user_id}
+                sourceBlueprintId={race.source_blueprint_id}
+                sourceType={race.source_type as TimelineStepSourceType}
+                copiedFromUserId={race.copied_from_user_id}
                 variant="compact"
               />
             )}
 
             {/* Pinned from another interest indicator */}
-            {(race as any).isPinned && (
+            {race.isPinned && (
               <View style={styles.pinnedBadge}>
                 <Ionicons name="pin" size={11} color={IOS_COLORS.secondaryLabel} />
                 <Text style={styles.pinnedBadgeText}>PINNED</Text>
@@ -2509,7 +2509,7 @@ function RaceSummaryCardImpl({
         </View>
         </View>
 
-        {(race as any).isDemo && isGuest ? (
+        {race.isDemo && isGuest ? (
           <View style={styles.sampleGuestBanner}>
             <View style={styles.sampleGuestIcon}>
               <Ionicons name="sparkles-outline" size={15} color="#2563EB" />
@@ -2532,7 +2532,7 @@ function RaceSummaryCardImpl({
               <Text style={styles.sampleGuestCtaText}>Sign up free</Text>
             </Pressable>
           </View>
-        ) : (race as any).isDemo ? (
+        ) : race.isDemo ? (
           <View style={styles.sampleBadge}>
             <Text style={styles.sampleBadgeText}>SAMPLE DATA</Text>
           </View>
@@ -2583,8 +2583,8 @@ function RaceSummaryCardImpl({
         )}
 
         {/* Due date chip on card */}
-        {isTimelineStep && ((race as any).due_at || onSetDueDate) && (() => {
-          const dueAt = (race as any).due_at as string | null;
+        {isTimelineStep && (race.due_at || onSetDueDate) && (() => {
+          const dueAt = race.due_at as string | null;
           const isDueOverdue = Boolean(dueAt && stepStatus !== 'completed' && new Date(dueAt) < new Date());
           if (dueAt) {
             const dueDate = new Date(dueAt);
@@ -2894,13 +2894,13 @@ function RaceSummaryCardImpl({
       />
 
       {/* Module Detail Bottom Sheet for non-sailing interests + sailing blank_activity */}
-      {(!isSailing || (race as any)?.metadata?.event_subtype === 'blank_activity') && (
+      {(!isSailing || race?.metadata?.event_subtype === 'blank_activity') && (
         <ModuleDetailBottomSheet
           moduleId={activeModuleId}
           isOpen={activeModuleId !== null}
           onClose={handleCloseModuleSheet}
           config={eventConfig}
-          stepMetadata={(race as any)?.metadata || null}
+          stepMetadata={race?.metadata || null}
           artifactContext={moduleArtifactContext}
           onContentChange={handleModuleContentChange}
         />
@@ -2923,7 +2923,7 @@ function RaceSummaryCardImpl({
       {/* Crew Hub - Unified crew management */}
       <CrewHub
         sailorId={userId || ''}
-        classId={(race as any).class_id || ''}
+        classId={race.class_id || ''}
         className={boatClassName}
         regattaId={race.id}
         raceName={race.name}
@@ -2997,7 +2997,7 @@ function RaceSummaryCardImpl({
       {isTimelineStep && onSetDueDate && (
         <DueDatePickerModal
           visible={showDueDatePicker}
-          currentDate={(race as any).due_at || null}
+          currentDate={race.due_at || null}
           onSelect={(iso) => {
             onSetDueDate(race.id, iso);
             setShowDueDatePicker(false);

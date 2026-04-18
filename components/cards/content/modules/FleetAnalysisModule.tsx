@@ -28,8 +28,8 @@ function FleetAnalysisModule({
   }
 
   // Extract fleet info from race data
-  const boatClass = race.boatClass || (race as any).boat_class;
-  const fleetSize = (race as any).fleet_size || (race as any).entries?.length;
+  const boatClass = race.boatClass || race.boat_class;
+  const fleetSize = race.fleet_size || race.entries?.length;
 
   return (
     <View style={styles.container}>
