@@ -1,5 +1,5 @@
 {
-  "name": "regattaflow-app",
+  "name": "betterat-app",
   "main": "index.js",
   "version": "1.0.0",
   "scripts": {
@@ -18,7 +18,7 @@
     "validate:integration:strict:smoke": "node scripts/run-integration-validation.mjs --strict-api-smoke",
     "validate:integration:report:schema": "node scripts/validate-integration-report-schema.mjs --report docs/integration-validation-latest.md",
     "validate:integration:strict": "npm run validate:integration:strict:smoke && npm run validate:integration:report:schema && npm run gate:integration-validation && npm run report:deployment-readiness",
-    "validate:integration:vercel-strict": "INTEGRATION_BASE_URL=https://regattaflow-app.vercel.app npm run validate:integration:strict",
+    "validate:integration:vercel-strict": "INTEGRATION_BASE_URL=https://betterat-app.vercel.app npm run validate:integration:strict",
     "ops:check:auth-probe-secrets": "node scripts/check-auth-probe-gh-secrets.mjs",
     "ops:check:auth-probe-secrets:strict": "node scripts/check-auth-probe-gh-secrets.mjs --strict",
     "gate:integration-validation": "node scripts/check-integration-validation-gate.mjs --report docs/integration-validation-latest.md",

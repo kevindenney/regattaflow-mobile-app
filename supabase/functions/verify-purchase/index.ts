@@ -16,7 +16,7 @@ const APPLE_VERIFY_URL = Deno.env.get('APPLE_VERIFY_PRODUCTION') === 'true'
 const APPLE_SHARED_SECRET = Deno.env.get('APPLE_SHARED_SECRET') || '';
 
 // Google Play verification
-const GOOGLE_PACKAGE_NAME = 'com.regattaflow.app';
+const GOOGLE_PACKAGE_NAME = 'com.betterat.app';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -366,7 +366,7 @@ async function getGoogleAccessToken(credentials: any): Promise<string> {
 /**
  * Create JWT for Google OAuth (simplified - use proper library in production)
  */
-function createJWT(header: any, payload: any, privateKey: string): string {
+function createJWT(header: any, payload: any, _privateKey: string): string {
   // In production, use a proper JWT library like jose
   // This is a placeholder that would need proper implementation
   const base64Header = btoa(JSON.stringify(header));

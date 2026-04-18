@@ -7,16 +7,16 @@
 module.exports = {
   expo: {
     name: 'BetterAt',
-    slug: 'regattaflow-app',
+    slug: 'betterat-app',
     owner: 'denneyke',
     version: '1.0.0',
     orientation: 'portrait',
     icon: './assets/images/icon.png',
-    scheme: 'regattaflow',
+    scheme: 'betterat',
     userInterfaceStyle: 'automatic',
     newArchEnabled: true,
     deep: {
-      scheme: 'regattaflow',
+      scheme: 'betterat',
       hosts: ['auth', 'regattaflow.io'],
     },
     splash: {
@@ -26,7 +26,7 @@ module.exports = {
     },
     ios: {
       supportsTablet: true,
-      bundleIdentifier: 'com.regattaflow.app',
+      bundleIdentifier: 'com.betterat.app',
       buildNumber: '2',
       usesAppleSignIn: true,
       // googleMapsApiKey removed from config — handled by withGoogleMaps plugin
@@ -48,7 +48,7 @@ module.exports = {
       },
     },
     android: {
-      package: 'com.regattaflow.app',
+      package: 'com.betterat.app',
       versionCode: 5,
       adaptiveIcon: {
         backgroundColor: '#0a1832',

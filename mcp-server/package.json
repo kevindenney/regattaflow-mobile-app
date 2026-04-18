@@ -1,7 +1,7 @@
 {
-  "name": "regattaflow-mcp-server",
+  "name": "betterat-mcp-server",
   "version": "1.0.0",
-  "description": "MCP server for RegattaFlow sailing data and tools",
+  "description": "MCP server for BetterAt data and tools",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
@@ -12,12 +12,11 @@
   },
   "keywords": [
     "mcp",
-    "sailing",
-    "regatta",
+    "betterat",
     "claude",
     "ai"
   ],
-  "author": "RegattaFlow",
+  "author": "BetterAt",
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4",

@@ -3,11 +3,11 @@
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.regattaflow.dbbackup</string>
+  <string>com.betterat.dbbackup</string>
 
   <key>ProgramArguments</key>
   <array>
-    <string>/Users/kdenney/Developer/RegattaFlow/regattaflow-app/scripts/backup-supabase-dbs.sh</string>
+    <string>/Users/kdenney/Developer/BetterAt/betterat-app/scripts/backup-supabase-dbs.sh</string>
   </array>
 
   <!-- PATH must include /opt/homebrew/bin so pg_dump + openssl are found -->
