@@ -108,11 +108,10 @@ if (process.env.NODE_ENV === 'production') {
   };
 }
 
-// Only apply Sentry serializer for native production builds.
-// withSentryConfig crashes web exports — its resolver calls .match() on undefined
-// module names during web bundling (Sentry RN SDK bug).
-// Set SKIP_SENTRY_BUNDLE=1 to also skip Sentry on native (e.g., for local perf tests).
-const isWebExport = process.argv.some(a => a === '--platform' && process.argv[process.argv.indexOf(a) + 1] === 'web') ||
-  process.argv.includes('web');
-const skipSentry = process.env.SKIP_SENTRY_BUNDLE === '1' || isWebExport;
-module.exports = (process.env.NODE_ENV === 'production' && !skipSentry) ? withSentryConfig(config) : config;
+// withSentryConfig wraps the Metro serializer for source-map debug IDs.
+// It crashes with "Cannot read properties of undefined (reading 'match')"
+// in determineDebugIdFromBundleSource (Sentry RN SDK bug) on both web and
+// native export builds. Disable until @sentry/react-native ships a fix.
+// Set SENTRY_BUNDLE=1 to explicitly opt back in for testing.
+const forceSentry = process.env.SENTRY_BUNDLE === '1';
+module.exports = forceSentry ? withSentryConfig(config) : config;
