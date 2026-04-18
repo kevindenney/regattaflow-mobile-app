@@ -15,7 +15,6 @@ import { FEATURE_FLAGS } from '@/lib/featureFlags';
 import { type TabConfig, getTabsForUserType } from '@/lib/navigation-config';
 import { useVocabulary } from '@/hooks/useVocabulary';
 import { triggerHaptic } from '@/lib/haptics';
-import { createLogger } from '@/lib/utils/logger';
 import { saveLastTab } from '@/lib/utils/lastTab';
 import { useAuth } from '@/providers/AuthProvider';
 import { CoachWorkspaceProvider } from '@/providers/CoachWorkspaceProvider';
@@ -37,7 +36,6 @@ const WebSidebarNav = Platform.OS === 'web'
 // Web sidebar should be desktop-only; phones/tablets use tab UX.
 const WEB_SIDEBAR_MIN_WIDTH = 1024;
 
-const logger = createLogger('_layout');
 const TAB_SWEEP_REQUIRED_TABS = ['discover', 'learn', 'reflect'] as const;
 const isTabSweepRequiredTab = (tabName: string) =>
   TAB_SWEEP_REQUIRED_TABS.some((requiredTab) => requiredTab === tabName);
@@ -251,18 +249,6 @@ function TabLayoutInner() {
     }, [navigation])
   );
 
-  // COMPREHENSIVE DEBUG LOGGING FOR CLUB USERS
-  logger.debug('[TabLayout] === TAB BAR RENDER DEBUG ===');
-  logger.debug('[TabLayout] userType:', userType);
-  logger.debug('[TabLayout] user.id:', user?.id);
-  logger.debug('[TabLayout] personaLoading:', personaLoading);
-  logger.debug('[TabLayout] clubProfile:', clubProfile ? 'loaded' : 'null');
-  logger.debug('[TabLayout] tabs config:', tabs);
-  logger.debug('[TabLayout] Visible tabs:', tabs.map(t => t.name));
-  logger.debug('[TabLayout] isClubUser:', userType === 'club');
-  logger.debug('[TabLayout] Platform:', Platform.OS);
-  logger.debug('[TabLayout] ==============================');
-
   // User type flags for conditional rendering
   // Guests are treated as sailors for UI purposes
   const isClubUser = userType === 'club';
@@ -270,53 +256,57 @@ function TabLayoutInner() {
   const isGuestUser = isGuest;
 
   // Helper to check if a tab is active based on pathname
-  const isTabActive = (tabName: string): boolean => {
+  const isTabActive = useCallback((tabName: string): boolean => {
     // Handle special case for boat/index
     const normalizedTabName = tabName === 'boat/index' ? 'boat' : tabName;
     // Check if pathname matches the tab (e.g., /races, /learn, /boat)
     return pathname === `/${normalizedTabName}` || pathname.startsWith(`/${normalizedTabName}/`);
-  };
+  }, [pathname]);
 
   // iOS HIG-style tab button for sailors: icon + label with proper touch handling
-  const renderSailorTabButton = (tabName: string, tabTitle: string, tabConfig?: TabConfig) => (props: BottomTabBarButtonProps) => {
-    const { accessibilityState, onPress, style } = props;
-    // Use pathname-based active detection since accessibilityState.selected is undefined
-    const isActive = isTabActive(tabName);
-    const iconName = isActive
-      ? (tabConfig?.iconFocused || tabConfig?.icon || 'ellipsis-horizontal')
-      : (tabConfig?.icon || 'ellipsis-horizontal-outline');
+  const renderSailorTabButton = useCallback(
+    (tabName: string, tabTitle: string, tabConfig?: TabConfig) =>
+      (props: BottomTabBarButtonProps) => {
+        const { accessibilityState, onPress, style } = props;
+        // Use pathname-based active detection since accessibilityState.selected is undefined
+        const isActive = isTabActive(tabName);
+        const iconName = isActive
+          ? (tabConfig?.iconFocused || tabConfig?.icon || 'ellipsis-horizontal')
+          : (tabConfig?.icon || 'ellipsis-horizontal-outline');
 
-    const handlePress = () => {
-      markTabSweepVisited(tabName);
-      triggerHaptic('selection');
-      onPress?.({} as any);
-    };
+        const handlePress = () => {
+          markTabSweepVisited(tabName);
+          triggerHaptic('selection');
+          onPress?.({} as any);
+        };
 
-    return (
-      <TouchableOpacity
-        accessibilityRole="button"
-        accessibilityState={{ ...accessibilityState, selected: isActive }}
-        onPress={handlePress}
-        style={[style, styles.iosTabButton]}
-        activeOpacity={0.7}
-      >
-        <Ionicons
-          name={iconName as any}
-          size={24}
-          color={isActive ? IOS_COLORS.systemBlue : IOS_COLORS.systemGray}
-        />
-        <Text style={[
-          styles.iosTabLabel,
-          isActive && styles.iosTabLabelActive
-        ]}>
-          {tabTitle}
-        </Text>
-      </TouchableOpacity>
-    );
-  };
+        return (
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityState={{ ...accessibilityState, selected: isActive }}
+            onPress={handlePress}
+            style={[style, styles.iosTabButton]}
+            activeOpacity={0.7}
+          >
+            <Ionicons
+              name={iconName as any}
+              size={24}
+              color={isActive ? IOS_COLORS.systemBlue : IOS_COLORS.systemGray}
+            />
+            <Text style={[
+              styles.iosTabLabel,
+              isActive && styles.iosTabLabelActive
+            ]}>
+              {tabTitle}
+            </Text>
+          </TouchableOpacity>
+        );
+      },
+    [isTabActive, markTabSweepVisited],
+  );
 
   // Custom tab button for club users with active indicator
-  const renderClubTabButton = (props: BottomTabBarButtonProps) => {
+  const renderClubTabButton = useCallback((props: BottomTabBarButtonProps) => {
     const { accessibilityState, children, onPress, style } = props;
     const isActive = accessibilityState?.selected;
 
@@ -338,7 +328,7 @@ function TabLayoutInner() {
         {children}
       </TouchableOpacity>
     );
-  };
+  }, []);
 
   // iOS HIG colors: system blue for active, system gray for inactive
   const tabBarActiveColor = isClubUser ? '#FFFFFF' : IOS_COLORS.systemBlue;
@@ -370,8 +360,10 @@ function TabLayoutInner() {
   const programsTab = findTab('programs');
   const raceManagementTab = findTab('race-management');
 
-  // Determine tab bar and scene style based on platform
-  const getTabBarConfig = () => {
+  // Determine tab bar and scene style based on platform.
+  // Memoized so that React Navigation sees a stable tabBar component / tabBarStyle
+  // reference — otherwise the navigator's useSyncState can loop on option churn.
+  const tabBarConfig = useMemo(() => {
     // Web sidebar mode: hide the tab bar entirely, sidebar handles navigation
     if (useWebSidebar) {
       return {
@@ -407,35 +399,47 @@ function TabLayoutInner() {
           : { display: 'none' as const },
       sceneStyle: undefined,
     };
-  };
+  }, [
+    useWebSidebar,
+    isSailorUser,
+    isClubUser,
+    tabs,
+    pathname,
+    markTabSweepVisited,
+    isIPadPortrait,
+    unreadMessageCount,
+  ]);
 
-  const tabBarConfig = getTabBarConfig();
+  // Memoize screenOptions so React Navigation doesn't see a fresh function
+  // reference per render, which can feed back into its useSyncState listener loop.
+  const screenOptions = useCallback(
+    ({ route }: { route: { name: string } }) => {
+      const visible = tabs.some((t) => t.name === route.name);
+
+      return {
+        headerShown: false,
+        tabBarShowLabel: true,
+        tabBarLabelPosition: 'below-icon' as const,
+        tabBarActiveTintColor: tabBarActiveColor,
+        tabBarInactiveTintColor: tabBarInactiveColor,
+        tabBarStyle: tabBarConfig.tabBarStyle,
+        sceneStyle: tabBarConfig.sceneStyle,
+        tabBarIconStyle: isClubUser ? styles.tabIconClub : styles.tabIconDefault,
+        tabBarLabelStyle: isClubUser ? styles.tabLabelClub : styles.tabLabelDefault,
+        tabBarItemStyle: visible
+          ? isClubUser
+            ? styles.tabItemClub
+            : styles.tabItemDefault
+          : styles.hiddenTabItem,
+      };
+    },
+    [tabs, tabBarActiveColor, tabBarInactiveColor, tabBarConfig.tabBarStyle, tabBarConfig.sceneStyle, isClubUser],
+  );
 
   const tabsContent = (
     <Tabs
       tabBar={tabBarConfig.tabBar}
-      screenOptions={({ route }) => {
-        const visible = isTabVisible(route.name);
-        const tab = findTab(route.name);
-        const labelText = tab?.title ?? tab?.name ?? route.name;
-
-        return {
-          headerShown: false,
-          tabBarShowLabel: true,
-          tabBarLabelPosition: 'below-icon',
-          tabBarActiveTintColor: tabBarActiveColor,
-          tabBarInactiveTintColor: tabBarInactiveColor,
-          tabBarStyle: tabBarConfig.tabBarStyle,
-          sceneStyle: tabBarConfig.sceneStyle,
-          tabBarIconStyle: isClubUser ? styles.tabIconClub : styles.tabIconDefault,
-          tabBarLabelStyle: isClubUser ? styles.tabLabelClub : styles.tabLabelDefault,
-          tabBarItemStyle: visible
-            ? isClubUser
-              ? styles.tabItemClub
-              : styles.tabItemDefault
-            : styles.hiddenTabItem,
-        };
-      }}
+      screenOptions={screenOptions}
     >
         {/* Tab 1: Race */}
         <Tabs.Screen
