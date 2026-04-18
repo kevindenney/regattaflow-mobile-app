@@ -107,7 +107,7 @@ module.exports = {
     // Expose environment variables via Constants.expoConfig.extra
     extra: {
       eas: {
-        projectId: 'bab702c1-4ae8-42aa-ae6a-7982de755dd7',
+        projectId: '88a65b55-6656-418d-86cd-909eea27e895',
       },
       openWeatherMapApiKey: process.env.EXPO_PUBLIC_OPENWEATHERMAP_API_KEY,
       supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
