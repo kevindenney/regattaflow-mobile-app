@@ -677,7 +677,7 @@ export default function RacesScreen() {
       if (!myTimelineSteps?.length) return EMPTY_RACES;
       const cards = timelineStepsToCardRaceData(myTimelineSteps);
       return cards.map((card) => {
-        const bpId = (card as any).source_blueprint_id;
+        const bpId = card.source_blueprint_id;
         const bpTitle = bpId ? blueprintTitleById.get(bpId) : null;
         return bpTitle ? { ...card, blueprintTitle: bpTitle } : card;
       });
@@ -1178,8 +1178,8 @@ export default function RacesScreen() {
       metadata: race.metadata, // Preserve metadata for sample detection
       notice_of_race_url: race.notice_of_race_url, // Source document URL from AI extraction
       expected_fleet_size: race.expected_fleet_size,
-      boat_id: race.boat_id || (race as any).boatId,
-      class_id: race.class_id || (race as any).classId,
+      boat_id: race.boat_id || race.boatId,
+      class_id: race.class_id || race.classId,
       // Basic defaults for new cards (will be enriched for selected race later)
       rigSettings: race.rigSettings || race.tuningRecommendation,
       fleet: race.fleet || {
@@ -1232,7 +1232,7 @@ export default function RacesScreen() {
     // timeline_steps; regattas go to regattas. sort_order is the primary
     // sort key everywhere, so this assignment fully determines visual order.
     const updates = deduped.map((id, idx) => {
-      const row = byId.get(id) as any;
+      const row = byId.get(id);
       return {
         id,
         sort_order: idx + 1,
@@ -1284,7 +1284,7 @@ export default function RacesScreen() {
     status: 'completed' | 'pending',
     opts?: {indexHint?: number}
   ) => {
-    const race = orderedBaseCardGridRaces.find((entry) => entry.id === raceId) as any;
+    const race = orderedBaseCardGridRaces.find((entry) => entry.id === raceId);
     const nowIso = new Date().toISOString();
     if (race?.isTimelineStep) {
       const stepPayload: Record<string, unknown> = {
@@ -1421,7 +1421,7 @@ export default function RacesScreen() {
   }, [applyTimelineStepStatus]);
 
   const handleSetDueDate = useCallback(async (raceId: string, dateIso: string | null) => {
-    const race = orderedBaseCardGridRaces.find((entry) => entry.id === raceId) as any;
+    const race = orderedBaseCardGridRaces.find((entry) => entry.id === raceId);
     if (!race?.isTimelineStep) return;
     try {
       const { error } = await supabase
@@ -2225,7 +2225,7 @@ export default function RacesScreen() {
     }
 
     const friendlyName = raceName || 'this step';
-    const race = orderedBaseCardGridRaces.find((row) => row.id === raceId) as any;
+    const race = orderedBaseCardGridRaces.find((row) => row.id === raceId);
     const isStep = race?.isTimelineStep;
 
     // Races still get the modal — they're higher-stakes (crew, results,
@@ -2338,7 +2338,7 @@ export default function RacesScreen() {
     const noun = count === 1 ? 'step' : 'steps';
     const stepIds = new Set(
       uniqueIds.filter((raceId) => {
-        const race = orderedBaseCardGridRaces.find((row) => row.id === raceId) as any;
+        const race = orderedBaseCardGridRaces.find((row) => row.id === raceId);
         return race?.isTimelineStep;
       }),
     );
@@ -2400,7 +2400,7 @@ export default function RacesScreen() {
               if (stepIds.has(raceId)) {
                 await deleteTimelineStep(raceId);
               } else {
-                const race = orderedBaseCardGridRaces.find((row) => row.id === raceId) as any;
+                const race = orderedBaseCardGridRaces.find((row) => row.id === raceId);
                 await deleteRaceById(raceId, race?.name, { showSuccessAlert: false, skipRefetch: true });
               }
             }
@@ -3135,10 +3135,10 @@ export default function RacesScreen() {
   // falling back to browser/device geolocation when no venue coordinates exist.
   const nextRaceVenueCoords = useMemo(() => {
     if (!safeNextRace) return null;
-    const coords = (safeNextRace as any).venueCoordinates;
-    if (coords?.lat && coords?.lng) return coords as { lat: number; lng: number };
+    const coords = safeNextRace.venueCoordinates;
+    if (coords?.lat && coords?.lng) return coords;
     // Fallback to metadata
-    const meta = (safeNextRace as any).metadata;
+    const meta = safeNextRace.metadata;
     if (meta?.venue_lat && meta?.venue_lng) {
       return { lat: parseFloat(meta.venue_lat), lng: parseFloat(meta.venue_lng) };
     }
@@ -3838,8 +3838,8 @@ export default function RacesScreen() {
   const availableCapabilityGoals = useMemo(() => {
     const goals = new Set<string>();
     for (const race of cardGridRaces) {
-      if (!(race as any).isTimelineStep) continue;
-      const capGoals: string[] = (race as any).metadata?.plan?.capability_goals ?? [];
+      if (!race.isTimelineStep) continue;
+      const capGoals: string[] = race.metadata?.plan?.capability_goals ?? [];
       for (const g of capGoals) {
         if (g) goals.add(g);
       }
@@ -4437,7 +4437,7 @@ export default function RacesScreen() {
                   //   subsequent visits
                   if (
                     isGuest &&
-                    (race as any).isDemo &&
+                    race.isDemo &&
                     !sampleSignupShownRef.current
                   ) {
                     const lastShown = signupModalLastShownRef.current;

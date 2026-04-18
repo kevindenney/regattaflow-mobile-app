@@ -278,6 +278,31 @@ export interface CardRaceData {
   created_by?: string;
   /** Whether this is a demo race (shown when user has no real races) */
   isDemo?: boolean;
+  /**
+   * Marker: this row represents a timeline_step (not a regatta/race_event).
+   * Set by the step→card adapters. Used throughout races.tsx to branch
+   * between the timeline_steps and race_events/regattas table paths.
+   */
+  isTimelineStep?: boolean;
+  /** Free-form metadata blob (plan, weather, venue coords, capability goals, etc.) */
+  metadata?: Record<string, any>;
+  /** Legacy explicit start date (alias of `date` for race_events/regattas rows). */
+  start_date?: string;
+  /** Provenance hints populated by enrichment — used to pick the right Supabase table. */
+  _source?: string;
+  source?: string;
+  source_table?: string;
+  /** Venue coordinates attached by enrichment for NowBar weather fallback. */
+  venueCoordinates?: { lat: number; lng: number } | null;
+  /** Boat / class ids — both snake_case (canonical) and camelCase (legacy) appear. */
+  boat_id?: string;
+  class_id?: string;
+  boatId?: string;
+  classId?: string;
+  /** Source blueprint id for steps adopted from a published blueprint. */
+  source_blueprint_id?: string | null;
+  /** Collaborator user ids — present on shared timeline steps. */
+  collaborator_user_ids?: string[];
   /** Any additional fields from the race */
   [key: string]: unknown;
 }
