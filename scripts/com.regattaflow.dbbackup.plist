@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.regattaflow.dbbackup</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/kdenney/Developer/RegattaFlow/regattaflow-app/scripts/backup-supabase-dbs.sh</string>
+  </array>
+
+  <!-- PATH must include /opt/homebrew/bin so pg_dump + openssl are found -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>HOME</key>
+    <string>/Users/kdenney</string>
+  </dict>
+
+  <!-- Run weekly: Sunday at 03:00 -->
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Weekday</key>
+    <integer>0</integer>
+    <key>Hour</key>
+    <integer>3</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+
+  <!-- If the Mac was asleep at 03:00 Sunday, run as soon as it wakes -->
+  <key>StartCalendarIntervalRunAtLoad</key>
+  <false/>
+
+  <!-- Logs -->
+  <key>StandardOutPath</key>
+  <string>/Users/kdenney/.config/supabase-backup/launchd.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/kdenney/.config/supabase-backup/launchd.err.log</string>
+
+  <!-- Don't keep alive — single shot per schedule -->
+  <key>KeepAlive</key>
+  <false/>
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>
